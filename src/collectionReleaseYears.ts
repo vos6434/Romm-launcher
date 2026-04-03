@@ -91,7 +91,7 @@ function yearFromFirstReleaseDate(ts: number | null | undefined): number | null 
 }
 
 /** Structured paths first, then regex on full JSON (nested metadata blobs). */
-function yearFromRomPayload(row: unknown): number | null {
+export function yearFromRomPayload(row: unknown): number | null {
   const ts = firstReleaseTimestampFromRom(row);
   if (ts != null) {
     const y = yearFromFirstReleaseDate(ts);
@@ -117,7 +117,7 @@ function yearFromRomPayload(row: unknown): number | null {
   return null;
 }
 
-function itemsFromRomsPage(page: unknown): unknown[] {
+export function itemsFromRomsPage(page: unknown): unknown[] {
   if (Array.isArray(page)) return page;
   if (page && typeof page === "object") {
     const p = page as Record<string, unknown>;
@@ -149,7 +149,7 @@ function itemsFromRomsPage(page: unknown): unknown[] {
   return [];
 }
 
-function romsQueryForCollection(
+export function romsQueryForCollection(
   c: CollectionRomsFilter,
   offset: number,
 ): string {
@@ -173,7 +173,7 @@ function formatMinMaxYears(years: number[]): string {
   return min === max ? String(min) : `${min}-${max}`;
 }
 
-function romNumericId(row: unknown): number | undefined {
+export function romNumericId(row: unknown): number | undefined {
   if (!row || typeof row !== "object") return undefined;
   const id = (row as Record<string, unknown>).id;
   if (typeof id === "number" && Number.isFinite(id)) return id;
@@ -191,7 +191,7 @@ function normalizeRomIds(v: unknown): number[] {
   return out;
 }
 
-function collectionRomIdsFromPayload(c: CollectionRomsFilter): number[] {
+export function collectionRomIdsFromPayload(c: CollectionRomsFilter): number[] {
   const r = c as Record<string, unknown>;
   return [
     ...new Set([

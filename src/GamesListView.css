@@ -1,0 +1,181 @@
+.games-screen {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 48px 24px 32px;
+  overflow: hidden;
+  color: #f2f2f2;
+  font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.games-screen > *:not(.collections-bg):not(.collections-bg-scrim) {
+  position: relative;
+  z-index: 2;
+}
+
+.games-header {
+  margin-bottom: 4px;
+}
+
+.games-collection-title {
+  letter-spacing: 0.06em;
+  text-transform: none;
+  max-width: min(92vw, 40rem);
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.15;
+}
+
+.games-main {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  justify-content: center;
+}
+
+.games-viewport {
+  overflow-x: hidden;
+  overflow-y: visible;
+  padding: 8px 0 20px;
+}
+
+.games-track {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex-shrink: 0;
+  transition: transform 0.24s ease;
+  will-change: transform;
+}
+
+.games-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: clamp(12px, 2.5vw, 28px);
+}
+
+.games-row--timeline {
+  align-items: flex-start;
+}
+
+.games-slot-cell {
+  width: clamp(100px, 14vw, 160px);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.games-slot-cell--empty {
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+.games-timeline-block {
+  position: relative;
+  align-self: stretch;
+  margin-top: 8px;
+  padding-top: 20px;
+}
+
+.games-timeline-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 26px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+
+.games-timeline-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  min-height: 92px;
+  padding-top: 2px;
+}
+
+.games-timeline-cell--empty {
+  opacity: 0.35;
+}
+
+.games-timeline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.38);
+  border: 2px solid rgba(22, 22, 22, 0.95);
+  flex-shrink: 0;
+  z-index: 1;
+  margin-top: 15px;
+}
+
+.games-timeline-cell--focus .games-timeline-dot {
+  width: 14px;
+  height: 14px;
+  margin-top: 13px;
+  background: #ffffff;
+  border-color: #ffffff;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.35),
+    0 0 16px rgba(255, 255, 255, 0.35);
+}
+
+.games-timeline-dot--ghost {
+  visibility: hidden;
+}
+
+.games-timeline-year {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.52);
+  line-height: 1.2;
+  max-width: 100%;
+}
+
+.games-timeline-cell--focus .games-timeline-year {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.games-timeline-title {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.48);
+  line-height: 1.25;
+  max-width: 100%;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.games-timeline-cell--focus .games-timeline-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.games-logout-alt {
+  margin-top: 4px;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.games-logout-alt:hover {
+  color: rgba(255, 255, 255, 0.88);
+}
