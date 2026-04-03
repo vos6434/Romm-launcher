@@ -232,12 +232,19 @@
   flex: 0 0 auto;
   width: clamp(100px, 14vw, 160px);
   padding: 0;
+  margin: 0;
   border: none;
   background: transparent;
   cursor: pointer;
   color: inherit;
   font: inherit;
   text-align: center;
+  transform-origin: bottom center;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  appearance: none;
+  -webkit-appearance: none;
   transition:
     transform 0.22s ease,
     opacity 0.22s ease;
@@ -246,7 +253,7 @@
 
 .collection-slot--focus {
   opacity: 1;
-  transform: translateY(-12px) scale(1.08);
+  transform: scale(1.08);
   z-index: 3;
 }
 
@@ -275,7 +282,8 @@
 
 .collection-poster--empty {
   background: rgba(255, 255, 255, 0.06);
-  border: 1px dashed rgba(255, 255, 255, 0.15);
+  /* Match .collection-poster 2px border so poster boxes line up with real cards */
+  border: 2px dashed rgba(255, 255, 255, 0.15);
 }
 
 .collection-poster img {
@@ -303,6 +311,9 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Same reserved height as two text lines (incl. focused year size) so flex-end
+     aligns poster edges across empty vs filled slots */
+  min-height: 3.125rem;
 }
 
 .collection-years {

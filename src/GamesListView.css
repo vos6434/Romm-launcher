@@ -18,7 +18,7 @@
 }
 
 /*
- * Collections carousel uses translateY + scale on focus; that breaks alignment with
+ * Collections carousel uses scale on focus; that breaks alignment with
  * the timeline columns. Keep focus readable via poster border only.
  */
 .games-screen .collection-slot,
