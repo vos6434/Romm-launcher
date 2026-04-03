@@ -104,6 +104,46 @@ function metaPrimaryLine(
   return "—";
 }
 
+/** Match `.collection-slot` width: `clamp(100px, 14vw, 160px)` (vw = window). */
+function estimateCollectionSlotWidthPx(): number {
+  if (typeof window === "undefined") return 130;
+  return Math.min(160, Math.max(100, window.innerWidth * 0.14));
+}
+
+/** Match `.collections-carousel-track` gap: `clamp(12px, 2.5vw, 28px)`. */
+function estimateCollectionGapPx(): number {
+  if (typeof window === "undefined") return 20;
+  return Math.min(28, Math.max(12, window.innerWidth * 0.025));
+}
+
+const MAX_CAROUSEL_SLOT_RADIUS = 30;
+
+/** Track width: one centered slot is `scale(1.08)`; others stay base width. */
+function carouselTrackWidthPx(n: number, slotW: number, gap: number): number {
+  if (n < 1) return 0;
+  return (n - 1) * slotW + slotW * 1.08 + (n - 1) * gap;
+}
+
+/**
+ * Half-width of the offset window [−r … +r] so an odd number of slots fits in `width`.
+ */
+function computeCarouselSlotRadius(width: number): number {
+  if (!Number.isFinite(width) || width < 60) return 0;
+  const slotW = estimateCollectionSlotWidthPx();
+  const gap = estimateCollectionGapPx();
+  const safety = 1.035;
+  const budget = width * 0.998;
+  let n = 1;
+  const maxSlots = MAX_CAROUSEL_SLOT_RADIUS * 2 + 1;
+  while (n + 2 <= maxSlots) {
+    const next = n + 2;
+    const raw = carouselTrackWidthPx(next, slotW, gap);
+    if (raw * safety > budget) break;
+    n = next;
+  }
+  return (n - 1) / 2;
+}
+
 async function fetchCollectionArrays(
   session: Session,
   virtualType: VirtualCollectionType,
@@ -221,6 +261,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   const carouselTrackRef = useRef<HTMLDivElement>(null);
   const focusSlotRef = useRef<HTMLButtonElement | null>(null);
   const settingsWrapRef = useRef<HTMLDivElement>(null);
+  const [slotRadius, setSlotRadius] = useState(2);
 
   useEffect(() => {
     let cancelled = false;
@@ -309,6 +350,26 @@ export function CollectionsView({ session, onLogout }: Props) {
     setSettingsOpen(false);
   }
 
+  useEffect(() => {
+    if (loading || items.length === 0) return;
+    const el = carouselViewportRef.current;
+    if (!el) return;
+    const apply = () => {
+      const t = carouselViewportRef.current;
+      if (t) {
+        setSlotRadius(computeCarouselSlotRadius(t.getBoundingClientRect().width));
+      }
+    };
+    apply();
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(el);
+    window.addEventListener("resize", apply);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", apply);
+    };
+  }, [loading, items.length]);
+
   /** Keep the focused card’s horizontal center aligned with the viewport center. */
   useLayoutEffect(() => {
     const vp = carouselViewportRef.current;
@@ -331,7 +392,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     ro.observe(vp);
     ro.observe(track);
     return () => ro.disconnect();
-  }, [focusIndex, items.length, loading, refreshing]);
+  }, [focusIndex, items.length, loading, refreshing, slotRadius]);
 
   const focused = items[focusIndex];
   const bgUrl = useMemo(
@@ -389,7 +450,11 @@ export function CollectionsView({ session, onLogout }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [moveFocus, onLogout, settingsOpen, items, focusIndex]);
 
-  const slots = useMemo(() => [-2, -1, 0, 1, 2], []);
+  const slots = useMemo(() => {
+    const r = slotRadius;
+    const len = r * 2 + 1;
+    return Array.from({ length: len }, (_, i) => i - r);
+  }, [slotRadius]);
 
   return (
     <div className="collections-screen">
