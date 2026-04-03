@@ -113,11 +113,56 @@ async fn romm_login(host: String, username: String, password: String) -> Result<
     })
 }
 
+/// Authenticated GET under `/api/{path}` (path without leading slash), returns response body text.
+/// Optional `query` is appended as `?...` (e.g. `type=all` for virtual collections).
+#[tauri::command]
+async fn romm_api_get(
+    api_base: String,
+    access_token: String,
+    path: String,
+    query: Option<String>,
+) -> Result<String, String> {
+    let base = normalize_base_url(&api_base)?;
+    let p = path.trim_start_matches('/');
+    let mut url = format!("{base}/api/{p}");
+    if let Some(q) = query {
+        let q = q.trim();
+        if !q.is_empty() {
+            let q = q.strip_prefix('?').unwrap_or(q);
+            url.push('?');
+            url.push_str(q);
+        }
+    }
+
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let res = client
+        .get(&url)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            format!("Bearer {}", access_token.trim()),
+        )
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?;
+
+    let status = res.status();
+    let body = res.text().await.map_err(|e| e.to_string())?;
+
+    if !status.is_success() {
+        return Err(format_error_body(status, &body));
+    }
+
+    Ok(body)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![romm_login])
+        .invoke_handler(tauri::generate_handler![romm_login, romm_api_get])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

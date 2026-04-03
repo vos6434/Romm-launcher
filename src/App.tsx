@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { CollectionsView, type Session } from "./CollectionsView";
+import { loadSavedCredentials, saveCredentials } from "./savedCredentials";
 import "./App.css";
 
 type LoginOk = {
@@ -26,18 +28,26 @@ function formatInvokeError(err: unknown): string {
 }
 
 function App() {
+  const [session, setSession] = useState<Session | null>(null);
   const [host, setHost] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [lastSuccess, setLastSuccess] = useState<LoginOk | null>(null);
+
+  useEffect(() => {
+    const saved = loadSavedCredentials();
+    if (saved) {
+      setHost(saved.host);
+      setUsername(saved.username);
+      setPassword(saved.password);
+    }
+  }, []);
 
   async function onLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setLastSuccess(null);
     if (!isTauri()) {
       setError(
         "This page is open in a normal browser without the Tauri app. Close the tab and run: npm run tauri dev — then use the desktop window that opens (not localhost in Chrome/Edge).",
@@ -51,7 +61,11 @@ function App() {
         username,
         password,
       });
-      setLastSuccess(result);
+      setSession({
+        apiBase: result.apiBase,
+        accessToken: result.accessToken,
+      });
+      saveCredentials({ host, username, password });
     } catch (err) {
       setError(formatInvokeError(err));
     } finally {
@@ -68,7 +82,15 @@ function App() {
     setUsername("");
     setPassword("");
     setError(null);
-    setLastSuccess(null);
+  }
+
+  if (session) {
+    return (
+      <CollectionsView
+        session={session}
+        onLogout={() => setSession(null)}
+      />
+    );
   }
 
   return (
@@ -78,8 +100,8 @@ function App() {
 
         {!isTauri() ? (
           <p className="login-warn" role="status">
-            No desktop shell detected. Run <code>npm run tauri dev</code> and log
-            in from the <strong>app window</strong>, not from a browser tab.
+            No desktop shell detected. Run <code>npm run tauri:dev</code> and
+            log in from the <strong>app window</strong>, not from a browser tab.
           </p>
         ) : null}
 
@@ -146,14 +168,6 @@ function App() {
         {error ? (
           <p className="login-error" role="alert">
             {error}
-          </p>
-        ) : null}
-
-        {lastSuccess ? (
-          <p className="login-success" role="status">
-            Connected to {lastSuccess.apiBase}. Received {lastSuccess.tokenType}{" "}
-            token (access expires in {lastSuccess.expires}s). You can use this
-            session to call the RomM API.
           </p>
         ) : null}
 
