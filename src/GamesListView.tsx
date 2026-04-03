@@ -234,7 +234,9 @@ export function GamesListView({
               </div>
 
               <div className="games-timeline-block">
-                <div className="games-timeline-line" aria-hidden />
+                <div className="games-timeline-line-track" aria-hidden>
+                  <div className="games-timeline-line" />
+                </div>
                 <div className="games-row games-row--timeline">
                   {slots.map((offset) => {
                     const idx = focusIndex + offset;
@@ -247,17 +249,28 @@ export function GamesListView({
                         key={`t-${offset}`}
                         className={`games-slot-cell games-timeline-cell${isFocus ? " games-timeline-cell--focus" : ""}${empty ? " games-timeline-cell--empty" : ""}`}
                       >
+                        <div className="games-timeline-marker-row" aria-hidden>
+                          {empty ? (
+                            <span className="games-timeline-tick games-timeline-tick--empty" />
+                          ) : isFocus ? (
+                            <span className="games-timeline-dot" />
+                          ) : (
+                            <span className="games-timeline-tick" />
+                          )}
+                        </div>
                         {!empty ? (
                           <>
-                            <span className="games-timeline-dot" aria-hidden />
                             <span className="games-timeline-year">{g.displayYear}</span>
                             <span className="games-timeline-title">{g.name}</span>
                           </>
                         ) : (
                           <>
-                            <span className="games-timeline-dot games-timeline-dot--ghost" aria-hidden />
-                            <span className="games-timeline-year"> </span>
-                            <span className="games-timeline-title"> </span>
+                            <span className="games-timeline-year games-timeline-year--empty">
+                              {" "}
+                            </span>
+                            <span className="games-timeline-title games-timeline-title--empty">
+                              {" "}
+                            </span>
                           </>
                         )}
                       </div>
