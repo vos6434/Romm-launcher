@@ -11,7 +11,6 @@ import { fetchRomsInCollection, type RomInCollection } from "./collectionRomsFet
 import { rommAssetUrl } from "./rommAssets";
 import type { RommCollection, Session } from "./CollectionsView";
 import "./CollectionsView.css";
-import "./GamesListView.css";
 
 type Props = {
   session: Session;
