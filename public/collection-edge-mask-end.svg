@@ -6,14 +6,14 @@
     </linearGradient>
     <filter
       id="f"
-      x="-55"
-      y="-55"
-      width="210"
-      height="210"
+      x="-78"
+      y="-78"
+      width="256"
+      height="256"
       filterUnits="userSpaceOnUse"
       color-interpolation-filters="linearRGB"
     >
-      <feGaussianBlur in="SourceGraphic" stdDeviation="18"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="26"/>
     </filter>
   </defs>
   <rect width="100" height="100" fill="url(#g)" filter="url(#f)"/>
