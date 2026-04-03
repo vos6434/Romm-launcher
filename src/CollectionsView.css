@@ -247,10 +247,61 @@
   align-items: stretch;
   appearance: none;
   -webkit-appearance: none;
+  position: relative;
   transition:
     transform 0.22s ease,
     opacity 0.22s ease;
   opacity: 0.72;
+}
+
+/* Outermost tiles: blurred SVG mask + fine grain overlay. Masks still quantize to
+   8-bit on screen; soft-light dither breaks visible stepped bands in dark ramps. */
+.collection-slot--edge-start:not(.collection-slot--focus):not(.collection-slot--empty),
+.collection-slot--edge-end:not(.collection-slot--focus):not(.collection-slot--empty) {
+  opacity: 0.68;
+}
+
+.collection-slot--edge-start:not(.collection-slot--focus) .collection-poster {
+  -webkit-mask-image: url("/collection-edge-mask-start.svg");
+  mask-image: url("/collection-edge-mask-start.svg");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.collection-slot--edge-end:not(.collection-slot--focus) .collection-poster {
+  -webkit-mask-image: url("/collection-edge-mask-end.svg");
+  mask-image: url("/collection-edge-mask-end.svg");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.collection-slot--edge-start:not(.collection-slot--focus) .collection-poster,
+.collection-slot--edge-end:not(.collection-slot--focus) .collection-poster {
+  isolation: isolate;
+}
+
+.collection-slot--edge-start:not(.collection-slot--focus) .collection-poster::after,
+.collection-slot--edge-end:not(.collection-slot--focus) .collection-poster::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: 2;
+  pointer-events: none;
+  background-image: url("/collection-edge-grain.svg");
+  background-repeat: repeat;
+  background-size: 96px 96px;
+  opacity: 0.09;
+  mix-blend-mode: soft-light;
+}
+
+.collection-slot--edge-start.collection-slot--empty,
+.collection-slot--edge-end.collection-slot--empty {
+  opacity: 0.34;
 }
 
 .collection-slot--focus {

@@ -576,12 +576,20 @@ export function CollectionsView({ session, onLogout }: Props) {
               const c = items[idx];
               const isFocus = offset === 0;
               const isPlaceholder = idx < 0 || idx >= items.length;
+              const edgeClass =
+                slots.length > 1
+                  ? offset === -slotRadius
+                    ? " collection-slot--edge-start"
+                    : offset === slotRadius
+                      ? " collection-slot--edge-end"
+                      : ""
+                  : "";
 
               if (isPlaceholder) {
                 return (
                   <div
                     key={`empty-${offset}`}
-                    className="collection-slot collection-slot--empty"
+                    className={`collection-slot collection-slot--empty${edgeClass}`}
                     aria-hidden
                   >
                     <div className="collection-poster collection-poster--empty" />
@@ -600,7 +608,7 @@ export function CollectionsView({ session, onLogout }: Props) {
                   ref={isFocus ? focusSlotRef : undefined}
                   type="button"
                   role="listitem"
-                  className={`collection-slot${isFocus ? " collection-slot--focus" : ""}`}
+                  className={`collection-slot${isFocus ? " collection-slot--focus" : ""}${edgeClass}`}
                   onClick={() => setFocusIndex(idx)}
                 >
                 <div
