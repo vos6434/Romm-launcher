@@ -36,3 +36,11 @@ export function saveCredentials(c: SavedCredentials): void {
     }),
   );
 }
+
+export function clearSavedCredentials(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}

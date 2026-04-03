@@ -1,7 +1,25 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { CollectionsView, type Session } from "./CollectionsView";
-import { loadSavedCredentials, saveCredentials } from "./savedCredentials";
+import { GamepadNavPromptGlyphs } from "./GamepadNavPromptGlyphs";
+import { GamepadPromptGlyph } from "./GamepadPromptGlyph";
+import {
+  KeyboardEnterPromptGlyph,
+  KeyboardNavPromptGlyphs,
+} from "./KeyboardNavPromptGlyphs";
+import {
+  clearSavedCredentials,
+  loadSavedCredentials,
+  saveCredentials,
+} from "./savedCredentials";
+import { useLoginGamepadNavigation } from "./useLoginGamepadNavigation";
+import { useLoginKeyboardNavigation } from "./useLoginKeyboardNavigation";
+import { useGamepadInput } from "./useGamepadFlavor";
+import {
+  loginSlotIndex,
+  loginSlotOrder,
+  type LoginSlotId,
+} from "./loginGamepadSlots";
 import "./App.css";
 
 type LoginOk = {
@@ -33,8 +51,28 @@ function App() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberPassword, setRememberPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [gpFocusIndex, setGpFocusIndex] = useState(0);
+
+  const formRef = useRef<HTMLFormElement>(null);
+  const hostRef = useRef<HTMLInputElement>(null);
+  const usernameRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const rememberRef = useRef<HTMLInputElement>(null);
+  const submitRef = useRef<HTMLButtonElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
+
+  const { flavor: gamepadFlavor, gamepadConnected } = useGamepadInput();
+  const tauriShell = isTauri();
+  const slotNavChrome = session === null;
+  const showGamepadFooterHints =
+    slotNavChrome && tauriShell && gamepadConnected;
+  const showKeyboardFooterHints = slotNavChrome && !showGamepadFooterHints;
+
+  const slotOrder = useMemo(() => loginSlotOrder(!!error), [error]);
 
   useEffect(() => {
     const saved = loadSavedCredentials();
@@ -42,13 +80,96 @@ function App() {
       setHost(saved.host);
       setUsername(saved.username);
       setPassword(saved.password);
+      setRememberPassword(true);
     }
   }, []);
+
+  useEffect(() => {
+    setGpFocusIndex((i) =>
+      Math.min(i, Math.max(0, slotOrder.length - 1)),
+    );
+  }, [slotOrder.length]);
+
+  const isActive = useCallback(
+    (id: LoginSlotId) =>
+      slotNavChrome && slotOrder[gpFocusIndex] === id,
+    [slotNavChrome, slotOrder, gpFocusIndex],
+  );
+
+  const focusSlot = useCallback(
+    (id: LoginSlotId) => {
+      if (!slotNavChrome) return;
+      setGpFocusIndex(loginSlotIndex(slotOrder, id));
+    },
+    [slotNavChrome, slotOrder],
+  );
+
+  useEffect(() => {
+    if (!slotNavChrome) return;
+    const id = slotOrder[gpFocusIndex];
+    const el =
+      id === "host"
+        ? hostRef.current
+        : id === "username"
+          ? usernameRef.current
+          : id === "password"
+            ? passwordRef.current
+            : id === "togglePassword"
+              ? toggleRef.current
+              : id === "remember"
+                ? rememberRef.current
+                : id === "submit"
+                  ? submitRef.current
+                  : id === "retry"
+                    ? retryRef.current
+                    : null;
+    el?.focus();
+  }, [gpFocusIndex, slotOrder, slotNavChrome]);
+
+  const onRetry = useCallback(() => {
+    setError(null);
+  }, []);
+
+  const activateLoginSlot = useCallback(() => {
+    const id = slotOrder[gpFocusIndex];
+    if (id === "togglePassword") {
+      toggleRef.current?.click();
+      return;
+    }
+    if (id === "remember") {
+      rememberRef.current?.click();
+      return;
+    }
+    if (id === "submit") {
+      formRef.current?.requestSubmit();
+      return;
+    }
+    if (id === "retry") {
+      onRetry();
+      return;
+    }
+  }, [slotOrder, gpFocusIndex, onRetry]);
+
+  useLoginKeyboardNavigation({
+    enabled: slotNavChrome,
+    loading,
+    slotCount: slotOrder.length,
+    setFocusIndex: setGpFocusIndex,
+    onActivate: activateLoginSlot,
+  });
+
+  useLoginGamepadNavigation({
+    enabled: session === null && tauriShell,
+    loading,
+    slotCount: slotOrder.length,
+    setFocusIndex: setGpFocusIndex,
+    onSelect: activateLoginSlot,
+  });
 
   async function onLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!isTauri()) {
+    if (!tauriShell) {
       setError(
         "This page is open in a normal browser without the Tauri app. Close the tab and run: npm run tauri dev — then use the desktop window that opens (not localhost in Chrome/Edge).",
       );
@@ -65,23 +186,16 @@ function App() {
         apiBase: result.apiBase,
         accessToken: result.accessToken,
       });
-      saveCredentials({ host, username, password });
+      if (rememberPassword) {
+        saveCredentials({ host, username, password });
+      } else {
+        clearSavedCredentials();
+      }
     } catch (err) {
       setError(formatInvokeError(err));
     } finally {
       setLoading(false);
     }
-  }
-
-  function onRetry() {
-    setError(null);
-  }
-
-  function onCancel() {
-    setHost("");
-    setUsername("");
-    setPassword("");
-    setError(null);
   }
 
   if (session) {
@@ -98,24 +212,27 @@ function App() {
       <div className="login-card">
         <h1 className="login-title">Log In</h1>
 
-        {!isTauri() ? (
+        {!tauriShell ? (
           <p className="login-warn" role="status">
             No desktop shell detected. Run <code>npm run tauri:dev</code> and
             log in from the <strong>app window</strong>, not from a browser tab.
           </p>
         ) : null}
 
-        <form className="login-form" onSubmit={onLogin}>
+        <form ref={formRef} className="login-form" onSubmit={onLogin}>
           <label className="field">
             <span className="field-label">RomM Host</span>
             <input
+              ref={hostRef}
               type="text"
               name="host"
               autoComplete="off"
               placeholder="http://192.168.1.100:3000"
               value={host}
               onChange={(e) => setHost(e.target.value)}
+              onFocus={() => focusSlot("host")}
               disabled={loading}
+              className={isActive("host") ? "login-slot--active" : undefined}
             />
             <span className="field-hint">
               Use your RomM server URL including port (default{" "}
@@ -126,33 +243,52 @@ function App() {
           <label className="field">
             <span className="field-label">Username</span>
             <input
+              ref={usernameRef}
               type="text"
               name="username"
               autoComplete="username"
               placeholder="Enter username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              onFocus={() => focusSlot("username")}
               disabled={loading}
+              className={
+                isActive("username") ? "login-slot--active" : undefined
+              }
             />
           </label>
 
           <label className="field">
             <span className="field-label">Password</span>
-            <div className="password-wrap">
+            <div
+              className={
+                isActive("password")
+                  ? "password-wrap login-slot--active"
+                  : "password-wrap"
+              }
+            >
               <input
+                ref={passwordRef}
                 type={showPassword ? "text" : "password"}
                 name="password"
                 autoComplete="current-password"
                 placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onFocus={() => focusSlot("password")}
                 disabled={loading}
               />
               <button
+                ref={toggleRef}
                 type="button"
-                className="toggle-password"
+                className={
+                  isActive("togglePassword")
+                    ? "toggle-password login-slot--active"
+                    : "toggle-password"
+                }
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 onClick={() => setShowPassword((v) => !v)}
+                onFocus={() => focusSlot("togglePassword")}
                 disabled={loading}
               >
                 {showPassword ? "Hide" : "Show"}
@@ -160,7 +296,32 @@ function App() {
             </div>
           </label>
 
-          <button type="submit" className="btn-primary" disabled={loading}>
+          <label className="remember-row">
+            <input
+              ref={rememberRef}
+              type="checkbox"
+              checked={rememberPassword}
+              onChange={(e) => setRememberPassword(e.target.checked)}
+              onFocus={() => focusSlot("remember")}
+              disabled={loading}
+              className={
+                isActive("remember") ? "login-slot--active" : undefined
+              }
+            />
+            <span className="remember-label">Remember Password</span>
+          </label>
+
+          <button
+            ref={submitRef}
+            type="submit"
+            className={
+              isActive("submit")
+                ? "btn-primary login-slot--active"
+                : "btn-primary"
+            }
+            onFocus={() => focusSlot("submit")}
+            disabled={loading}
+          >
             {loading ? "Signing in…" : "Log In"}
           </button>
         </form>
@@ -173,26 +334,52 @@ function App() {
 
         {error ? (
           <button
+            ref={retryRef}
             type="button"
-            className="btn-secondary"
+            className={
+              isActive("retry")
+                ? "btn-secondary login-slot--active"
+                : "btn-secondary"
+            }
             onClick={onRetry}
+            onFocus={() => focusSlot("retry")}
             disabled={loading}
           >
             Retry
           </button>
         ) : null}
 
-        <button
-          type="button"
-          className="login-cancel"
-          onClick={onCancel}
-          disabled={loading}
-        >
-          <span className="btn-b" aria-hidden>
-            B
-          </span>
-          Cancel
-        </button>
+        {showKeyboardFooterHints ? (
+          <div
+            className="login-input-hints"
+            aria-label="Keyboard shortcuts"
+          >
+            <span className="login-gamepad-hint">
+              <KeyboardNavPromptGlyphs />
+              <span>Navigation</span>
+            </span>
+            <span className="login-gamepad-hint">
+              <KeyboardEnterPromptGlyph />
+              <span>Select</span>
+            </span>
+          </div>
+        ) : null}
+
+        {showGamepadFooterHints ? (
+          <div
+            className="login-input-hints"
+            aria-label="Gamepad shortcuts"
+          >
+            <span className="login-gamepad-hint">
+              <GamepadNavPromptGlyphs flavor={gamepadFlavor} />
+              <span>Navigation</span>
+            </span>
+            <span className="login-gamepad-hint">
+              <GamepadPromptGlyph flavor={gamepadFlavor} role="primary" />
+              <span>Select</span>
+            </span>
+          </div>
+        ) : null}
       </div>
     </div>
   );

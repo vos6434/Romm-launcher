@@ -116,6 +116,22 @@ body {
   box-shadow: 0 0 0 1px #6b9fff;
 }
 
+.field input.login-slot--active,
+.field input.login-slot--active:focus {
+  border-color: #f0f0f0;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+.password-wrap.login-slot--active input {
+  border-color: #f0f0f0;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+.password-wrap.login-slot--active input:focus {
+  border-color: #f0f0f0;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
 .field input:disabled {
   opacity: 0.6;
 }
@@ -140,16 +156,90 @@ body {
   cursor: pointer;
   font-size: 1rem;
   line-height: 1;
-  opacity: 0.85;
+  font-family: inherit;
+  color: #e8e8e8;
 }
 
 .toggle-password:hover {
-  opacity: 1;
+  color: #ffffff;
 }
 
 .toggle-password:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: not-allowed;
+}
+
+.toggle-password.login-slot--active {
+  color: #ffffff;
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.remember-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+  padding: 4px 0;
+  cursor: pointer;
+  border-radius: 8px;
+  color: #c8c8c8;
+  font-size: 0.875rem;
+}
+
+.remember-row input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border: 2px solid #c8c8c8;
+  border-radius: 5px;
+  background: #0d0d0d;
+  cursor: pointer;
+  position: relative;
+  outline: none;
+}
+
+.remember-row input[type="checkbox"]:checked {
+  background: #2563eb;
+  border-color: #3b82f6;
+}
+
+.remember-row input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 4px;
+  height: 8px;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.remember-row input[type="checkbox"]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.remember-row input[type="checkbox"].login-slot--active {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.remember-label {
+  user-select: none;
+  outline: none;
+}
+
+.login-slot--active.btn-primary,
+.login-slot--active.btn-secondary {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
 }
 
 .btn-primary {
@@ -161,19 +251,76 @@ body {
   font-size: 1rem;
   font-weight: 600;
   font-family: inherit;
-  color: #ffffff;
+  color: #1a1a1a;
   cursor: pointer;
-  background: linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%);
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+  background: #ffffff;
 }
 
 .btn-primary:hover:not(:disabled) {
-  filter: brightness(1.06);
+  background: #f0f0f0;
 }
 
 .btn-primary:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+.login-input-hints {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 20px 28px;
+  margin-top: 14px;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.login-gamepad-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Kenney Input Prompts SVGs (see src/assets/kenney prompts, License.txt) */
+.gp-prompt-svg-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  flex-shrink: 0;
+}
+
+.gp-prompt-img {
+  width: 28px;
+  height: 28px;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.gp-prompt-img--gp-dpad-vertical {
+  height: 32px;
+  width: auto;
+  max-width: 30px;
+  object-fit: contain;
+  object-position: center;
+}
+
+.gp-prompt-img--kb-arrows-vertical {
+  height: 32px;
+  width: auto;
+  max-width: 28px;
+  object-fit: contain;
+  object-position: center;
+}
+
+.gp-prompt-img--kb-enter {
+  height: 28px;
+  width: auto;
+  max-width: 52px;
+  object-fit: contain;
+  object-position: center;
 }
 
 .login-error {
@@ -210,38 +357,4 @@ body {
 .btn-secondary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.login-cancel {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 22px;
-  width: 100%;
-  padding: 0;
-  border: none;
-  background: none;
-  color: #ffffff;
-  font-size: 0.9375rem;
-  font-family: inherit;
-  cursor: pointer;
-  opacity: 0.9;
-}
-
-.login-cancel:hover:not(:disabled) {
-  opacity: 1;
-}
-
-.btn-b {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 2px solid #c4c4c4;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #ffffff;
 }

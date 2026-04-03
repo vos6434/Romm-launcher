@@ -18,7 +18,6 @@ import {
   saveVirtualCollectionType,
   type VirtualCollectionType,
 } from "./virtualCollectionType";
-import { GamesListView } from "./GamesListView";
 import "./CollectionsView.css";
 
 export type Session = {
@@ -210,9 +209,6 @@ export function CollectionsView({ session, onLogout }: Props) {
   const carouselTrackRef = useRef<HTMLDivElement>(null);
   const focusSlotRef = useRef<HTMLButtonElement | null>(null);
   const settingsWrapRef = useRef<HTMLDivElement>(null);
-  const [openCollection, setOpenCollection] = useState<RommCollection | null>(
-    null,
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -361,10 +357,6 @@ export function CollectionsView({ session, onLogout }: Props) {
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         moveFocus(1);
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        const c = items[focusIndex];
-        if (c) setOpenCollection(c);
       } else if (e.key === "Backspace") {
         e.preventDefault();
         onLogout();
@@ -375,17 +367,6 @@ export function CollectionsView({ session, onLogout }: Props) {
   }, [moveFocus, onLogout, settingsOpen, items, focusIndex]);
 
   const slots = useMemo(() => [-2, -1, 0, 1, 2], []);
-
-  if (openCollection) {
-    return (
-      <GamesListView
-        session={session}
-        collection={openCollection}
-        onBack={() => setOpenCollection(null)}
-        onLogout={onLogout}
-      />
-    );
-  }
 
   return (
     <div className="collections-screen">
@@ -532,10 +513,7 @@ export function CollectionsView({ session, onLogout }: Props) {
                   type="button"
                   role="listitem"
                   className={`collection-slot${isFocus ? " collection-slot--focus" : ""}`}
-                  onClick={() => {
-                    setFocusIndex(idx);
-                    setOpenCollection(c);
-                  }}
+                  onClick={() => setFocusIndex(idx)}
                 >
                 <div
                   className={`collection-poster${isFocus ? " collection-poster--focus" : ""}`}
@@ -574,7 +552,7 @@ export function CollectionsView({ session, onLogout }: Props) {
           <span className="footer-btn footer-btn--a" aria-hidden>
             A
           </span>
-          <span>Select</span>
+          <span>Focus</span>
         </div>
         <div className="footer-hint">
           <span className="footer-btn footer-btn--x" aria-hidden>
