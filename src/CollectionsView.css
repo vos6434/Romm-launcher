@@ -431,7 +431,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: 48px 24px 32px;
+  /* Match .collections-screen — same vertical band for the cover carousel */
+  padding: 76px 24px 32px;
   overflow: hidden;
   color: #f2f2f2;
   font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -449,7 +450,8 @@
 }
 
 .games-header {
-  margin-bottom: 4px;
+  /* Match .collections-header when both apply */
+  margin-bottom: 8px;
 }
 
 .games-collection-title {
@@ -461,19 +463,15 @@
   line-height: 1.15;
 }
 
-.games-main {
-  flex: 1;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  justify-content: center;
-}
-
-.games-viewport {
+/*
+ * Match collections: carousel viewport is a direct flex:1 child of the screen (no extra
+ * wrapper). Symmetric padding only — large padding-bottom was shifting the flex vertical
+ * center upward vs collections. Timeline stays position:absolute on the pan.
+ */
+.games-screen .collections-carousel-viewport.games-viewport {
+  padding: 16px 0;
   overflow-x: hidden;
   overflow-y: visible;
-  padding: 8px 0 20px;
 }
 
 .games-track {
@@ -483,6 +481,33 @@
   flex-shrink: 0;
   transition: transform 0.38s var(--tl-ease);
   will-change: transform;
+}
+
+.games-track--pan {
+  position: relative;
+  width: max-content;
+  max-width: 100%;
+}
+
+.games-poster-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.games-poster-stage .games-row--posters {
+  flex-shrink: 0;
+}
+
+/* Match .collection-meta margin + min-height — same box collections carousel uses */
+.games-poster-stage::after {
+  content: "";
+  flex-shrink: 0;
+  height: calc(12px + 3.125rem);
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .games-row {
@@ -509,10 +534,13 @@
 }
 
 .games-timeline-block {
-  position: relative;
-  align-self: stretch;
+  position: absolute;
+  left: 0;
+  top: 100%;
+  width: 100%;
   margin-top: 20px;
   padding-top: 0;
+  box-sizing: border-box;
 }
 
 .games-timeline-line-track {
@@ -670,7 +698,11 @@
 }
 
 .games-logout-alt {
-  margin-top: 4px;
+  position: absolute;
+  left: 50%;
+  bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
+  z-index: 8;
+  margin: 0;
   padding: 6px 12px;
   border: none;
   background: transparent;
@@ -678,8 +710,14 @@
   font-size: 0.8125rem;
   font-family: inherit;
   cursor: pointer;
+  transform: translateX(-50%);
 }
 
 .games-logout-alt:hover {
   color: rgba(255, 255, 255, 0.88);
+}
+
+.games-logout-alt:hover,
+.games-logout-alt:focus-visible {
+  transform: translateX(-50%);
 }

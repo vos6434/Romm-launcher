@@ -176,60 +176,61 @@ export function GamesListView({
       ) : null}
 
       {!loading && games.length > 0 ? (
-        <div className="games-main">
-          <div
-            className="collections-carousel-viewport games-viewport"
-            ref={viewportRef}
-          >
+        <div
+          className="collections-carousel-viewport games-viewport"
+          ref={viewportRef}
+        >
             <div
-              className="games-track"
+              className="games-track games-track--pan"
               ref={trackRef}
               role="list"
               aria-label="Games in collection"
             >
-              <div className="games-row games-row--posters">
-                {slots.map((offset) => {
-                  const idx = focusIndex + offset;
-                  const g = games[idx];
-                  const isFocus = offset === 0;
-                  const empty = idx < 0 || idx >= games.length;
+              <div className="games-poster-stage">
+                <div className="games-row games-row--posters">
+                  {slots.map((offset) => {
+                    const idx = focusIndex + offset;
+                    const g = games[idx];
+                    const isFocus = offset === 0;
+                    const empty = idx < 0 || idx >= games.length;
 
-                  if (empty) {
+                    if (empty) {
+                      return (
+                        <div
+                          key={`p-${offset}`}
+                          className="games-slot-cell games-slot-cell--empty"
+                          aria-hidden
+                        >
+                          <div className="collection-poster collection-poster--empty" />
+                        </div>
+                      );
+                    }
+
+                    const cover = coverForRom(session.apiBase, g);
                     return (
-                      <div
-                        key={`p-${offset}`}
-                        className="games-slot-cell games-slot-cell--empty"
-                        aria-hidden
+                      <button
+                        key={`p-${g.id}-${idx}`}
+                        ref={isFocus ? focusRef : undefined}
+                        type="button"
+                        role="listitem"
+                        className={`collection-slot games-poster-slot${isFocus ? " collection-slot--focus" : ""}`}
+                        onClick={() => setFocusIndex(idx)}
                       >
-                        <div className="collection-poster collection-poster--empty" />
-                      </div>
+                        <div
+                          className={`collection-poster${isFocus ? " collection-poster--focus" : ""}`}
+                        >
+                          {cover ? (
+                            <img src={cover} alt="" loading="lazy" />
+                          ) : (
+                            <span className="collection-poster-fallback">
+                              {g.name}
+                            </span>
+                          )}
+                        </div>
+                      </button>
                     );
-                  }
-
-                  const cover = coverForRom(session.apiBase, g);
-                  return (
-                    <button
-                      key={`p-${g.id}-${idx}`}
-                      ref={isFocus ? focusRef : undefined}
-                      type="button"
-                      role="listitem"
-                      className={`collection-slot games-poster-slot${isFocus ? " collection-slot--focus" : ""}`}
-                      onClick={() => setFocusIndex(idx)}
-                    >
-                      <div
-                        className={`collection-poster${isFocus ? " collection-poster--focus" : ""}`}
-                      >
-                        {cover ? (
-                          <img src={cover} alt="" loading="lazy" />
-                        ) : (
-                          <span className="collection-poster-fallback">
-                            {g.name}
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
+                  })}
+                </div>
               </div>
 
               <div className="games-timeline-block">
@@ -279,7 +280,6 @@ export function GamesListView({
               </div>
             </div>
           </div>
-        </div>
       ) : null}
 
       <footer className="collections-footer">
