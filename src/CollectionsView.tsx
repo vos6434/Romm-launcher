@@ -6,7 +6,15 @@ import {
   useRef,
   useState,
 } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { GamepadHorizontalNavPromptGlyphs } from "./GamepadHorizontalNavPromptGlyphs";
+import { GamepadPromptGlyph } from "./GamepadPromptGlyph";
+import {
+  KeyboardBackGlyph,
+  KeyboardMoveHorizontalGlyph,
+} from "./KeyboardCollectionsHintGlyphs";
+import { useCollectionsGamepadNavigation } from "./useCollectionsGamepadNavigation";
+import { useGamepadInput } from "./useGamepadFlavor";
 import {
   FETCH_CONCURRENCY,
   fetchReleaseYearLabel,
@@ -192,6 +200,10 @@ async function fetchCollectionArrays(
 }
 
 export function CollectionsView({ session, onLogout }: Props) {
+  const { flavor: gamepadFlavor, gamepadConnected } = useGamepadInput();
+  const tauriShell = isTauri();
+  const showGamepadHints = tauriShell && gamepadConnected;
+
   const [virtualType, setVirtualType] = useState<VirtualCollectionType>(() =>
     loadVirtualCollectionType(),
   );
@@ -337,6 +349,17 @@ export function CollectionsView({ session, onLogout }: Props) {
     },
     [items.length],
   );
+
+  const hintsReady = !loading;
+  const showMoveHints = hintsReady && items.length > 0;
+
+  useCollectionsGamepadNavigation({
+    enabled: tauriShell && hintsReady,
+    itemsLength: items.length,
+    settingsOpen,
+    onMove: moveFocus,
+    onBack: onLogout,
+  });
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -540,34 +563,28 @@ export function CollectionsView({ session, onLogout }: Props) {
         </div>
       ) : null}
 
-      <footer className="collections-footer">
-        <div className="footer-hint">
-          <span className="footer-keys" aria-hidden>
-            <kbd>←</kbd>
-            <kbd>→</kbd>
-          </span>
-          <span>Move</span>
-        </div>
-        <div className="footer-hint">
-          <span className="footer-btn footer-btn--a" aria-hidden>
-            A
-          </span>
-          <span>Focus</span>
-        </div>
-        <div className="footer-hint">
-          <span className="footer-btn footer-btn--x" aria-hidden>
-            X
-          </span>
-          <span>Launch</span>
-        </div>
-      </footer>
-
-      <button type="button" className="collections-logout" onClick={onLogout}>
-        <span className="footer-btn footer-btn--b" aria-hidden>
-          B
-        </span>
-        Back to login
-      </button>
+      {hintsReady ? (
+        <footer className="collections-footer" aria-label="Shortcuts">
+          {showMoveHints ? (
+            <div className="collections-footer-hint">
+              {showGamepadHints ? (
+                <GamepadHorizontalNavPromptGlyphs flavor={gamepadFlavor} />
+              ) : (
+                <KeyboardMoveHorizontalGlyph />
+              )}
+              <span>Move</span>
+            </div>
+          ) : null}
+          <div className="collections-footer-hint">
+            {showGamepadHints ? (
+              <GamepadPromptGlyph flavor={gamepadFlavor} role="back" />
+            ) : (
+              <KeyboardBackGlyph />
+            )}
+            <span>Back to login</span>
+          </div>
+        </footer>
+      ) : null}
     </div>
   );
 }

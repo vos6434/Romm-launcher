@@ -307,6 +307,30 @@ body {
   object-position: center;
 }
 
+.gp-prompt-img--gp-dpad-horizontal {
+  height: 32px;
+  width: auto;
+  max-width: 42px;
+  object-fit: contain;
+  object-position: center;
+}
+
+.gp-prompt-img--kb-arrows-horizontal {
+  height: 28px;
+  width: auto;
+  max-width: 48px;
+  object-fit: contain;
+  object-position: center;
+}
+
+.gp-prompt-img--kb-escape {
+  height: 28px;
+  width: auto;
+  max-width: 40px;
+  object-fit: contain;
+  object-position: center;
+}
+
 .gp-prompt-img--kb-arrows-vertical {
   height: 32px;
   width: auto;

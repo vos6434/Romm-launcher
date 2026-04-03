@@ -3,14 +3,17 @@ import type { GamepadFlavor } from "./gamepadFlavor";
 import xboxA from "./assets/kenney prompts/Xbox Series/Vector/xbox_button_a.svg?url";
 import xboxB from "./assets/kenney prompts/Xbox Series/Vector/xbox_button_b.svg?url";
 import xboxDpadVerticalOutline from "./assets/kenney prompts/Xbox Series/Vector/xbox_dpad_vertical_outline.svg?url";
+import xboxDpadHorizontalOutline from "./assets/kenney prompts/Xbox Series/Vector/xbox_dpad_horizontal_outline.svg?url";
 
 import psCross from "./assets/kenney prompts/PlayStation Series/Vector/playstation_button_cross.svg?url";
 import psCircle from "./assets/kenney prompts/PlayStation Series/Vector/playstation_button_circle.svg?url";
 import psDpadVerticalOutline from "./assets/kenney prompts/PlayStation Series/Vector/playstation_dpad_vertical_outline.svg?url";
+import psDpadHorizontalOutline from "./assets/kenney prompts/PlayStation Series/Vector/playstation_dpad_horizontal_outline.svg?url";
 
 import switchA from "./assets/kenney prompts/Nintendo Switch/Vector/switch_button_a.svg?url";
 import switchB from "./assets/kenney prompts/Nintendo Switch/Vector/switch_button_b.svg?url";
 import switchDpadVerticalOutline from "./assets/kenney prompts/Nintendo Switch/Vector/switch_dpad_vertical_outline.svg?url";
+import switchDpadHorizontalOutline from "./assets/kenney prompts/Nintendo Switch/Vector/switch_dpad_horizontal_outline.svg?url";
 
 /** South / confirm (A, Cross, B on Switch). */
 export function primaryPromptUrl(flavor: GamepadFlavor): string {
@@ -45,4 +48,10 @@ export function dpadVerticalOutlineUrl(flavor: GamepadFlavor): string {
   if (flavor === "playstation") return psDpadVerticalOutline;
   if (flavor === "nintendo") return switchDpadVerticalOutline;
   return xboxDpadVerticalOutline;
+}
+
+export function dpadHorizontalOutlineUrl(flavor: GamepadFlavor): string {
+  if (flavor === "playstation") return psDpadHorizontalOutline;
+  if (flavor === "nintendo") return switchDpadHorizontalOutline;
+  return xboxDpadHorizontalOutline;
 }
