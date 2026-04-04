@@ -624,15 +624,27 @@ button.collections-settings-action:focus-visible {
   height: 14px;
   pointer-events: none;
   --timeline-line-color: #ffffff;
-  --timeline-line: linear-gradient(
-    90deg,
-    var(--timeline-line-color) 0%,
-    var(--timeline-line-color) 100%
-  );
-  background-image: var(--timeline-line);
-  background-position: center 6px;
-  background-repeat: no-repeat;
-  background-size: 100% 2px;
+  --timeline-gap-half: 7px;
+}
+
+.collection-timeline::before,
+.collection-timeline::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--timeline-line-color);
+}
+
+.collection-timeline::before {
+  left: 0;
+  right: calc(50% + var(--timeline-gap-half));
+}
+
+.collection-timeline::after {
+  left: calc(50% + var(--timeline-gap-half));
+  right: 0;
 }
 
 .collection-timeline-dot-wrap {
@@ -651,7 +663,7 @@ button.collections-settings-action:focus-visible {
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.56);
+  background: rgba(255, 255, 255, 0.7);
   transition:
     width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
     height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
@@ -667,33 +679,50 @@ button.collections-settings-action:focus-visible {
 
 .collection-slot--timeline.collection-slot--edge-start:not(.collection-slot--focus):not(.collection-slot--empty) .collection-timeline-dot,
 .collection-slot--timeline.collection-slot--edge-end:not(.collection-slot--focus):not(.collection-slot--empty) .collection-timeline-dot {
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.62);
 }
 
 .collection-timeline--first {
-  --timeline-line: linear-gradient(
+}
+
+.collection-timeline--first::before {
+  background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0%,
-    var(--timeline-line-color) 34%,
+    var(--timeline-line-color) 38%,
     var(--timeline-line-color) 100%
   );
 }
 
 .collection-timeline--last {
-  --timeline-line: linear-gradient(
+}
+
+.collection-timeline--last::after {
+  background: linear-gradient(
     90deg,
     var(--timeline-line-color) 0%,
-    var(--timeline-line-color) 66%,
+    var(--timeline-line-color) 62%,
     rgba(255, 255, 255, 0) 100%
   );
 }
 
 .collection-timeline--first.collection-timeline--last {
-  --timeline-line: linear-gradient(
+}
+
+.collection-timeline--first.collection-timeline--last::before {
+  background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0%,
-    var(--timeline-line-color) 34%,
-    var(--timeline-line-color) 66%,
+    var(--timeline-line-color) 38%,
+    var(--timeline-line-color) 100%
+  );
+}
+
+.collection-timeline--first.collection-timeline--last::after {
+  background: linear-gradient(
+    90deg,
+    var(--timeline-line-color) 0%,
+    var(--timeline-line-color) 62%,
     rgba(255, 255, 255, 0) 100%
   );
 }
@@ -701,6 +730,10 @@ button.collections-settings-action:focus-visible {
 .collection-slot--timeline.collection-slot--focus {
   /* Keep the timeline lane fixed; only the poster should animate in games view. */
   transform: scale(1) translateY(0) !important;
+}
+
+.collection-slot--timeline.collection-slot--focus .collection-timeline {
+  --timeline-gap-half: 9px;
 }
 
 .collection-slot--timeline.collection-slot--focus .collection-poster {
