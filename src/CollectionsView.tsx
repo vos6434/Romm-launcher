@@ -1607,17 +1607,19 @@ export function CollectionsView({ session, onLogout }: Props) {
                     }
                   }}
                 >
-                  <div className={`collection-slot-content${slideClass}`}>
-                    <div
-                      className={`collection-poster${isFocus ? " collection-poster--focus" : ""}`}
-                    >
-                      {card.coverUrl ? (
-                        <img src={card.coverUrl} alt="" loading="lazy" />
-                      ) : (
-                        <span className="collection-poster-fallback">
-                          {card.title}
-                        </span>
-                      )}
+                  <div className="collection-slot-content">
+                    <div className={`collection-slot-poster-wrap${slideClass}`}>
+                      <div
+                        className={`collection-poster${isFocus ? " collection-poster--focus" : ""}`}
+                      >
+                        {card.coverUrl ? (
+                          <img src={card.coverUrl} alt="" loading="lazy" />
+                        ) : (
+                          <span className="collection-poster-fallback">
+                            {card.title}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div
                       className={`collection-meta${
@@ -1642,8 +1644,10 @@ export function CollectionsView({ session, onLogout }: Props) {
                         }`}
                         aria-hidden
                       />
-                      <span className="collection-years">{card.meta}</span>
-                      <span className="collection-label">{card.title}</span>
+                      <div className={`collection-meta-text${slideClass}`}>
+                        <span className="collection-years">{card.meta}</span>
+                        <span className="collection-label">{card.title}</span>
+                      </div>
                     </div>
                   </div>
                 </button>

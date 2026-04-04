@@ -440,12 +440,22 @@ button.collections-settings-action:focus-visible {
   z-index: 3;
 }
 
-/* Whole tile (frame + art + labels) slides; focus stays at flex offset 0 so track barely moves. */
+/* Slot layout stays fixed; motion wrappers let the timeline lane remain still. */
 .collection-slot-content {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   width: 100%;
+}
+
+.collection-slot-poster-wrap {
+  width: 100%;
+}
+
+.collection-meta-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 @keyframes collection-slot-slide-next {
