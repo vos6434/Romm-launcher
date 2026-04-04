@@ -31,6 +31,17 @@ type LoginOk = {
   apiBase: string;
 };
 
+function hasSavedCredentialsForAutoLogin(): boolean {
+  if (!isTauri()) return false;
+  const s = loadSavedCredentials();
+  return !!(
+    s &&
+    s.host.trim().length > 0 &&
+    s.username.trim().length > 0 &&
+    s.password.length > 0
+  );
+}
+
 function formatInvokeError(err: unknown): string {
   if (typeof err === "string") return err;
   if (err instanceof Error) return err.message;
@@ -54,6 +65,9 @@ function App() {
   const [rememberPassword, setRememberPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [authBootstrapping, setAuthBootstrapping] = useState(
+    hasSavedCredentialsForAutoLogin,
+  );
   const [gpFocusIndex, setGpFocusIndex] = useState(0);
 
   const formRef = useRef<HTMLFormElement>(null);
@@ -82,6 +96,37 @@ function App() {
       setPassword(saved.password);
       setRememberPassword(true);
     }
+  }, []);
+
+  useEffect(() => {
+    if (!hasSavedCredentialsForAutoLogin()) {
+      setAuthBootstrapping(false);
+      return;
+    }
+    const saved = loadSavedCredentials()!;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await invoke<LoginOk>("romm_login", {
+          host: saved.host,
+          username: saved.username,
+          password: saved.password,
+        });
+        if (cancelled) return;
+        setSession({
+          apiBase: result.apiBase,
+          accessToken: result.accessToken,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        setError(formatInvokeError(err));
+      } finally {
+        if (!cancelled) setAuthBootstrapping(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -204,6 +249,19 @@ function App() {
         session={session}
         onLogout={() => setSession(null)}
       />
+    );
+  }
+
+  if (authBootstrapping) {
+    return (
+      <div className="login-page">
+        <div className="login-card login-card--bootstrap">
+          <h1 className="login-title">RomM Launcher</h1>
+          <p className="login-status" role="status">
+            Signing in…
+          </p>
+        </div>
+      </div>
     );
   }
 

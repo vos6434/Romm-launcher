@@ -70,6 +70,17 @@ body {
   color: #ffffff;
 }
 
+.login-card--bootstrap .login-title {
+  margin-bottom: 16px;
+}
+
+.login-status {
+  margin: 0;
+  text-align: center;
+  font-size: 0.9375rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+
 .login-form {
   display: flex;
   flex-direction: column;
