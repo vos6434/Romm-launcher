@@ -1,6 +1,7 @@
 /* Collections grid (RomM launcher) */
 
 .collections-screen {
+  --focused-game-poster-scale: 1.063;
   position: relative;
   height: 100vh;
   min-height: 100vh;
@@ -574,42 +575,82 @@ button.collections-settings-action:focus-visible {
   padding-top: 18px;
 }
 
-.collection-meta--timeline::before {
-  content: "";
+.collection-timeline {
   position: absolute;
-  left: -100vw;
-  right: -100vw;
-  top: 6px;
-  height: 2px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.42);
+  left: calc(clamp(12px, 2.5vw, 28px) * -0.5);
+  right: calc(clamp(12px, 2.5vw, 28px) * -0.5);
+  top: 0;
+  height: 14px;
+  pointer-events: none;
+  --timeline-line-color: rgba(255, 255, 255, 0.72);
+  --timeline-dot-color: rgba(255, 255, 255, 0.72);
+  --timeline-line: linear-gradient(
+    90deg,
+    var(--timeline-line-color) 0%,
+    var(--timeline-line-color) 100%
+  );
+  background-image: var(--timeline-line);
+  background-position: center 6px;
+  background-repeat: no-repeat;
+  background-size: 100% 2px;
 }
 
-.collection-timeline {
+.collection-timeline::after {
+  content: "";
   position: absolute;
   left: 50%;
   top: 0;
   width: 14px;
   height: 14px;
-  border-radius: 999px;
   transform: translateX(-50%);
-  background: rgba(184, 184, 184, 0.88);
-  box-shadow: 0 0 0 2px rgba(20, 20, 20, 0.2);
-  pointer-events: none;
+  border-radius: 999px;
+  background: var(--timeline-dot-color);
+}
+
+.collection-timeline--first {
+  --timeline-line: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    var(--timeline-line-color) 34%,
+    var(--timeline-line-color) 100%
+  );
+}
+
+.collection-timeline--last {
+  --timeline-line: linear-gradient(
+    90deg,
+    var(--timeline-line-color) 0%,
+    var(--timeline-line-color) 66%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+.collection-timeline--first.collection-timeline--last {
+  --timeline-line: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    var(--timeline-line-color) 34%,
+    var(--timeline-line-color) 66%,
+    rgba(255, 255, 255, 0) 100%
+  );
 }
 
 .collection-slot--timeline.collection-slot--focus {
-  transform: none;
+  /* Keep the timeline lane fixed; only the poster should animate in games view. */
+  transform: scale(1) translateY(0) !important;
 }
 
 .collection-slot--timeline.collection-slot--focus .collection-poster {
   /* Collections scale the whole tile; bump the poster-only scale slightly so
      the focused game cover lands at the same visual height without moving the timeline. */
-  transform: scale(1.063) translateY(-3px);
+  transform: scale(var(--focused-game-poster-scale)) translateY(-3px);
 }
 
 .collection-slot--timeline.collection-slot--focus .collection-timeline {
-  background: #ffffff;
+  --timeline-dot-color: #ffffff;
+}
+
+.collection-slot--timeline.collection-slot--focus .collection-timeline::after {
   box-shadow:
     0 0 0 2px rgba(20, 20, 20, 0.24),
     0 0 18px rgba(255, 255, 255, 0.28);
@@ -620,7 +661,9 @@ button.collections-settings-action:focus-visible {
 }
 
 .collection-years {
+  display: block;
   font-size: 0.8125rem;
+  line-height: 1rem;
   font-weight: 500;
   color: #ffffff;
 }
@@ -631,8 +674,13 @@ button.collections-settings-action:focus-visible {
 }
 
 .collection-label {
+  display: block;
   font-size: 0.75rem;
+  line-height: 0.875rem;
   color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .collection-slot--focus .collection-label {
@@ -667,6 +715,10 @@ button.collections-settings-action:focus-visible {
 }
 
 @media (max-width: 920px) {
+  .collections-screen {
+    --focused-game-poster-scale: 1.067;
+  }
+
   .collections-footer {
     min-height: 98px;
   }
@@ -678,6 +730,10 @@ button.collections-settings-action:focus-visible {
 }
 
 @media (max-width: 720px) {
+  .collections-screen {
+    --focused-game-poster-scale: 1.071;
+  }
+
   .collections-footer {
     min-height: 118px;
   }

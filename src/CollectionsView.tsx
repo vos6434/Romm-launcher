@@ -1239,6 +1239,12 @@ export function CollectionsView({ session, onLogout }: Props) {
     const len = r * 2 + 1;
     return Array.from({ length: len }, (_, i) => i - r);
   }, [slotRadius]);
+  const timelineVisibleStartIndex =
+    activeCollection !== null ? Math.max(0, currentFocusIndex - slotRadius) : -1;
+  const timelineVisibleEndIndex =
+    activeCollection !== null
+      ? Math.min(currentCards.length - 1, currentFocusIndex + slotRadius)
+      : -1;
 
   const headerTitle = activeCollection ? "GAMES" : "COLLECTIONS";
   const headerSubtitle = activeCollection
@@ -1625,6 +1631,14 @@ export function CollectionsView({ session, onLogout }: Props) {
                           card.showTimeline
                             ? ""
                             : " collection-timeline--hidden"
+                        }${
+                          idx === timelineVisibleStartIndex
+                            ? " collection-timeline--first"
+                            : ""
+                        }${
+                          idx === timelineVisibleEndIndex
+                            ? " collection-timeline--last"
+                            : ""
                         }`}
                         aria-hidden
                       />
