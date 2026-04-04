@@ -2,11 +2,12 @@
 
 .collections-screen {
   position: relative;
+  height: 100vh;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 48px 24px 32px;
   overflow: hidden;
   color: #f2f2f2;
@@ -589,10 +590,14 @@ button.collections-settings-action:focus-visible {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  align-content: flex-end;
   justify-content: center;
+  width: min(100%, 880px);
+  box-sizing: border-box;
   gap: 14px 18px;
   margin-top: auto;
-  padding-top: 32px;
+  min-height: 80px;
+  padding-top: 20px;
   font-size: 0.875rem;
   color: rgba(255, 255, 255, 0.78);
 }
@@ -606,6 +611,23 @@ button.collections-settings-action:focus-visible {
 .collections-footer-hint--disabled {
   opacity: 0.5;
   pointer-events: none;
+}
+
+@media (max-width: 920px) {
+  .collections-footer {
+    min-height: 98px;
+  }
+
+  .collections-footer-hint--back {
+    flex-basis: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 720px) {
+  .collections-footer {
+    min-height: 118px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

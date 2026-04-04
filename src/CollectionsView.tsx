@@ -22,6 +22,7 @@ import {
   KeyboardRefreshGlyph,
   KeyboardSettingsGlyph,
 } from "./KeyboardCollectionsHintGlyphs";
+import { KeyboardEnterPromptGlyph } from "./KeyboardNavPromptGlyphs";
 import { useCollectionsGamepadNavigation } from "./useCollectionsGamepadNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
 import { fetchCollectionBackgroundUrl } from "./collectionBackground";
@@ -40,6 +41,7 @@ import {
   mapPool,
 } from "./collectionReleaseYears";
 import { rommAssetUrl } from "./rommAssets";
+import { fetchGamesForCollection, type RommGame } from "./rommGames";
 import {
   getSteamGridDbApiKey,
   loadSteamGridDbApiKey,
@@ -82,6 +84,14 @@ export type RommCollection = {
 type Props = {
   session: Session;
   onLogout: () => void;
+};
+
+type CarouselDisplayItem = {
+  key: string;
+  title: string;
+  meta: string;
+  coverUrl?: string;
+  backgroundUrl?: string;
 };
 
 function formatInvokeError(err: unknown): string {
@@ -345,10 +355,17 @@ export function CollectionsView({ session, onLogout }: Props) {
     Record<string, string | undefined>
   >({});
   const [items, setItems] = useState<RommCollection[]>([]);
+  const [activeCollection, setActiveCollection] = useState<RommCollection | null>(
+    null,
+  );
+  const [games, setGames] = useState<RommGame[]>([]);
   const [focusIndex, setFocusIndex] = useState(0);
+  const [gamesFocusIndex, setGamesFocusIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [gamesLoading, setGamesLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gamesError, setGamesError] = useState<string | null>(null);
   const [releaseLabels, setReleaseLabels] = useState<Record<string, string>>(
     {},
   );
@@ -402,6 +419,42 @@ export function CollectionsView({ session, onLogout }: Props) {
     };
   }, [session, virtualType]);
 
+  const inGamesView = activeCollection !== null;
+
+  useEffect(() => {
+    if (!activeCollection) {
+      setGames([]);
+      setGamesFocusIndex(0);
+      setGamesLoading(false);
+      setGamesError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setGames([]);
+    setGamesFocusIndex(0);
+    setGamesLoading(true);
+    setGamesError(null);
+
+    void (async () => {
+      try {
+        const list = await fetchGamesForCollection(session, activeCollection);
+        if (!cancelled) {
+          setGames(list);
+          setGamesFocusIndex(0);
+        }
+      } catch (e) {
+        if (!cancelled) setGamesError(formatInvokeError(e));
+      } finally {
+        if (!cancelled) setGamesLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCollection, session]);
+
   const visibleItems = useMemo(
     () => items.filter((c) => !isCollectionHidden(c)),
     [items, prefsRev],
@@ -416,40 +469,91 @@ export function CollectionsView({ session, onLogout }: Props) {
   }, [visibleItems.length]);
 
   useEffect(() => {
-    focusIndexRef.current = focusIndex;
-  }, [focusIndex]);
+    if (games.length === 0) {
+      setGamesFocusIndex(0);
+      return;
+    }
+    setGamesFocusIndex((i) => Math.min(i, games.length - 1));
+  }, [games.length]);
+
+  const collectionCards = useMemo<CarouselDisplayItem[]>(
+    () =>
+      visibleItems.map((c) => ({
+        key: collectionRowKey(c),
+        title: c.name,
+        meta: metaPrimaryLine(
+          releaseLabels[collectionRowKey(c)],
+          yearSpansLoading,
+        ),
+        coverUrl: coverForCarouselSlot(session.apiBase, c, gridCovers),
+      })),
+    [
+      visibleItems,
+      releaseLabels,
+      yearSpansLoading,
+      session.apiBase,
+      gridCovers,
+      prefsRev,
+    ],
+  );
+
+  const gameCards = useMemo<CarouselDisplayItem[]>(
+    () =>
+      games.map((game) => ({
+        key: game.key,
+        title: game.name,
+        meta: game.yearLabel,
+        coverUrl: game.coverUrl,
+        backgroundUrl: game.backgroundUrl,
+      })),
+    [games],
+  );
+
+  const currentCards = inGamesView ? gameCards : collectionCards;
+  const currentFocusIndex = inGamesView ? gamesFocusIndex : focusIndex;
+  const currentLoading = inGamesView ? gamesLoading : loading;
+  const currentError = inGamesView ? gamesError : error;
+
+  useEffect(() => {
+    focusIndexRef.current = currentFocusIndex;
+  }, [currentFocusIndex]);
 
   useLayoutEffect(() => {
-    if (visibleItems.length <= 1) {
-      prevFocusForSlideRef.current = focusIndex;
+    if (currentCards.length <= 1) {
+      prevFocusForSlideRef.current = currentFocusIndex;
       return;
     }
     const prev = prevFocusForSlideRef.current;
     if (prev === null) {
-      prevFocusForSlideRef.current = focusIndex;
+      prevFocusForSlideRef.current = currentFocusIndex;
       return;
     }
-    if (prev === focusIndex) return;
+    if (prev === currentFocusIndex) return;
     if (
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ) {
-      prevFocusForSlideRef.current = focusIndex;
+      prevFocusForSlideRef.current = currentFocusIndex;
       return;
     }
     setCarouselTransition({
-      dir: focusNavSlideDir(prev, focusIndex, visibleItems.length),
+      dir: focusNavSlideDir(prev, currentFocusIndex, currentCards.length),
       from: prev,
-      to: focusIndex,
+      to: currentFocusIndex,
     });
-    prevFocusForSlideRef.current = focusIndex;
-  }, [focusIndex, visibleItems.length]);
+    prevFocusForSlideRef.current = currentFocusIndex;
+  }, [currentCards.length, currentFocusIndex]);
 
   useEffect(() => {
     if (!carouselTransition) return;
     const timer = window.setTimeout(() => setCarouselTransition(null), 420);
     return () => window.clearTimeout(timer);
   }, [carouselTransition]);
+
+  useEffect(() => {
+    prevFocusForSlideRef.current = null;
+    setCarouselTransition(null);
+  }, [activeCollection]);
 
   useEffect(() => {
     let cancelled = false;
@@ -509,6 +613,22 @@ export function CollectionsView({ session, onLogout }: Props) {
 
   const onRefreshLibrary = useCallback(async () => {
     setRefreshing(true);
+    if (activeCollection) {
+      setGamesError(null);
+      try {
+        const list = await fetchGamesForCollection(session, activeCollection);
+        setGames(list);
+        setGamesFocusIndex((i) =>
+          list.length === 0 ? 0 : Math.min(i, list.length - 1),
+        );
+      } catch (e) {
+        setGamesError(formatInvokeError(e));
+      } finally {
+        setRefreshing(false);
+      }
+      return;
+    }
+
     setError(null);
     try {
       const list = await fetchCollectionArrays(session, virtualType);
@@ -521,7 +641,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     } finally {
       setRefreshing(false);
     }
-  }, [session, virtualType]);
+  }, [activeCollection, session, virtualType]);
 
   const toggleSettings = useCallback(() => {
     setCollectionSettingsOpen(false);
@@ -540,7 +660,29 @@ export function CollectionsView({ session, onLogout }: Props) {
     setCollectionSettingsTarget(null);
   }, []);
 
+  const openGamesView = useCallback(() => {
+    if (settingsOpen || collectionSettingsOpen || visibleItems.length === 0) return;
+    const target = visibleItems[focusIndexRef.current];
+    if (!target) return;
+    closeCollectionSettings();
+    setActiveCollection(target);
+  }, [
+    closeCollectionSettings,
+    collectionSettingsOpen,
+    settingsOpen,
+    visibleItems,
+  ]);
+
+  const goBack = useCallback(() => {
+    if (activeCollection) {
+      setActiveCollection(null);
+      return;
+    }
+    onLogout();
+  }, [activeCollection, onLogout]);
+
   const toggleCollectionSettings = useCallback(() => {
+    if (activeCollection) return;
     if (collectionSettingsOpen) {
       closeCollectionSettings();
       return;
@@ -557,6 +699,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     settingsOpen,
     visibleItems,
     focusIndex,
+    activeCollection,
   ]);
 
   const saveSteamGridKey = useCallback(() => {
@@ -766,7 +909,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   }
 
   useEffect(() => {
-    if (loading || items.length === 0) return;
+    if (currentLoading || currentCards.length === 0) return;
     const el = carouselViewportRef.current;
     if (!el) return;
     const apply = () => {
@@ -783,14 +926,14 @@ export function CollectionsView({ session, onLogout }: Props) {
       ro.disconnect();
       window.removeEventListener("resize", apply);
     };
-  }, [loading, visibleItems.length]);
+  }, [currentCards.length, currentLoading]);
 
   /** Keep the focused card’s horizontal center aligned with the viewport center. */
   useLayoutEffect(() => {
     const vp = carouselViewportRef.current;
     const track = carouselTrackRef.current;
     const focusEl = focusSlotRef.current;
-    if (!vp || !track || !focusEl || loading || visibleItems.length === 0) {
+    if (!vp || !track || !focusEl || currentLoading || currentCards.length === 0) {
       if (track) track.style.transform = "translateX(0)";
       return;
     }
@@ -819,17 +962,24 @@ export function CollectionsView({ session, onLogout }: Props) {
     ro.observe(vp);
     ro.observe(track);
     return () => ro.disconnect();
-  }, [focusIndex, visibleItems.length, loading, refreshing, slotRadius]);
+  }, [currentFocusIndex, currentCards.length, currentLoading, refreshing, slotRadius]);
 
-  const focused =
-    visibleItems.length > 0 ? visibleItems[focusIndex] : undefined;
-  const cardCoverUrl = useMemo(
-    () =>
-      focused
-        ? coverForCarouselSlot(session.apiBase, focused, gridCovers)
-        : undefined,
-    [focused, session.apiBase, gridCovers, prefsRev],
-  );
+  const focusedCollection =
+    !inGamesView && visibleItems.length > 0 ? visibleItems[focusIndex] : undefined;
+  const focusedGame =
+    inGamesView && games.length > 0 ? games[gamesFocusIndex] : undefined;
+  const cardCoverUrl = useMemo(() => {
+    if (focusedCollection) {
+      return coverForCarouselSlot(session.apiBase, focusedCollection, gridCovers);
+    }
+    return focusedGame?.coverUrl;
+  }, [
+    focusedCollection,
+    focusedGame,
+    session.apiBase,
+    gridCovers,
+    prefsRev,
+  ]);
 
   const [heroBg, setHeroBg] = useState<{
     key: string;
@@ -837,25 +987,25 @@ export function CollectionsView({ session, onLogout }: Props) {
   } | null>(null);
 
   useEffect(() => {
-    if (!focused) {
+    if (!focusedCollection) {
       setHeroBg(null);
       return;
     }
-    const key = collectionRowKey(focused);
+    const key = collectionRowKey(focusedCollection);
     const cover = coverForCarouselSlot(
       session.apiBase,
-      focused,
+      focusedCollection,
       gridCovers,
     );
     const heroIdx =
-      getCollectionPrefs(collectionRowKey(focused)).heroSteamIndex ?? 0;
+      getCollectionPrefs(collectionRowKey(focusedCollection)).heroSteamIndex ?? 0;
     setHeroBg({ key, url: undefined });
 
     let cancelled = false;
     void (async () => {
       const url = await fetchCollectionBackgroundUrl(
         session,
-        focused,
+        focusedCollection,
         cover,
         heroIdx,
       );
@@ -867,7 +1017,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       cancelled = true;
     };
   }, [
-    focused,
+    focusedCollection,
     session.apiBase,
     session.accessToken,
     steamSettingsRev,
@@ -875,29 +1025,36 @@ export function CollectionsView({ session, onLogout }: Props) {
     gridCovers,
   ]);
 
-  const bgUrl =
-    focused && heroBg && heroBg.key === collectionRowKey(focused)
+  const bgUrl = inGamesView
+    ? (focusedGame?.backgroundUrl ?? focusedGame?.coverUrl)
+    : focusedCollection &&
+        heroBg &&
+        heroBg.key === collectionRowKey(focusedCollection)
       ? (heroBg.url ?? cardCoverUrl)
       : cardCoverUrl;
 
   const moveFocus = useCallback(
     (delta: number) => {
-      if (visibleItems.length === 0) return;
-      const n = visibleItems.length;
+      if (currentCards.length === 0) return;
+      const n = currentCards.length;
       const from = focusIndexRef.current;
       const next = (from + delta + n) % n;
       focusIndexRef.current = next;
-      setFocusIndex(next);
+      if (activeCollection) {
+        setGamesFocusIndex(next);
+      } else {
+        setFocusIndex(next);
+      }
     },
-    [visibleItems.length],
+    [activeCollection, currentCards.length],
   );
 
-  const hintsReady = !loading;
-  const showMoveHints = hintsReady && visibleItems.length > 0;
+  const hintsReady = !currentLoading;
+  const showMoveHints = hintsReady && currentCards.length > 0;
 
   useCollectionsGamepadNavigation({
     enabled: tauriShell && hintsReady,
-    itemsLength: visibleItems.length,
+    itemsLength: currentCards.length,
     collectionSettingsOpen,
     collectionSettingsNav: collectionSettingsOpen
       ? {
@@ -916,9 +1073,10 @@ export function CollectionsView({ session, onLogout }: Props) {
           onCloseSettings: () => setSettingsOpen(false),
         }
       : null,
-    refreshDisabled: loading || refreshing,
+    refreshDisabled: currentLoading || refreshing,
     onMove: moveFocus,
-    onBack: onLogout,
+    onBack: goBack,
+    onPrimaryAction: activeCollection ? null : openGamesView,
     onToggleSettings: toggleSettings,
     onToggleCollectionSettings: toggleCollectionSettings,
     onRefresh: () => void onRefreshLibrary(),
@@ -947,7 +1105,7 @@ export function CollectionsView({ session, onLogout }: Props) {
           return;
         }
         e.preventDefault();
-        onLogout();
+        goBack();
         return;
       }
 
@@ -964,11 +1122,21 @@ export function CollectionsView({ session, onLogout }: Props) {
         }
         if (
           (e.key === "r" || e.key === "R") &&
-          !loading &&
+          !currentLoading &&
           !refreshing
         ) {
           e.preventDefault();
           void onRefreshLibrary();
+          return;
+        }
+        if (
+          e.key === "Enter" &&
+          !e.repeat &&
+          !activeCollection &&
+          visibleItems.length > 0
+        ) {
+          e.preventDefault();
+          openGamesView();
           return;
         }
       }
@@ -1040,23 +1208,26 @@ export function CollectionsView({ session, onLogout }: Props) {
         moveFocus(1);
       } else if (e.key === "Backspace") {
         e.preventDefault();
-        onLogout();
+        goBack();
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [
+    activeCollection,
     moveFocus,
-    onLogout,
+    goBack,
+    currentLoading,
     onRefreshLibrary,
     settingsOpen,
     collectionSettingsOpen,
     toggleSettings,
     toggleCollectionSettings,
     closeCollectionSettings,
+    openGamesView,
+    visibleItems.length,
     activateSettingsNav,
     activateCollectionSettingsNav,
-    loading,
     refreshing,
   ]);
 
@@ -1065,6 +1236,12 @@ export function CollectionsView({ session, onLogout }: Props) {
     const len = r * 2 + 1;
     return Array.from({ length: len }, (_, i) => i - r);
   }, [slotRadius]);
+
+  const headerTitle = activeCollection ? "GAMES" : "COLLECTIONS";
+  const headerSubtitle = activeCollection
+    ? `Browse games in ${activeCollection.name}`
+    : "Browse your game collections";
+  const backLabel = activeCollection ? "Back to collections" : "Back to login";
 
   const settingsPortal =
     settingsOpen && typeof document !== "undefined"
@@ -1305,27 +1482,33 @@ export function CollectionsView({ session, onLogout }: Props) {
       <div className="collections-bg-scrim" />
 
       <header className="collections-header">
-        <h1 className="collections-title">COLLECTIONS</h1>
-        <p className="collections-subtitle">Browse your game collections</p>
+        <h1 className="collections-title">{headerTitle}</h1>
+        <p className="collections-subtitle">{headerSubtitle}</p>
       </header>
 
-      {loading ? (
-        <p className="collections-status">Loading collections…</p>
+      {currentLoading ? (
+        <p className="collections-status">
+          {activeCollection ? "Loading games…" : "Loading collections…"}
+        </p>
       ) : null}
-      {error ? (
+      {currentError ? (
         <p className="collections-error" role="alert">
-          {error}
+          {currentError}
         </p>
       ) : null}
 
-      {!loading && !error && items.length === 0 ? (
+      {!currentLoading && !currentError && !activeCollection && items.length === 0 ? (
         <p className="collections-status">
           No collections found. Add manual or smart collections in RomM, or
           enable autogenerated groups in library settings—then log in again.
         </p>
       ) : null}
 
-      {!loading && !error && items.length > 0 && visibleItems.length === 0 ? (
+      {!currentLoading &&
+      !currentError &&
+      !activeCollection &&
+      items.length > 0 &&
+      visibleItems.length === 0 ? (
         <p className="collections-status">
           Every collection is hidden. Clear this launcher’s saved preferences
           (for example the <code>romm-launcher-collection-prefs-v1</code>{" "}
@@ -1333,7 +1516,13 @@ export function CollectionsView({ session, onLogout }: Props) {
         </p>
       ) : null}
 
-      {!loading && visibleItems.length > 0 ? (
+      {!currentLoading && !currentError && activeCollection && games.length === 0 ? (
+        <p className="collections-status">
+          No games found in <strong>{activeCollection.name}</strong>.
+        </p>
+      ) : null}
+
+      {!currentLoading && currentCards.length > 0 ? (
         <div
           className="collections-carousel-viewport"
           ref={carouselViewportRef}
@@ -1344,10 +1533,10 @@ export function CollectionsView({ session, onLogout }: Props) {
             role="list"
           >
             {slots.map((offset) => {
-              const idx = focusIndex + offset;
-              const c = visibleItems[idx];
+              const idx = currentFocusIndex + offset;
+              const card = currentCards[idx];
               const isFocus = offset === 0;
-              const isPlaceholder = idx < 0 || idx >= visibleItems.length;
+              const isPlaceholder = idx < 0 || idx >= currentCards.length;
               const edgeClass =
                 slots.length > 1
                   ? offset === -slotRadius
@@ -1362,7 +1551,7 @@ export function CollectionsView({ session, onLogout }: Props) {
                   <div
                     key={`empty-${offset}`}
                     className={`collection-slot collection-slot--empty${edgeClass}`}
-                    aria-hidden
+                        aria-hidden
                   >
                     <div className="collection-poster collection-poster--empty" />
                     <div className="collection-meta">
@@ -1373,11 +1562,6 @@ export function CollectionsView({ session, onLogout }: Props) {
                 );
               }
 
-              const cover = coverForCarouselSlot(
-                session.apiBase,
-                c,
-                gridCovers,
-              );
               const slideClass = carouselSlotContentAnimClass(carouselTransition, {
                 idx,
                 offset,
@@ -1387,38 +1571,40 @@ export function CollectionsView({ session, onLogout }: Props) {
               });
               return (
                 <button
-                  key={`${collectionRowKey(c)}-${idx}`}
+                  key={`${card.key}-${idx}`}
                   ref={isFocus ? focusSlotRef : undefined}
                   type="button"
                   role="listitem"
                   className={`collection-slot${isFocus ? " collection-slot--focus" : ""}${edgeClass}`}
                   onClick={() => {
                     const cur = focusIndexRef.current;
-                    if (idx === cur) return;
+                    if (idx === cur) {
+                      if (!activeCollection) openGamesView();
+                      return;
+                    }
                     focusIndexRef.current = idx;
-                    setFocusIndex(idx);
+                    if (activeCollection) {
+                      setGamesFocusIndex(idx);
+                    } else {
+                      setFocusIndex(idx);
+                    }
                   }}
                 >
                   <div className={`collection-slot-content${slideClass}`}>
                     <div
                       className={`collection-poster${isFocus ? " collection-poster--focus" : ""}`}
                     >
-                      {cover ? (
-                        <img src={cover} alt="" loading="lazy" />
+                      {card.coverUrl ? (
+                        <img src={card.coverUrl} alt="" loading="lazy" />
                       ) : (
                         <span className="collection-poster-fallback">
-                          {c.name}
+                          {card.title}
                         </span>
                       )}
                     </div>
                     <div className="collection-meta">
-                      <span className="collection-years">
-                        {metaPrimaryLine(
-                          releaseLabels[collectionRowKey(c)],
-                          yearSpansLoading,
-                        )}
-                      </span>
-                      <span className="collection-label">{c.name}</span>
+                      <span className="collection-years">{card.meta}</span>
+                      <span className="collection-label">{card.title}</span>
                     </div>
                   </div>
                 </button>
@@ -1440,16 +1626,30 @@ export function CollectionsView({ session, onLogout }: Props) {
               <span>Move</span>
             </div>
           ) : null}
-          <div
-            className={`collections-footer-hint${visibleItems.length === 0 ? " collections-footer-hint--disabled" : ""}`}
-          >
-            {showGamepadHints ? (
-              <GamepadCollectionSettingsPromptGlyph flavor={gamepadFlavor} />
-            ) : (
-              <KeyboardCollectionSettingsGlyph />
-            )}
-            <span>Collection settings</span>
-          </div>
+          {!activeCollection ? (
+            <div
+              className={`collections-footer-hint${visibleItems.length === 0 ? " collections-footer-hint--disabled" : ""}`}
+            >
+              {showGamepadHints ? (
+                <GamepadPromptGlyph flavor={gamepadFlavor} role="primary" />
+              ) : (
+                <KeyboardEnterPromptGlyph />
+              )}
+              <span>Select</span>
+            </div>
+          ) : null}
+          {!activeCollection ? (
+            <div
+              className={`collections-footer-hint${visibleItems.length === 0 ? " collections-footer-hint--disabled" : ""}`}
+            >
+              {showGamepadHints ? (
+                <GamepadCollectionSettingsPromptGlyph flavor={gamepadFlavor} />
+              ) : (
+                <KeyboardCollectionSettingsGlyph />
+              )}
+              <span>Collection settings</span>
+            </div>
+          ) : null}
           <div className="collections-footer-hint">
             {showGamepadHints ? (
               <GamepadStartPromptGlyph flavor={gamepadFlavor} />
@@ -1459,7 +1659,7 @@ export function CollectionsView({ session, onLogout }: Props) {
             <span>Launcher settings</span>
           </div>
           <div
-            className={`collections-footer-hint${loading || refreshing ? " collections-footer-hint--disabled" : ""}`}
+            className={`collections-footer-hint${currentLoading || refreshing ? " collections-footer-hint--disabled" : ""}`}
           >
             {showGamepadHints ? (
               <GamepadSelectPromptGlyph flavor={gamepadFlavor} />
@@ -1468,13 +1668,13 @@ export function CollectionsView({ session, onLogout }: Props) {
             )}
             <span>{refreshing ? "Refreshing…" : "Refresh library"}</span>
           </div>
-          <div className="collections-footer-hint">
+          <div className="collections-footer-hint collections-footer-hint--back">
             {showGamepadHints ? (
               <GamepadPromptGlyph flavor={gamepadFlavor} role="back" />
             ) : (
               <KeyboardBackGlyph />
             )}
-            <span>Back to login</span>
+            <span>{backLabel}</span>
           </div>
         </footer>
       ) : null}

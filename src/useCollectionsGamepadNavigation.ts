@@ -35,6 +35,7 @@ type Options = {
   refreshDisabled: boolean;
   onMove: (delta: number) => void;
   onBack: () => void;
+  onPrimaryAction: (() => void) | null;
   onToggleSettings: () => void;
   onToggleCollectionSettings: () => void;
   onRefresh: () => void;
@@ -51,12 +52,14 @@ export function useCollectionsGamepadNavigation({
   refreshDisabled,
   onMove,
   onBack,
+  onPrimaryAction,
   onToggleSettings,
   onToggleCollectionSettings,
   onRefresh,
 }: Options): void {
   const onMoveRef = useRef(onMove);
   const onBackRef = useRef(onBack);
+  const onPrimaryActionRef = useRef<(() => void) | null>(null);
   const onToggleSettingsRef = useRef(onToggleSettings);
   const onToggleCollectionSettingsRef = useRef(onToggleCollectionSettings);
   const onRefreshRef = useRef(onRefresh);
@@ -66,6 +69,7 @@ export function useCollectionsGamepadNavigation({
   );
   onMoveRef.current = onMove;
   onBackRef.current = onBack;
+  onPrimaryActionRef.current = onPrimaryAction;
   onToggleSettingsRef.current = onToggleSettings;
   onToggleCollectionSettingsRef.current = onToggleCollectionSettings;
   onRefreshRef.current = onRefresh;
@@ -264,6 +268,13 @@ export function useCollectionsGamepadNavigation({
       }
 
       if (now - lastActionRef.current >= ACTION_DEBOUNCE_MS) {
+        const south = pressed[GP_FACE_SOUTH] ?? false;
+        const prevSouth = prev[GP_FACE_SOUTH] ?? false;
+        if (itemsLength > 0 && south && !prevSouth && onPrimaryActionRef.current) {
+          lastActionRef.current = now;
+          onPrimaryActionRef.current();
+        }
+
         const start = pressed[GP_START] ?? false;
         const prevStart = prev[GP_START] ?? false;
         if (start && !prevStart) {
