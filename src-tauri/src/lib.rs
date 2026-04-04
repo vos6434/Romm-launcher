@@ -237,6 +237,233 @@ async fn sgdb_game_id_for_query(
     Ok(sgdb_extract_first_game_id(&search_json))
 }
 
+async fn sgdb_image_urls_for_game(
+    api_key: String,
+    search_query: String,
+    image_kind: &str,
+) -> Result<Vec<String>, String> {
+    let key = api_key.trim();
+    if key.is_empty() {
+        return Ok(Vec::new());
+    }
+    let q = search_query.trim();
+    if q.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let client = reqwest::Client::builder()
+        .https_only(true)
+        .user_agent("RomM-Launcher/0.1")
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let Some(game_id) = sgdb_game_id_for_query(&client, key, q).await? else {
+        return Ok(Vec::new());
+    };
+
+    let images_url = format!(
+        "{SGDB_BASE}/{image_kind}/game/{game_id}?types=static&nsfw=false&humor=false"
+    );
+
+    let res = client
+        .get(&images_url)
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", key))
+        .send()
+        .await
+        .map_err(|e| format!("SteamGridDB {image_kind} failed: {e}"))?;
+
+    let status = res.status();
+    let body = res.text().await.map_err(|e| e.to_string())?;
+
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(Vec::new());
+    }
+    if !status.is_success() {
+        let snippet: String = body.chars().take(200).collect();
+        return Err(format!("SteamGridDB {image_kind} ({}): {}", status, snippet));
+    }
+
+    let images_json: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| format!("SteamGridDB {image_kind} JSON: {e}"))?;
+    Ok(sgdb_all_image_urls(&images_json))
+}
+
+#[tauri::command]
+async fn steamgriddb_hero_urls(
+    api_key: String,
+    search_query: String,
+) -> Result<Vec<String>, String> {
+    sgdb_image_urls_for_game(api_key, search_query, "heroes").await
+}
+
+#[tauri::command]
+async fn steamgriddb_grid_urls(
+    api_key: String,
+    search_query: String,
+) -> Result<Vec<String>, String> {
+    sgdb_image_urls_for_game(api_key, search_query, "grids").await
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SteamGridImage {
+    source_index: u64,
+    url: String,
+    width: Option<u64>,
+    height: Option<u64>,
+    score: Option<i64>,
+    author: Option<String>,
+    mime: Option<String>,
+    created_at: Option<String>,
+}
+
+fn sgdb_parse_images(value: &serde_json::Value) -> Vec<SteamGridImage> {
+    let mut out = Vec::new();
+    let Some(arr) = value.get("data").and_then(|v| v.as_array()) else {
+        return out;
+    };
+
+    for (idx, item) in arr.iter().enumerate() {
+        let Some(url) = item.get("url").and_then(|x| x.as_str()) else {
+            continue;
+        };
+        if url.is_empty() {
+            continue;
+        }
+
+        let score = item
+            .get("score")
+            .and_then(|x| x.as_i64())
+            .or_else(|| item.get("upvotes").and_then(|x| x.as_i64()));
+
+        let author = item
+            .get("author")
+            .and_then(|a| a.get("name"))
+            .and_then(|x| x.as_str())
+            .map(std::string::ToString::to_string)
+            .or_else(|| {
+                item.get("author_name")
+                    .and_then(|x| x.as_str())
+                    .map(std::string::ToString::to_string)
+            });
+
+        out.push(SteamGridImage {
+            source_index: idx as u64,
+            url: url.to_string(),
+            width: item.get("width").and_then(|x| x.as_u64()),
+            height: item.get("height").and_then(|x| x.as_u64()),
+            score,
+            author,
+            mime: item
+                .get("mime")
+                .and_then(|x| x.as_str())
+                .map(std::string::ToString::to_string),
+            created_at: item
+                .get("created_at")
+                .and_then(|x| x.as_str())
+                .map(std::string::ToString::to_string),
+        });
+    }
+
+    out
+}
+
+async fn sgdb_images_for_game(
+    api_key: String,
+    search_query: String,
+    image_kind: &str,
+    static_only: bool,
+    include_nsfw: bool,
+    include_humor: bool,
+) -> Result<Vec<SteamGridImage>, String> {
+    let key = api_key.trim();
+    if key.is_empty() {
+        return Ok(Vec::new());
+    }
+    let q = search_query.trim();
+    if q.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let client = reqwest::Client::builder()
+        .https_only(true)
+        .user_agent("RomM-Launcher/0.1")
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let Some(game_id) = sgdb_game_id_for_query(&client, key, q).await? else {
+        return Ok(Vec::new());
+    };
+
+    let mut params = Vec::new();
+    if static_only {
+        params.push("types=static".to_string());
+    }
+    params.push(format!("nsfw={}", if include_nsfw { "true" } else { "false" }));
+    params.push(format!("humor={}", if include_humor { "true" } else { "false" }));
+    let images_url = format!("{SGDB_BASE}/{image_kind}/game/{game_id}?{}", params.join("&"));
+
+    let res = client
+        .get(&images_url)
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", key))
+        .send()
+        .await
+        .map_err(|e| format!("SteamGridDB {image_kind} failed: {e}"))?;
+
+    let status = res.status();
+    let body = res.text().await.map_err(|e| e.to_string())?;
+
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(Vec::new());
+    }
+    if !status.is_success() {
+        let snippet: String = body.chars().take(200).collect();
+        return Err(format!("SteamGridDB {image_kind} ({}): {}", status, snippet));
+    }
+
+    let images_json: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| format!("SteamGridDB {image_kind} JSON: {e}"))?;
+    Ok(sgdb_parse_images(&images_json))
+}
+
+#[tauri::command]
+async fn steamgriddb_hero_images(
+    api_key: String,
+    search_query: String,
+    static_only: bool,
+    include_nsfw: bool,
+    include_humor: bool,
+) -> Result<Vec<SteamGridImage>, String> {
+    sgdb_images_for_game(
+        api_key,
+        search_query,
+        "heroes",
+        static_only,
+        include_nsfw,
+        include_humor,
+    )
+    .await
+}
+
+#[tauri::command]
+async fn steamgriddb_grid_images(
+    api_key: String,
+    search_query: String,
+    static_only: bool,
+    include_nsfw: bool,
+    include_humor: bool,
+) -> Result<Vec<SteamGridImage>, String> {
+    sgdb_images_for_game(
+        api_key,
+        search_query,
+        "grids",
+        static_only,
+        include_nsfw,
+        include_humor,
+    )
+    .await
+}
+
 /// SteamGridDB hero image for fullscreen backgrounds ([API v2](https://www.steamgriddb.com/api)).
 /// Searches by collection name, then loads static heroes for the first matching game.
 #[tauri::command]
@@ -251,54 +478,7 @@ async fn steamgriddb_hero_url_at(
     search_query: String,
     index: u64,
 ) -> Result<Option<String>, String> {
-    let key = api_key.trim();
-    if key.is_empty() {
-        return Ok(None);
-    }
-    let q = search_query.trim();
-    if q.is_empty() {
-        return Ok(None);
-    }
-
-    let client = reqwest::Client::builder()
-        .https_only(true)
-        .user_agent("RomM-Launcher/0.1")
-        .build()
-        .map_err(|e| format!("HTTP client error: {e}"))?;
-
-    let Some(game_id) = sgdb_game_id_for_query(&client, key, q).await? else {
-        return Ok(None);
-    };
-
-    let heroes_url = format!(
-        "{SGDB_BASE}/heroes/game/{game_id}?types=static&nsfw=false&humor=false"
-    );
-
-    let res = client
-        .get(&heroes_url)
-        .header(
-            reqwest::header::AUTHORIZATION,
-            format!("Bearer {}", key),
-        )
-        .send()
-        .await
-        .map_err(|e| format!("SteamGridDB heroes failed: {e}"))?;
-
-    let status = res.status();
-    let body = res.text().await.map_err(|e| e.to_string())?;
-
-    if status == reqwest::StatusCode::NOT_FOUND {
-        return Ok(None);
-    }
-    if !status.is_success() {
-        let snippet: String = body.chars().take(200).collect();
-        return Err(format!("SteamGridDB heroes ({}): {}", status, snippet));
-    }
-
-    let heroes_json: serde_json::Value =
-        serde_json::from_str(&body).map_err(|e| format!("SteamGridDB heroes JSON: {e}"))?;
-
-    let urls = sgdb_all_image_urls(&heroes_json);
+    let urls = steamgriddb_hero_urls(api_key, search_query).await?;
     let i = index as usize;
     if i >= urls.len() {
         return Ok(None);
@@ -313,54 +493,7 @@ async fn steamgriddb_grid_url_at(
     search_query: String,
     index: u64,
 ) -> Result<Option<String>, String> {
-    let key = api_key.trim();
-    if key.is_empty() {
-        return Ok(None);
-    }
-    let q = search_query.trim();
-    if q.is_empty() {
-        return Ok(None);
-    }
-
-    let client = reqwest::Client::builder()
-        .https_only(true)
-        .user_agent("RomM-Launcher/0.1")
-        .build()
-        .map_err(|e| format!("HTTP client error: {e}"))?;
-
-    let Some(game_id) = sgdb_game_id_for_query(&client, key, q).await? else {
-        return Ok(None);
-    };
-
-    let grids_url = format!(
-        "{SGDB_BASE}/grids/game/{game_id}?types=static&nsfw=false&humor=false"
-    );
-
-    let res = client
-        .get(&grids_url)
-        .header(
-            reqwest::header::AUTHORIZATION,
-            format!("Bearer {}", key),
-        )
-        .send()
-        .await
-        .map_err(|e| format!("SteamGridDB grids failed: {e}"))?;
-
-    let status = res.status();
-    let body = res.text().await.map_err(|e| e.to_string())?;
-
-    if status == reqwest::StatusCode::NOT_FOUND {
-        return Ok(None);
-    }
-    if !status.is_success() {
-        let snippet: String = body.chars().take(200).collect();
-        return Err(format!("SteamGridDB grids ({}): {}", status, snippet));
-    }
-
-    let grids_json: serde_json::Value =
-        serde_json::from_str(&body).map_err(|e| format!("SteamGridDB grids JSON: {e}"))?;
-
-    let urls = sgdb_all_image_urls(&grids_json);
+    let urls = steamgriddb_grid_urls(api_key, search_query).await?;
     let i = index as usize;
     if i >= urls.len() {
         return Ok(None);
@@ -376,7 +509,11 @@ pub fn run() {
             romm_login,
             romm_api_get,
             steamgriddb_hero_url,
+            steamgriddb_hero_urls,
+            steamgriddb_hero_images,
             steamgriddb_hero_url_at,
+            steamgriddb_grid_urls,
+            steamgriddb_grid_images,
             steamgriddb_grid_url_at
         ])
         .run(tauri::generate_context!())

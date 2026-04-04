@@ -24,6 +24,8 @@ import {
   KeyboardSettingsGlyph,
 } from "./KeyboardCollectionsHintGlyphs";
 import { KeyboardEnterPromptGlyph } from "./KeyboardNavPromptGlyphs";
+import { getActiveGamepad } from "./gamepadAccess";
+import { GP_FACE_EAST, GP_FACE_SOUTH } from "./gamepadFlavor";
 import { useCollectionsGamepadNavigation } from "./useCollectionsGamepadNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
 import { fetchCollectionBackgroundUrl } from "./collectionBackground";
@@ -108,6 +110,33 @@ type BackgroundLayer = {
   active: boolean;
 };
 
+type PickerArtKind = "background" | "cover";
+
+type SteamGridPickerItem = {
+  sourceIndex: number;
+  url: string;
+  width?: number;
+  height?: number;
+  score?: number;
+  author?: string;
+  mime?: string;
+  createdAt?: string;
+};
+
+type SteamGridPickerTarget =
+  | {
+      scope: "collection";
+      rowKey: string;
+      name: string;
+      artKind: PickerArtKind;
+    }
+  | {
+      scope: "game";
+      gameKey: string;
+      name: string;
+      artKind: PickerArtKind;
+    };
+
 function formatInvokeError(err: unknown): string {
   if (typeof err === "string") return err;
   if (err instanceof Error) return err.message;
@@ -190,10 +219,23 @@ const BACKGROUND_CROSSFADE_MS = 320;
 /** Settings panel: IGDB, franchise, SteamGrid key, save, unhide. */
 const SETTINGS_NAV_SLOTS = 5;
 
-/** Per-collection panel: hide, next hero, next cover. */
-/** Hide + SteamGrid hero (prev/next/clear) + cover (prev/next/clear). */
-const COLLECTION_SETTINGS_NAV_SLOTS = 7;
-const GAME_SETTINGS_NAV_SLOTS = 6;
+/** Hide + pick background + clear background + pick cover + clear cover. */
+const COLLECTION_SETTINGS_NAV_SLOTS = 5;
+/** Pick background + clear background + pick cover + clear cover. */
+const GAME_SETTINGS_NAV_SLOTS = 4;
+
+const STEAMGRID_PICKER_GRID_COLS = 6;
+const PICKER_DPAD_LEFT = 14;
+const PICKER_DPAD_RIGHT = 15;
+const PICKER_DPAD_UP = 12;
+const PICKER_DPAD_DOWN = 13;
+const PICKER_LB = 4;
+const PICKER_RB = 5;
+const PICKER_STICK_DEAD = 0.42;
+const PICKER_STICK_REPEAT_MS = 140;
+const PICKER_ACTION_DEBOUNCE_MS = 220;
+
+type SteamGridPickerSort = "score" | "recent";
 
 /**
  * Signed minimal index delta on the ring → slide direction.
@@ -426,17 +468,13 @@ export function CollectionsView({ session, onLogout }: Props) {
   const settingsSaveRef = useRef<HTMLButtonElement>(null);
   const settingsUnhideAllRef = useRef<HTMLButtonElement>(null);
   const collectionHideRef = useRef<HTMLButtonElement>(null);
-  const collectionPrevHeroRef = useRef<HTMLButtonElement>(null);
-  const collectionNextHeroRef = useRef<HTMLButtonElement>(null);
+  const collectionPickHeroRef = useRef<HTMLButtonElement>(null);
   const collectionClearHeroRef = useRef<HTMLButtonElement>(null);
-  const collectionPrevCoverRef = useRef<HTMLButtonElement>(null);
-  const collectionNextCoverRef = useRef<HTMLButtonElement>(null);
+  const collectionPickCoverRef = useRef<HTMLButtonElement>(null);
   const collectionClearCoverRef = useRef<HTMLButtonElement>(null);
-  const gamePrevHeroRef = useRef<HTMLButtonElement>(null);
-  const gameNextHeroRef = useRef<HTMLButtonElement>(null);
+  const gamePickHeroRef = useRef<HTMLButtonElement>(null);
   const gameClearHeroRef = useRef<HTMLButtonElement>(null);
-  const gamePrevCoverRef = useRef<HTMLButtonElement>(null);
-  const gameNextCoverRef = useRef<HTMLButtonElement>(null);
+  const gamePickCoverRef = useRef<HTMLButtonElement>(null);
   const gameClearCoverRef = useRef<HTMLButtonElement>(null);
   const [settingsNavIndex, setSettingsNavIndex] = useState(0);
   const [slotRadius, setSlotRadius] = useState(2);
@@ -444,6 +482,34 @@ export function CollectionsView({ session, onLogout }: Props) {
     loadSteamGridDbApiKey(),
   );
   const [steamSettingsRev, setSteamSettingsRev] = useState(0);
+  const [steamGridPickerTarget, setSteamGridPickerTarget] =
+    useState<SteamGridPickerTarget | null>(null);
+  const [steamGridPickerSearchQuery, setSteamGridPickerSearchQuery] =
+    useState("");
+  const [steamGridPickerSearchInput, setSteamGridPickerSearchInput] =
+    useState("");
+  const [steamGridPickerSort, setSteamGridPickerSort] =
+    useState<SteamGridPickerSort>("score");
+  const [steamGridPickerStaticOnly, setSteamGridPickerStaticOnly] =
+    useState(true);
+  const [steamGridPickerNsfwOff, setSteamGridPickerNsfwOff] =
+    useState(true);
+  const [steamGridPickerHumorOff, setSteamGridPickerHumorOff] =
+    useState(true);
+  const [steamGridPickerItems, setSteamGridPickerItems] = useState<
+    SteamGridPickerItem[]
+  >([]);
+  const [steamGridPickerPage, setSteamGridPickerPage] = useState(0);
+  const [steamGridPickerSelectedIndex, setSteamGridPickerSelectedIndex] =
+    useState(0);
+  const [steamGridPickerLoading, setSteamGridPickerLoading] = useState(false);
+  const [steamGridPickerError, setSteamGridPickerError] = useState<string | null>(
+    null,
+  );
+  const [steamGridPickerViewport, setSteamGridPickerViewport] = useState(() => ({
+    width: typeof window === "undefined" ? 1366 : window.innerWidth,
+    height: typeof window === "undefined" ? 768 : window.innerHeight,
+  }));
 
   useEffect(() => {
     let cancelled = false;
@@ -811,6 +877,337 @@ export function CollectionsView({ session, onLogout }: Props) {
     setPrefsRev((n) => n + 1);
   }, []);
 
+  const steamGridPickerOpen = steamGridPickerTarget !== null;
+  const steamGridPickerCols = useMemo(() => {
+    if (steamGridPickerViewport.height < 760) {
+      return steamGridPickerTarget?.artKind === "cover" ? 4 : 3;
+    }
+    if (steamGridPickerViewport.width < 760) {
+      return steamGridPickerTarget?.artKind === "cover" ? 3 : 2;
+    }
+    if (steamGridPickerViewport.width < 1180) {
+      return steamGridPickerTarget?.artKind === "cover" ? 6 : 4;
+    }
+    return steamGridPickerTarget?.artKind === "cover" ? 8 : 6;
+  }, [steamGridPickerTarget?.artKind, steamGridPickerViewport.height, steamGridPickerViewport.width]);
+  const steamGridPickerRows = useMemo(() => {
+    if (steamGridPickerViewport.height < 760) return 2;
+    if (steamGridPickerViewport.width < 760) return 2;
+    return steamGridPickerTarget?.artKind === "cover" ? 3 : 4;
+  }, [steamGridPickerTarget?.artKind, steamGridPickerViewport.height, steamGridPickerViewport.width]);
+  const steamGridPickerPageSize = Math.max(1, steamGridPickerCols * steamGridPickerRows);
+  const steamGridPickerPageCount = Math.max(
+    1,
+    Math.ceil(steamGridPickerItems.length / steamGridPickerPageSize),
+  );
+  const steamGridPickerPageStart = steamGridPickerPage * steamGridPickerPageSize;
+  const steamGridPickerPageEnd = Math.min(
+    steamGridPickerItems.length - 1,
+    steamGridPickerPageStart + steamGridPickerPageSize - 1,
+  );
+  const steamGridPickerVisibleItems = useMemo(
+    () =>
+      steamGridPickerItems.slice(
+        steamGridPickerPageStart,
+        steamGridPickerPageStart + steamGridPickerPageSize,
+      ),
+    [steamGridPickerItems, steamGridPickerPageStart, steamGridPickerPageSize],
+  );
+  const steamGridPickerSelectedItem =
+    steamGridPickerSelectedIndex >= 0 &&
+    steamGridPickerSelectedIndex < steamGridPickerItems.length
+      ? steamGridPickerItems[steamGridPickerSelectedIndex]
+      : undefined;
+  const steamGridPickerSelectedUrl =
+    steamGridPickerSelectedItem?.url;
+
+  const closeSteamGridPicker = useCallback(() => {
+    setSteamGridPickerTarget(null);
+    setSteamGridPickerSearchQuery("");
+    setSteamGridPickerSearchInput("");
+    setSteamGridPickerItems([]);
+    setSteamGridPickerPage(0);
+    setSteamGridPickerSelectedIndex(0);
+    setSteamGridPickerLoading(false);
+    setSteamGridPickerError(null);
+  }, []);
+
+  const moveSteamGridPickerPage = useCallback(
+    (delta: number) => {
+      if (steamGridPickerItems.length === 0) return;
+      setSteamGridPickerPage((p) => {
+        const next = Math.max(0, Math.min(steamGridPickerPageCount - 1, p + delta));
+        const nextStart = next * steamGridPickerPageSize;
+        setSteamGridPickerSelectedIndex((i) =>
+          Math.max(nextStart, Math.min(nextStart + steamGridPickerPageSize - 1, i)),
+        );
+        return next;
+      });
+    },
+    [steamGridPickerItems.length, steamGridPickerPageCount, steamGridPickerPageSize],
+  );
+
+  useEffect(() => {
+    setSteamGridPickerPage((p) => Math.max(0, Math.min(steamGridPickerPageCount - 1, p)));
+  }, [steamGridPickerPageCount]);
+
+  useEffect(() => {
+    if (!steamGridPickerOpen || typeof window === "undefined") return;
+
+    const sync = () => {
+      setSteamGridPickerViewport({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
+    sync();
+    window.addEventListener("resize", sync);
+    return () => window.removeEventListener("resize", sync);
+  }, [steamGridPickerOpen]);
+
+  const loadSteamGridPickerResults = useCallback(
+    async (
+      target: SteamGridPickerTarget,
+      searchQuery: string,
+      initialSourceIndex: number,
+    ) => {
+      const steamKey = getSteamGridDbApiKey()?.trim();
+      if (!steamKey || !isTauri()) return;
+      const trimmedQuery = searchQuery.trim();
+      if (!trimmedQuery) {
+        setSteamGridPickerItems([]);
+        setSteamGridPickerSelectedIndex(0);
+        setSteamGridPickerError("Search query is required.");
+        return;
+      }
+
+      setSteamGridPickerSearchQuery(trimmedQuery);
+
+      setSteamGridPickerLoading(true);
+      setSteamGridPickerError(null);
+      try {
+        const command =
+          target.artKind === "background"
+            ? "steamgriddb_hero_images"
+            : "steamgriddb_grid_images";
+        const items = await invoke<SteamGridPickerItem[]>(command, {
+          apiKey: steamKey,
+          searchQuery: trimmedQuery,
+          staticOnly: steamGridPickerStaticOnly,
+          includeNsfw: !steamGridPickerNsfwOff,
+          includeHumor: !steamGridPickerHumorOff,
+        });
+        const list = Array.isArray(items)
+          ? items.filter(
+              (it): it is SteamGridPickerItem =>
+                !!it && typeof it.url === "string" && it.url.length > 0,
+            )
+          : [];
+
+        const filteredList =
+          target.artKind === "cover"
+            ? list.filter(
+                (it) =>
+                  typeof it.width === "number" &&
+                  typeof it.height === "number" &&
+                  it.height > it.width,
+              )
+            : list;
+
+        filteredList.sort((a, b) => {
+          if (steamGridPickerSort === "recent") {
+            const ta = a.createdAt ? Date.parse(a.createdAt) : 0;
+            const tb = b.createdAt ? Date.parse(b.createdAt) : 0;
+            if (ta !== tb) return tb - ta;
+            return b.sourceIndex - a.sourceIndex;
+          }
+          const sa = a.score ?? Number.NEGATIVE_INFINITY;
+          const sb = b.score ?? Number.NEGATIVE_INFINITY;
+          if (sa !== sb) return sb - sa;
+          return a.sourceIndex - b.sourceIndex;
+        });
+
+        setSteamGridPickerItems(filteredList);
+        if (filteredList.length === 0) {
+          setSteamGridPickerPage(0);
+          setSteamGridPickerSelectedIndex(0);
+          setSteamGridPickerError("No matching SteamGridDB art found.");
+          return;
+        }
+
+        if (initialSourceIndex >= 0) {
+          const matchIndex = filteredList.findIndex(
+            (it) => it.sourceIndex === initialSourceIndex,
+          );
+          const nextIndex = matchIndex >= 0 ? matchIndex : 0;
+          setSteamGridPickerSelectedIndex(nextIndex);
+          setSteamGridPickerPage(Math.floor(nextIndex / steamGridPickerPageSize));
+        } else {
+          setSteamGridPickerPage(0);
+          setSteamGridPickerSelectedIndex(0);
+        }
+      } catch (e) {
+        setSteamGridPickerError(formatInvokeError(e));
+      } finally {
+        setSteamGridPickerLoading(false);
+      }
+    },
+    [
+      steamGridPickerHumorOff,
+      steamGridPickerNsfwOff,
+      steamGridPickerPageSize,
+      steamGridPickerSort,
+      steamGridPickerStaticOnly,
+    ],
+  );
+
+  const openSteamGridPicker = useCallback(
+    async (
+      target: SteamGridPickerTarget,
+      searchQuery: string,
+      initialIndex: number,
+    ) => {
+      const steamKey = getSteamGridDbApiKey()?.trim();
+      if (!steamKey || !isTauri()) return;
+
+      setSteamGridPickerTarget(target);
+      setSteamGridPickerSearchQuery(searchQuery);
+      setSteamGridPickerSearchInput(searchQuery);
+      setSteamGridPickerItems([]);
+      setSteamGridPickerPage(0);
+      setSteamGridPickerSelectedIndex(0);
+      setSteamGridPickerError(null);
+      await loadSteamGridPickerResults(target, searchQuery, initialIndex);
+    },
+    [loadSteamGridPickerResults],
+  );
+
+  const refreshSteamGridPicker = useCallback(() => {
+    if (!steamGridPickerTarget || steamGridPickerLoading) return;
+    const query = steamGridPickerSearchInput.trim();
+    const initialSourceIndex = steamGridPickerSelectedItem?.sourceIndex ?? -1;
+    void loadSteamGridPickerResults(
+      steamGridPickerTarget,
+      query || steamGridPickerSearchQuery,
+      initialSourceIndex,
+    );
+  }, [
+    loadSteamGridPickerResults,
+    steamGridPickerLoading,
+    steamGridPickerSearchInput,
+    steamGridPickerSearchQuery,
+    steamGridPickerSelectedItem?.sourceIndex,
+    steamGridPickerTarget,
+  ]);
+
+  const openCollectionPicker = useCallback(
+    async (artKind: PickerArtKind) => {
+      const c = collectionSettingsTarget;
+      if (!c || !isTauri()) return;
+      const steamKey = getSteamGridDbApiKey()?.trim();
+      if (!steamKey) return;
+
+      const rowKey = collectionRowKey(c);
+      const searchQuery = await fetchSteamGridSearchQuery(session, c);
+      const prefs = getCollectionPrefs(rowKey);
+      const initialIndex =
+        artKind === "background"
+          ? (prefs.heroSteamIndex ?? -1)
+          : (prefs.coverSteamIndex ?? -1);
+
+      await openSteamGridPicker(
+        {
+          scope: "collection",
+          rowKey,
+          name: c.name,
+          artKind,
+        },
+        searchQuery,
+        initialIndex,
+      );
+    },
+    [collectionSettingsTarget, openSteamGridPicker, session],
+  );
+
+  const openGamePicker = useCallback(
+    async (artKind: PickerArtKind) => {
+      const game = gameSettingsTarget;
+      if (!game || !isTauri()) return;
+      const steamKey = getSteamGridDbApiKey()?.trim();
+      if (!steamKey) return;
+
+      const prefs = getGamePrefs(game.key, game.name);
+      const initialIndex =
+        artKind === "background"
+          ? (prefs.backgroundSteamIndex ?? -1)
+          : (prefs.coverSteamIndex ?? -1);
+      const searchQuery = game.name.trim() || "game";
+
+      await openSteamGridPicker(
+        {
+          scope: "game",
+          gameKey: game.key,
+          name: game.name,
+          artKind,
+        },
+        searchQuery,
+        initialIndex,
+      );
+    },
+    [gameSettingsTarget, openSteamGridPicker],
+  );
+
+  const applySteamGridPickerSelection = useCallback(() => {
+    const target = steamGridPickerTarget;
+    const url = steamGridPickerSelectedUrl;
+    const selectedItem = steamGridPickerSelectedItem;
+    if (!target || !url || !selectedItem) return;
+
+    if (target.scope === "collection") {
+      if (target.artKind === "background") {
+        patchCollectionPrefs(target.rowKey, {
+          heroSteamIndex: selectedItem.sourceIndex,
+        });
+        setHeroBg({ key: target.rowKey, url });
+      } else {
+        patchCollectionPrefs(target.rowKey, {
+          coverSteamIndex: selectedItem.sourceIndex,
+        });
+        setGridCovers((prev) => ({ ...prev, [target.rowKey]: url }));
+      }
+    } else {
+      if (target.artKind === "background") {
+        patchGamePrefs(
+          target.gameKey,
+          {
+            backgroundSteamIndex: selectedItem.sourceIndex,
+            backgroundSteamUrl: url,
+          },
+          target.name,
+        );
+        setGameHeroBg({ key: target.gameKey, url });
+      } else {
+        patchGamePrefs(
+          target.gameKey,
+          {
+            coverSteamIndex: selectedItem.sourceIndex,
+          },
+          target.name,
+        );
+        setGameGridCovers((prev) => ({ ...prev, [target.gameKey]: url }));
+      }
+    }
+
+    setPrefsRev((n) => n + 1);
+    closeSteamGridPicker();
+  }, [
+    closeSteamGridPicker,
+    steamGridPickerSelectedItem,
+    steamGridPickerSelectedUrl,
+    steamGridPickerTarget,
+  ]);
+
   const activateSettingsNav = useCallback(() => {
     switch (settingsNavIndex) {
       case 0:
@@ -833,60 +1230,9 @@ export function CollectionsView({ session, onLogout }: Props) {
     }
   }, [settingsNavIndex, saveSteamGridKey, onUnhideAllCollections]);
 
-  const prevHeroSteam = useCallback(async () => {
-    const c = collectionSettingsTarget;
-    if (!c || !isTauri()) return;
-    const key = getSteamGridDbApiKey()?.trim();
-    if (!key) return;
-    const rowKey = collectionRowKey(c);
-    const cur = getCollectionPrefs(rowKey).heroSteamIndex ?? -1;
-    if (cur < 0) return;
-    const next = cur - 1;
-    if (next < 0) {
-      patchCollectionPrefs(rowKey, { heroSteamIndex: -1 });
-      setHeroBg(null);
-      setPrefsRev((n) => n + 1);
-      return;
-    }
-    const searchQuery = await fetchSteamGridSearchQuery(session, c);
-    try {
-      const url = await invoke<string | null>("steamgriddb_hero_url_at", {
-        apiKey: key,
-        searchQuery,
-        index: next,
-      });
-      if (!url || url.length === 0) return;
-      patchCollectionPrefs(rowKey, { heroSteamIndex: next });
-      setHeroBg({ key: rowKey, url });
-    } catch {
-      return;
-    }
-    setPrefsRev((n) => n + 1);
-  }, [collectionSettingsTarget, session]);
-
-  const nextHeroSteam = useCallback(async () => {
-    const c = collectionSettingsTarget;
-    if (!c || !isTauri()) return;
-    const key = getSteamGridDbApiKey()?.trim();
-    if (!key) return;
-    const rowKey = collectionRowKey(c);
-    const searchQuery = await fetchSteamGridSearchQuery(session, c);
-    const cur = getCollectionPrefs(rowKey).heroSteamIndex ?? -1;
-    const next = cur + 1;
-    try {
-      const url = await invoke<string | null>("steamgriddb_hero_url_at", {
-        apiKey: key,
-        searchQuery,
-        index: next,
-      });
-      if (!url || url.length === 0) return;
-      patchCollectionPrefs(rowKey, { heroSteamIndex: next });
-      setHeroBg({ key: rowKey, url });
-    } catch {
-      return;
-    }
-    setPrefsRev((n) => n + 1);
-  }, [collectionSettingsTarget, session]);
+  const pickHeroSteam = useCallback(() => {
+    void openCollectionPicker("background");
+  }, [openCollectionPicker]);
 
   const clearHeroSteam = useCallback(() => {
     const c = collectionSettingsTarget;
@@ -896,42 +1242,9 @@ export function CollectionsView({ session, onLogout }: Props) {
     setPrefsRev((n) => n + 1);
   }, [collectionSettingsTarget]);
 
-  const prevCoverSteam = useCallback(async () => {
-    const c = collectionSettingsTarget;
-    if (!c || !isTauri()) return;
-    const key = getSteamGridDbApiKey()?.trim();
-    if (!key) return;
-    const rowKey = collectionRowKey(c);
-    const cur = getCollectionPrefs(rowKey).coverSteamIndex ?? -1;
-    if (cur < 0) return;
-    const next = cur - 1;
-    if (next < 0) {
-      patchCollectionPrefs(rowKey, { coverSteamIndex: -1 });
-      setGridCovers((prev) => ({ ...prev, [rowKey]: undefined }));
-      setPrefsRev((n) => n + 1);
-      return;
-    }
-    const url = await fetchCollectionGridCoverUrl(session, c, next);
-    if (!url) return;
-    patchCollectionPrefs(rowKey, { coverSteamIndex: next });
-    setGridCovers((prev) => ({ ...prev, [rowKey]: url }));
-    setPrefsRev((n) => n + 1);
-  }, [collectionSettingsTarget, session]);
-
-  const nextCoverSteam = useCallback(async () => {
-    const c = collectionSettingsTarget;
-    if (!c || !isTauri()) return;
-    const key = getSteamGridDbApiKey()?.trim();
-    if (!key) return;
-    const rowKey = collectionRowKey(c);
-    const cur = getCollectionPrefs(rowKey).coverSteamIndex ?? -1;
-    const next = cur + 1;
-    const url = await fetchCollectionGridCoverUrl(session, c, next);
-    if (!url) return;
-    patchCollectionPrefs(rowKey, { coverSteamIndex: next });
-    setGridCovers((prev) => ({ ...prev, [rowKey]: url }));
-    setPrefsRev((n) => n + 1);
-  }, [collectionSettingsTarget, session]);
+  const pickCoverSteam = useCallback(() => {
+    void openCollectionPicker("cover");
+  }, [openCollectionPicker]);
 
   const clearCoverSteam = useCallback(() => {
     const c = collectionSettingsTarget;
@@ -942,59 +1255,9 @@ export function CollectionsView({ session, onLogout }: Props) {
     setPrefsRev((n) => n + 1);
   }, [collectionSettingsTarget]);
 
-  const prevGameBackgroundSteam = useCallback(async () => {
-    const game = gameSettingsTarget;
-    if (!game || !isTauri()) return;
-    const key = getSteamGridDbApiKey()?.trim();
-    if (!key) return;
-    const cur = getGamePrefs(game.key, game.name).backgroundSteamIndex ?? -1;
-    if (cur < 0) return;
-    const next = cur - 1;
-    if (next < 0) {
-      patchGamePrefs(
-        game.key,
-        {
-          backgroundSteamIndex: -1,
-          backgroundSteamUrl: undefined,
-        },
-        game.name,
-      );
-      setGameHeroBg({ key: game.key, url: undefined });
-      setPrefsRev((n) => n + 1);
-      return;
-    }
-    const url = await fetchGameSteamGridBackgroundUrl(game, next);
-    patchGamePrefs(
-      game.key,
-      {
-        backgroundSteamIndex: url ? next : -1,
-        backgroundSteamUrl: url ?? undefined,
-      },
-      game.name,
-    );
-    setGameHeroBg({ key: game.key, url: url ?? undefined });
-    setPrefsRev((n) => n + 1);
-  }, [gameSettingsTarget]);
-
-  const nextGameBackgroundSteam = useCallback(async () => {
-    const game = gameSettingsTarget;
-    if (!game || !isTauri()) return;
-    const key = getSteamGridDbApiKey()?.trim();
-    if (!key) return;
-    const cur = getGamePrefs(game.key, game.name).backgroundSteamIndex ?? -1;
-    const next = cur + 1;
-    const url = await fetchGameSteamGridBackgroundUrl(game, next);
-    patchGamePrefs(
-      game.key,
-      {
-        backgroundSteamIndex: url ? next : -1,
-        backgroundSteamUrl: url ?? undefined,
-      },
-      game.name,
-    );
-    setGameHeroBg({ key: game.key, url: url ?? undefined });
-    setPrefsRev((n) => n + 1);
-  }, [gameSettingsTarget]);
+  const pickGameBackgroundSteam = useCallback(() => {
+    void openGamePicker("background");
+  }, [openGamePicker]);
 
   const clearGameBackgroundSteam = useCallback(() => {
     const game = gameSettingsTarget;
@@ -1011,52 +1274,15 @@ export function CollectionsView({ session, onLogout }: Props) {
     setPrefsRev((n) => n + 1);
   }, [gameSettingsTarget]);
 
-  const prevGameCoverSteam = useCallback(async () => {
-    const game = gameSettingsTarget;
-    if (!game || !isTauri()) return;
-    const key = getSteamGridDbApiKey()?.trim();
-    if (!key) return;
-    const cur = getGamePrefs(game.key, game.name).coverSteamIndex ?? -1;
-    if (cur < 0) return;
-    const next = cur - 1;
-    if (next < 0) {
-      patchGamePrefs(game.key, { coverSteamIndex: -1 }, game.name);
-      setPrefsRev((n) => n + 1);
-      return;
-    }
-    const url = await fetchGameSteamGridCoverUrl(game, next);
-    patchGamePrefs(
-      game.key,
-      {
-        coverSteamIndex: url ? next : -1,
-      },
-      game.name,
-    );
-    setPrefsRev((n) => n + 1);
-  }, [gameSettingsTarget]);
-
-  const nextGameCoverSteam = useCallback(async () => {
-    const game = gameSettingsTarget;
-    if (!game || !isTauri()) return;
-    const key = getSteamGridDbApiKey()?.trim();
-    if (!key) return;
-    const cur = getGamePrefs(game.key, game.name).coverSteamIndex ?? -1;
-    const next = cur + 1;
-    const url = await fetchGameSteamGridCoverUrl(game, next);
-    patchGamePrefs(
-      game.key,
-      {
-        coverSteamIndex: url ? next : -1,
-      },
-      game.name,
-    );
-    setPrefsRev((n) => n + 1);
-  }, [gameSettingsTarget]);
+  const pickGameCoverSteam = useCallback(() => {
+    void openGamePicker("cover");
+  }, [openGamePicker]);
 
   const clearGameCoverSteam = useCallback(() => {
     const game = gameSettingsTarget;
     if (!game) return;
     patchGamePrefs(game.key, { coverSteamIndex: -1 }, game.name);
+    setGameGridCovers((prev) => ({ ...prev, [game.key]: undefined }));
     setPrefsRev((n) => n + 1);
   }, [gameSettingsTarget]);
 
@@ -1072,21 +1298,15 @@ export function CollectionsView({ session, onLogout }: Props) {
         break;
       }
       case 1:
-        void prevHeroSteam();
+        pickHeroSteam();
         break;
       case 2:
-        void nextHeroSteam();
-        break;
-      case 3:
         clearHeroSteam();
         break;
+      case 3:
+        pickCoverSteam();
+        break;
       case 4:
-        void prevCoverSteam();
-        break;
-      case 5:
-        void nextCoverSteam();
-        break;
-      case 6:
         clearCoverSteam();
         break;
       default:
@@ -1097,30 +1317,22 @@ export function CollectionsView({ session, onLogout }: Props) {
     collectionSettingsTarget,
     clearCoverSteam,
     clearHeroSteam,
-    nextCoverSteam,
-    nextHeroSteam,
-    prevCoverSteam,
-    prevHeroSteam,
+    pickCoverSteam,
+    pickHeroSteam,
   ]);
 
   const activateGameSettingsNav = useCallback(() => {
     switch (gameSettingsNavIndex) {
       case 0:
-        void prevGameBackgroundSteam();
+        pickGameBackgroundSteam();
         break;
       case 1:
-        void nextGameBackgroundSteam();
-        break;
-      case 2:
         clearGameBackgroundSteam();
         break;
+      case 2:
+        pickGameCoverSteam();
+        break;
       case 3:
-        void prevGameCoverSteam();
-        break;
-      case 4:
-        void nextGameCoverSteam();
-        break;
-      case 5:
         clearGameCoverSteam();
         break;
       default:
@@ -1130,10 +1342,8 @@ export function CollectionsView({ session, onLogout }: Props) {
     clearGameBackgroundSteam,
     clearGameCoverSteam,
     gameSettingsNavIndex,
-    nextGameBackgroundSteam,
-    nextGameCoverSteam,
-    prevGameBackgroundSteam,
-    prevGameCoverSteam,
+    pickGameBackgroundSteam,
+    pickGameCoverSteam,
   ]);
 
   useLayoutEffect(() => {
@@ -1153,11 +1363,9 @@ export function CollectionsView({ session, onLogout }: Props) {
     if (!collectionSettingsOpen) return;
     const refs = [
       collectionHideRef,
-      collectionPrevHeroRef,
-      collectionNextHeroRef,
+      collectionPickHeroRef,
       collectionClearHeroRef,
-      collectionPrevCoverRef,
-      collectionNextCoverRef,
+      collectionPickCoverRef,
       collectionClearCoverRef,
     ] as const;
     refs[collectionSettingsNavIndex]?.current?.focus();
@@ -1166,11 +1374,9 @@ export function CollectionsView({ session, onLogout }: Props) {
   useLayoutEffect(() => {
     if (!gameSettingsOpen) return;
     const refs = [
-      gamePrevHeroRef,
-      gameNextHeroRef,
+      gamePickHeroRef,
       gameClearHeroRef,
-      gamePrevCoverRef,
-      gameNextCoverRef,
+      gamePickCoverRef,
       gameClearCoverRef,
     ] as const;
     refs[gameSettingsNavIndex]?.current?.focus();
@@ -1443,6 +1649,19 @@ export function CollectionsView({ session, onLogout }: Props) {
     [activeCollection, currentCards.length],
   );
 
+  const moveSteamGridPickerSelection = useCallback(
+    (delta: number) => {
+      if (steamGridPickerItems.length === 0) return;
+      setSteamGridPickerSelectedIndex((i) =>
+        Math.max(
+          steamGridPickerPageStart,
+          Math.min(steamGridPickerPageEnd, i + delta),
+        ),
+      );
+    },
+    [steamGridPickerItems.length, steamGridPickerPageEnd, steamGridPickerPageStart],
+  );
+
   const hintsReady = !currentLoading;
   const showMoveHints = hintsReady && currentCards.length > 0;
   const itemSettingsOpen = collectionSettingsOpen || gameSettingsOpen;
@@ -1463,7 +1682,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       : null;
 
   useCollectionsGamepadNavigation({
-    enabled: tauriShell && hintsReady,
+    enabled: tauriShell && hintsReady && !steamGridPickerOpen,
     itemsLength: currentCards.length,
     collectionSettingsOpen: itemSettingsOpen,
     collectionSettingsNav: itemSettingsNav,
@@ -1486,6 +1705,133 @@ export function CollectionsView({ session, onLogout }: Props) {
   });
 
   useEffect(() => {
+    if (
+      !steamGridPickerOpen ||
+      !tauriShell ||
+      typeof navigator === "undefined" ||
+      !("getGamepads" in navigator)
+    ) {
+      return;
+    }
+
+    let raf = 0;
+    let prevButtons: boolean[] | null = null;
+    let lastActionAt = 0;
+    let hold: { xSign: -1 | 0 | 1; ySign: -1 | 0 | 1; lastStep: number } = {
+      xSign: 0,
+      ySign: 0,
+      lastStep: 0,
+    };
+
+    const tick = () => {
+      if (document.visibilityState !== "visible") {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+
+      const pad = getActiveGamepad();
+      if (!pad) {
+        prevButtons = null;
+        hold = { xSign: 0, ySign: 0, lastStep: 0 };
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+
+      const now = performance.now();
+      const pressed = pad.buttons.map(
+        (b) => b.pressed || (typeof b.value === "number" && b.value > 0.5),
+      );
+      const prev = prevButtons ?? pressed.map(() => false);
+
+      let navigated = false;
+      if (pressed[PICKER_DPAD_LEFT] && !prev[PICKER_DPAD_LEFT]) {
+        moveSteamGridPickerSelection(-1);
+        navigated = true;
+      } else if (pressed[PICKER_DPAD_RIGHT] && !prev[PICKER_DPAD_RIGHT]) {
+        moveSteamGridPickerSelection(1);
+        navigated = true;
+      } else if (pressed[PICKER_DPAD_UP] && !prev[PICKER_DPAD_UP]) {
+        moveSteamGridPickerSelection(-steamGridPickerCols);
+        navigated = true;
+      } else if (pressed[PICKER_DPAD_DOWN] && !prev[PICKER_DPAD_DOWN]) {
+        moveSteamGridPickerSelection(steamGridPickerCols);
+        navigated = true;
+      }
+
+      if (!navigated) {
+        const ax = pad.axes[0] ?? 0;
+        const ay = pad.axes[1] ?? 0;
+        let xSign: -1 | 0 | 1 = 0;
+        let ySign: -1 | 0 | 1 = 0;
+        if (Math.abs(ax) >= Math.abs(ay) && Math.abs(ax) > PICKER_STICK_DEAD) {
+          xSign = ax < 0 ? -1 : 1;
+        } else if (Math.abs(ay) > PICKER_STICK_DEAD) {
+          ySign = ay < 0 ? -1 : 1;
+        }
+
+        if (xSign === 0 && ySign === 0) {
+          hold = { xSign: 0, ySign: 0, lastStep: 0 };
+        } else {
+          const changed = xSign !== hold.xSign || ySign !== hold.ySign;
+          if (changed || now - hold.lastStep >= PICKER_STICK_REPEAT_MS) {
+            if (xSign !== 0) moveSteamGridPickerSelection(xSign);
+            if (ySign !== 0) {
+              moveSteamGridPickerSelection(ySign * steamGridPickerCols);
+            }
+            hold = { xSign, ySign, lastStep: now };
+          }
+        }
+      }
+
+      if (now - lastActionAt >= PICKER_ACTION_DEBOUNCE_MS) {
+        const lb = pressed[PICKER_LB] ?? false;
+        const prevLb = prev[PICKER_LB] ?? false;
+        if (lb && !prevLb) {
+          lastActionAt = now;
+          moveSteamGridPickerPage(-1);
+        }
+
+        const rb = pressed[PICKER_RB] ?? false;
+        const prevRb = prev[PICKER_RB] ?? false;
+        if (rb && !prevRb) {
+          lastActionAt = now;
+          moveSteamGridPickerPage(1);
+        }
+      }
+
+      if (now - lastActionAt >= PICKER_ACTION_DEBOUNCE_MS) {
+        const south = pressed[GP_FACE_SOUTH] ?? false;
+        const prevSouth = prev[GP_FACE_SOUTH] ?? false;
+        if (south && !prevSouth) {
+          lastActionAt = now;
+          applySteamGridPickerSelection();
+        }
+
+        const east = pressed[GP_FACE_EAST] ?? false;
+        const prevEast = prev[GP_FACE_EAST] ?? false;
+        if (east && !prevEast) {
+          lastActionAt = now;
+          closeSteamGridPicker();
+        }
+      }
+
+      prevButtons = pressed;
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [
+    applySteamGridPickerSelection,
+    closeSteamGridPicker,
+    moveSteamGridPickerPage,
+    moveSteamGridPickerSelection,
+    steamGridPickerCols,
+    steamGridPickerOpen,
+    tauriShell,
+  ]);
+
+  useEffect(() => {
     function isShortcutTarget(el: EventTarget | null): boolean {
       if (!el || !(el instanceof HTMLElement)) return false;
       const tag = el.tagName;
@@ -1496,6 +1842,67 @@ export function CollectionsView({ session, onLogout }: Props) {
     }
 
     function onKey(e: KeyboardEvent) {
+      if (steamGridPickerOpen) {
+        const shortcutTarget = isShortcutTarget(e.target);
+
+        if (e.key === "Escape") {
+          e.preventDefault();
+          closeSteamGridPicker();
+          return;
+        }
+
+        if (shortcutTarget) {
+          if (e.key === "Enter" && !e.repeat) {
+            e.preventDefault();
+            refreshSteamGridPicker();
+          }
+          return;
+        }
+
+        if (e.key === "Backspace") {
+          e.preventDefault();
+          closeSteamGridPicker();
+          return;
+        }
+
+        if (e.key === "Enter" && !e.repeat) {
+          e.preventDefault();
+          applySteamGridPickerSelection();
+          return;
+        }
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          moveSteamGridPickerSelection(-1);
+          return;
+        }
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          moveSteamGridPickerSelection(1);
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          moveSteamGridPickerSelection(-steamGridPickerCols);
+          return;
+        }
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          moveSteamGridPickerSelection(steamGridPickerCols);
+          return;
+        }
+        if (e.key === "PageUp") {
+          e.preventDefault();
+          moveSteamGridPickerPage(-1);
+          return;
+        }
+        if (e.key === "PageDown") {
+          e.preventDefault();
+          moveSteamGridPickerPage(1);
+          return;
+        }
+        return;
+      }
+
       if (e.key === "Escape") {
         if (itemSettingsOpen) {
           e.preventDefault();
@@ -1633,7 +2040,12 @@ export function CollectionsView({ session, onLogout }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [
     activeCollection,
+    applySteamGridPickerSelection,
+    closeSteamGridPicker,
+    moveSteamGridPickerPage,
     moveFocus,
+    moveSteamGridPickerSelection,
+    refreshSteamGridPicker,
     goBack,
     currentLoading,
     onRefreshLibrary,
@@ -1650,6 +2062,8 @@ export function CollectionsView({ session, onLogout }: Props) {
     activateCollectionSettingsNav,
     activateGameSettingsNav,
     refreshing,
+    steamGridPickerCols,
+    steamGridPickerOpen,
   ]);
 
   const slots = useMemo(() => {
@@ -1851,55 +2265,37 @@ export function CollectionsView({ session, onLogout }: Props) {
                 </strong>
               </button>
               <button
-                ref={collectionPrevHeroRef}
+                ref={collectionPickHeroRef}
                 type="button"
                 className={`collections-settings-action${collectionSettingsNavIndex === 1 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
                 onFocus={() => setCollectionSettingsNavIndex(1)}
-                onClick={() => void prevHeroSteam()}
+                onClick={pickHeroSteam}
               >
-                <strong>Previous SteamGrid background</strong>
-              </button>
-              <button
-                ref={collectionNextHeroRef}
-                type="button"
-                className={`collections-settings-action${collectionSettingsNavIndex === 2 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
-                onFocus={() => setCollectionSettingsNavIndex(2)}
-                onClick={() => void nextHeroSteam()}
-              >
-                <strong>Next SteamGrid background</strong>
+                <strong>Pick SteamGrid background</strong>
               </button>
               <button
                 ref={collectionClearHeroRef}
                 type="button"
-                className={`collections-settings-action${collectionSettingsNavIndex === 3 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
-                onFocus={() => setCollectionSettingsNavIndex(3)}
+                className={`collections-settings-action${collectionSettingsNavIndex === 2 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setCollectionSettingsNavIndex(2)}
                 onClick={clearHeroSteam}
               >
                 <strong>Clear SteamGrid background</strong>
               </button>
               <button
-                ref={collectionPrevCoverRef}
+                ref={collectionPickCoverRef}
                 type="button"
-                className={`collections-settings-action${collectionSettingsNavIndex === 4 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
-                onFocus={() => setCollectionSettingsNavIndex(4)}
-                onClick={() => void prevCoverSteam()}
+                className={`collections-settings-action${collectionSettingsNavIndex === 3 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setCollectionSettingsNavIndex(3)}
+                onClick={pickCoverSteam}
               >
-                <strong>Previous cover art</strong>
-              </button>
-              <button
-                ref={collectionNextCoverRef}
-                type="button"
-                className={`collections-settings-action${collectionSettingsNavIndex === 5 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
-                onFocus={() => setCollectionSettingsNavIndex(5)}
-                onClick={() => void nextCoverSteam()}
-              >
-                <strong>Next cover art</strong>
+                <strong>Pick cover art</strong>
               </button>
               <button
                 ref={collectionClearCoverRef}
                 type="button"
-                className={`collections-settings-action${collectionSettingsNavIndex === 6 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
-                onFocus={() => setCollectionSettingsNavIndex(6)}
+                className={`collections-settings-action${collectionSettingsNavIndex === 4 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setCollectionSettingsNavIndex(4)}
                 onClick={clearCoverSteam}
               >
                 <strong>Clear cover art</strong>
@@ -1933,60 +2329,275 @@ export function CollectionsView({ session, onLogout }: Props) {
                 {gameSettingsTarget.name}
               </p>
               <button
-                ref={gamePrevHeroRef}
+                ref={gamePickHeroRef}
                 type="button"
                 className={`collections-settings-action${gameSettingsNavIndex === 0 ? " collections-settings-action--active" : ""}${gameSteamDisabled ? " collections-settings-action--disabled" : ""}`}
                 onFocus={() => setGameSettingsNavIndex(0)}
-                onClick={() => void prevGameBackgroundSteam()}
+                onClick={pickGameBackgroundSteam}
               >
-                <strong>Previous SteamGrid background</strong>
-              </button>
-              <button
-                ref={gameNextHeroRef}
-                type="button"
-                className={`collections-settings-action${gameSettingsNavIndex === 1 ? " collections-settings-action--active" : ""}${gameSteamDisabled ? " collections-settings-action--disabled" : ""}`}
-                onFocus={() => setGameSettingsNavIndex(1)}
-                onClick={() => void nextGameBackgroundSteam()}
-              >
-                <strong>Next SteamGrid background</strong>
+                <strong>Pick SteamGrid background</strong>
               </button>
               <button
                 ref={gameClearHeroRef}
                 type="button"
-                className={`collections-settings-action${gameSettingsNavIndex === 2 ? " collections-settings-action--active" : ""}`}
-                onFocus={() => setGameSettingsNavIndex(2)}
+                className={`collections-settings-action${gameSettingsNavIndex === 1 ? " collections-settings-action--active" : ""}${gameSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setGameSettingsNavIndex(1)}
                 onClick={clearGameBackgroundSteam}
               >
                 <strong>Clear SteamGrid background</strong>
               </button>
               <button
-                ref={gamePrevCoverRef}
+                ref={gamePickCoverRef}
                 type="button"
-                className={`collections-settings-action${gameSettingsNavIndex === 3 ? " collections-settings-action--active" : ""}${gameSteamDisabled ? " collections-settings-action--disabled" : ""}`}
-                onFocus={() => setGameSettingsNavIndex(3)}
-                onClick={() => void prevGameCoverSteam()}
+                className={`collections-settings-action${gameSettingsNavIndex === 2 ? " collections-settings-action--active" : ""}${gameSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setGameSettingsNavIndex(2)}
+                onClick={pickGameCoverSteam}
               >
-                <strong>Previous cover art</strong>
-              </button>
-              <button
-                ref={gameNextCoverRef}
-                type="button"
-                className={`collections-settings-action${gameSettingsNavIndex === 4 ? " collections-settings-action--active" : ""}${gameSteamDisabled ? " collections-settings-action--disabled" : ""}`}
-                onFocus={() => setGameSettingsNavIndex(4)}
-                onClick={() => void nextGameCoverSteam()}
-              >
-                <strong>Next cover art</strong>
+                <strong>Pick cover art</strong>
               </button>
               <button
                 ref={gameClearCoverRef}
                 type="button"
-                className={`collections-settings-action${gameSettingsNavIndex === 5 ? " collections-settings-action--active" : ""}`}
-                onFocus={() => setGameSettingsNavIndex(5)}
+                className={`collections-settings-action${gameSettingsNavIndex === 3 ? " collections-settings-action--active" : ""}`}
+                onFocus={() => setGameSettingsNavIndex(3)}
                 onClick={clearGameCoverSteam}
               >
                 <strong>Clear cover art</strong>
               </button>
             </div>
+          </>,
+          document.body,
+        )
+      : null;
+
+  const steamGridPickerPortal =
+    steamGridPickerOpen && steamGridPickerTarget && typeof document !== "undefined"
+      ? createPortal(
+          <>
+            <div
+              className="steamgrid-picker-backdrop"
+              aria-hidden
+              onPointerDown={closeSteamGridPicker}
+            />
+            <section
+              className={`steamgrid-picker steamgrid-picker--${steamGridPickerTarget.artKind}`}
+              role="dialog"
+              aria-label="SteamGridDB visual picker"
+              aria-modal="true"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <header className="steamgrid-picker-header">
+                <div>
+                  <p className="steamgrid-picker-eyebrow">SteamGridDB picker</p>
+                  <h2 className="steamgrid-picker-title">
+                    {steamGridPickerTarget.name}
+                  </h2>
+                  <p className="steamgrid-picker-subtitle">
+                    {steamGridPickerTarget.artKind === "background"
+                      ? "Choose a background hero"
+                      : "Choose a cover grid"}
+                    {" • "}
+                    query: {steamGridPickerSearchQuery}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="steamgrid-picker-close"
+                  onClick={closeSteamGridPicker}
+                >
+                  Close
+                </button>
+              </header>
+
+              <div className="steamgrid-picker-body">
+                <aside className="steamgrid-picker-filters">
+                  <p className="steamgrid-picker-filters-title">Search</p>
+                  <input
+                    type="text"
+                    className="steamgrid-picker-input"
+                    value={steamGridPickerSearchInput}
+                    onChange={(e) => setSteamGridPickerSearchInput(e.target.value)}
+                    placeholder="Search title"
+                  />
+
+                  <p className="steamgrid-picker-filters-title">Sort</p>
+                  <select
+                    className="steamgrid-picker-select"
+                    value={steamGridPickerSort}
+                    onChange={(e) =>
+                      setSteamGridPickerSort(e.target.value as SteamGridPickerSort)
+                    }
+                  >
+                    <option value="score">Most upvoted</option>
+                    <option value="recent">Most recent</option>
+                  </select>
+
+                  <p className="steamgrid-picker-filters-title">Filters</p>
+                  <label className="steamgrid-picker-check">
+                    <input
+                      type="checkbox"
+                      checked={steamGridPickerStaticOnly}
+                      onChange={(e) => setSteamGridPickerStaticOnly(e.target.checked)}
+                    />
+                    <span>Static only</span>
+                  </label>
+                  <label className="steamgrid-picker-check">
+                    <input
+                      type="checkbox"
+                      checked={steamGridPickerNsfwOff}
+                      onChange={(e) => setSteamGridPickerNsfwOff(e.target.checked)}
+                    />
+                    <span>NSFW off</span>
+                  </label>
+                  <label className="steamgrid-picker-check">
+                    <input
+                      type="checkbox"
+                      checked={steamGridPickerHumorOff}
+                      onChange={(e) => setSteamGridPickerHumorOff(e.target.checked)}
+                    />
+                    <span>Humor off</span>
+                  </label>
+
+                  <button
+                    type="button"
+                    className="steamgrid-picker-refresh"
+                    onClick={refreshSteamGridPicker}
+                    disabled={steamGridPickerLoading}
+                  >
+                    Refresh results
+                  </button>
+                </aside>
+
+                <div className="steamgrid-picker-gallery-wrap">
+                  <div className="steamgrid-picker-gallery-toolbar">
+                    <p className="steamgrid-picker-page-label">
+                      Page {steamGridPickerPage + 1} / {steamGridPickerPageCount}
+                    </p>
+                    <div className="steamgrid-picker-page-buttons">
+                      <button
+                        type="button"
+                        className="steamgrid-picker-page-btn"
+                        onClick={() => moveSteamGridPickerPage(-1)}
+                        disabled={steamGridPickerPage <= 0}
+                      >
+                        Prev page
+                      </button>
+                      <button
+                        type="button"
+                        className="steamgrid-picker-page-btn"
+                        onClick={() => moveSteamGridPickerPage(1)}
+                        disabled={steamGridPickerPage >= steamGridPickerPageCount - 1}
+                      >
+                        Next page
+                      </button>
+                    </div>
+                  </div>
+                  {steamGridPickerLoading ? (
+                    <p className="steamgrid-picker-status">Loading artwork...</p>
+                  ) : null}
+                  {!steamGridPickerLoading && steamGridPickerError ? (
+                    <p className="steamgrid-picker-error" role="alert">
+                      {steamGridPickerError}
+                    </p>
+                  ) : null}
+                  {!steamGridPickerLoading &&
+                  !steamGridPickerError &&
+                  steamGridPickerVisibleItems.length > 0 ? (
+                    <div className="steamgrid-picker-gallery" role="listbox">
+                      {steamGridPickerVisibleItems.map((item, localIdx) => {
+                        const idx = steamGridPickerPageStart + localIdx;
+                        return (
+                        <button
+                          key={`${idx}-${item.url}`}
+                          type="button"
+                          role="option"
+                          aria-selected={idx === steamGridPickerSelectedIndex}
+                          className={`steamgrid-picker-tile${
+                            idx === steamGridPickerSelectedIndex
+                              ? " steamgrid-picker-tile--active"
+                              : ""
+                          }`}
+                          onClick={() => setSteamGridPickerSelectedIndex(idx)}
+                        >
+                          <img src={item.url} alt="SteamGrid artwork" loading="lazy" />
+                          <span className="steamgrid-picker-tile-index">
+                            #{item.sourceIndex + 1}
+                          </span>
+                        </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+
+                <aside className="steamgrid-picker-preview">
+                  <p className="steamgrid-picker-preview-title">Preview</p>
+                  <div
+                    className="steamgrid-picker-preview-frame"
+                    style={
+                      steamGridPickerTarget.artKind === "background"
+                        ? backgroundImageStyle(steamGridPickerSelectedUrl)
+                        : undefined
+                    }
+                  >
+                    {steamGridPickerTarget.artKind === "background" ? (
+                      <div className="steamgrid-picker-preview-card" />
+                    ) : steamGridPickerSelectedUrl ? (
+                      <img
+                        className="steamgrid-picker-preview-cover"
+                        src={steamGridPickerSelectedUrl}
+                        alt="Selected cover preview"
+                      />
+                    ) : null}
+                  </div>
+                  <p className="steamgrid-picker-preview-meta">
+                    {steamGridPickerItems.length > 0
+                      ? `Selection ${steamGridPickerSelectedIndex + 1} of ${steamGridPickerItems.length}`
+                      : "No art available"}
+                  </p>
+                  <div className="steamgrid-picker-preview-details">
+                    <p>
+                      Resolution:{" "}
+                      {steamGridPickerSelectedItem?.width &&
+                      steamGridPickerSelectedItem?.height
+                        ? `${steamGridPickerSelectedItem.width} x ${steamGridPickerSelectedItem.height}`
+                        : "Unknown"}
+                    </p>
+                    <p>
+                      Score:{" "}
+                      {typeof steamGridPickerSelectedItem?.score === "number"
+                        ? steamGridPickerSelectedItem.score
+                        : "Unknown"}
+                    </p>
+                    <p>
+                      Author:{" "}
+                      {steamGridPickerSelectedItem?.author ?? "Unknown"}
+                    </p>
+                    <p>
+                      Format:{" "}
+                      {steamGridPickerSelectedItem?.mime ?? "Unknown"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="steamgrid-picker-apply"
+                    onClick={applySteamGridPickerSelection}
+                    disabled={!steamGridPickerSelectedUrl}
+                  >
+                    {steamGridPickerTarget.artKind === "background"
+                      ? "Set as background"
+                      : "Set as cover art"}
+                  </button>
+                </aside>
+              </div>
+
+              <footer className="steamgrid-picker-footer">
+                <span>B / Esc Close</span>
+                <span>D-pad / Arrows Move</span>
+                <span>LB/RB or PageUp/PageDown Page</span>
+                <span>A / Enter Apply</span>
+              </footer>
+            </section>
           </>,
           document.body,
         )
@@ -1999,6 +2610,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       {settingsPortal}
       {collectionSettingsPortal}
       {gameSettingsPortal}
+      {steamGridPickerPortal}
 
       <div className="collections-bg-stack" aria-hidden>
         {bgLayers.length > 0 ? (
