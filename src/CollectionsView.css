@@ -386,8 +386,8 @@
 
 .collection-poster--empty {
   background: rgba(255, 255, 255, 0.06);
-  /* Match .collection-poster 2px border so poster boxes line up with real cards */
-  border: 2px dashed rgba(255, 255, 255, 0.15);
+  /* Same 2px border box as filled posters; transparent so no dashed outline */
+  border: 2px solid transparent;
 }
 
 .collection-poster img {
