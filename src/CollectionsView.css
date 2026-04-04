@@ -624,7 +624,6 @@ button.collections-settings-action:focus-visible {
   height: 14px;
   pointer-events: none;
   --timeline-line-color: #ffffff;
-  --timeline-dot-color: #ffffff;
   --timeline-line: linear-gradient(
     90deg,
     var(--timeline-line-color) 0%,
@@ -636,16 +635,39 @@ button.collections-settings-action:focus-visible {
   background-size: 100% 2px;
 }
 
-.collection-timeline::after {
-  content: "";
+.collection-timeline-dot-wrap {
   position: absolute;
-  left: 50%;
+  left: 0;
+  right: 0;
   top: 0;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.collection-timeline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.56);
+  transition:
+    width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.collection-timeline-dot--focus {
   width: 14px;
   height: 14px;
-  transform: translateX(-50%);
-  border-radius: 999px;
-  background: var(--timeline-dot-color);
+  background: #ffffff;
+}
+
+.collection-slot--timeline.collection-slot--edge-start:not(.collection-slot--focus):not(.collection-slot--empty) .collection-timeline-dot,
+.collection-slot--timeline.collection-slot--edge-end:not(.collection-slot--focus):not(.collection-slot--empty) .collection-timeline-dot {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .collection-timeline--first {

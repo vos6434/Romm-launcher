@@ -1644,6 +1644,18 @@ export function CollectionsView({ session, onLogout }: Props) {
                         }`}
                         aria-hidden
                       />
+                      {card.showTimeline ? (
+                        <span
+                          className={`collection-timeline-dot-wrap${slideClass}`}
+                          aria-hidden
+                        >
+                          <span
+                            className={`collection-timeline-dot${
+                              isFocus ? " collection-timeline-dot--focus" : ""
+                            }`}
+                          />
+                        </span>
+                      ) : null}
                       <div className={`collection-meta-text${slideClass}`}>
                         <span className="collection-years">{card.meta}</span>
                         <span className="collection-label">{card.title}</span>
