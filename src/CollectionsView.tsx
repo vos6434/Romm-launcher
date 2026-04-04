@@ -45,6 +45,7 @@ import {
 import {
   fetchGameSteamGridBackgroundUrl,
   fetchGameSteamGridCoverUrl,
+  getCachedGameSteamGridBackgroundUrl,
 } from "./gameSteamGridArt";
 import { rommAssetUrl } from "./rommAssets";
 import { fetchGamesForCollection, type RommGame } from "./rommGames";
@@ -153,12 +154,16 @@ function coverForGameCarouselSlot(
   game: RommGame,
   gridCovers: Record<string, string | undefined>,
 ): string | undefined {
-  const idx = getGamePrefs(game.key).coverSteamIndex ?? -1;
+  const idx = getGamePrefs(game.key, game.name).coverSteamIndex ?? -1;
   if (idx >= 0) {
     const g = gridCovers[game.key];
     if (g) return g;
   }
   return game.coverUrl;
+}
+
+function gameIdentity(game: Pick<RommGame, "name">): string {
+  return game.name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 /** First line under poster: min–max game release years from RomM `/roms` metadata. */
@@ -393,6 +398,9 @@ export function CollectionsView({ session, onLogout }: Props) {
     Record<string, string | undefined>
   >({});
   const [gameGridCovers, setGameGridCovers] = useState<
+    Record<string, string | undefined>
+  >({});
+  const [gameBackgroundOverrides, setGameBackgroundOverrides] = useState<
     Record<string, string | undefined>
   >({});
   const [items, setItems] = useState<RommCollection[]>([]);
@@ -644,7 +652,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       }
       const next: Record<string, string | undefined> = {};
       for (const game of games) {
-        const idx = getGamePrefs(game.key).coverSteamIndex ?? -1;
+        const idx = getGamePrefs(game.key, game.name).coverSteamIndex ?? -1;
         if (idx >= 0) {
           const url = await fetchGameSteamGridCoverUrl(game, idx);
           if (cancelled) return;
@@ -936,18 +944,40 @@ export function CollectionsView({ session, onLogout }: Props) {
     if (!game || !isTauri()) return;
     const key = getSteamGridDbApiKey()?.trim();
     if (!key) return;
-    const cur = getGamePrefs(game.key).backgroundSteamIndex ?? -1;
+    const cur = getGamePrefs(game.key, game.name).backgroundSteamIndex ?? -1;
     if (cur < 0) return;
     const next = cur - 1;
     if (next < 0) {
-      patchGamePrefs(game.key, { backgroundSteamIndex: -1 });
+      patchGamePrefs(
+        game.key,
+        {
+        backgroundSteamIndex: -1,
+        backgroundSteamUrl: undefined,
+        },
+        game.name,
+      );
+      setGameBackgroundOverrides((prev) => ({
+        ...prev,
+        [gameIdentity(game)]: undefined,
+      }));
+      setGameHeroBg({ key: game.key, url: undefined });
       setPrefsRev((n) => n + 1);
       return;
     }
     const url = await fetchGameSteamGridBackgroundUrl(game, next);
-    patchGamePrefs(game.key, {
-      backgroundSteamIndex: url ? next : -1,
-    });
+    patchGamePrefs(
+      game.key,
+      {
+        backgroundSteamIndex: url ? next : -1,
+        backgroundSteamUrl: url ?? undefined,
+      },
+      game.name,
+    );
+    setGameBackgroundOverrides((prev) => ({
+      ...prev,
+      [gameIdentity(game)]: url ?? undefined,
+    }));
+    setGameHeroBg({ key: game.key, url: url ?? undefined });
     setPrefsRev((n) => n + 1);
   }, [gameSettingsTarget]);
 
@@ -956,19 +986,41 @@ export function CollectionsView({ session, onLogout }: Props) {
     if (!game || !isTauri()) return;
     const key = getSteamGridDbApiKey()?.trim();
     if (!key) return;
-    const cur = getGamePrefs(game.key).backgroundSteamIndex ?? -1;
+    const cur = getGamePrefs(game.key, game.name).backgroundSteamIndex ?? -1;
     const next = cur + 1;
     const url = await fetchGameSteamGridBackgroundUrl(game, next);
-    patchGamePrefs(game.key, {
-      backgroundSteamIndex: url ? next : -1,
-    });
+    patchGamePrefs(
+      game.key,
+      {
+        backgroundSteamIndex: url ? next : -1,
+        backgroundSteamUrl: url ?? undefined,
+      },
+      game.name,
+    );
+    setGameBackgroundOverrides((prev) => ({
+      ...prev,
+      [gameIdentity(game)]: url ?? undefined,
+    }));
+    setGameHeroBg({ key: game.key, url: url ?? undefined });
     setPrefsRev((n) => n + 1);
   }, [gameSettingsTarget]);
 
   const clearGameBackgroundSteam = useCallback(() => {
     const game = gameSettingsTarget;
     if (!game) return;
-    patchGamePrefs(game.key, { backgroundSteamIndex: -1 });
+    patchGamePrefs(
+      game.key,
+      {
+        backgroundSteamIndex: -1,
+        backgroundSteamUrl: undefined,
+      },
+      game.name,
+    );
+    setGameBackgroundOverrides((prev) => ({
+      ...prev,
+      [gameIdentity(game)]: undefined,
+    }));
+    setGameHeroBg({ key: game.key, url: undefined });
     setPrefsRev((n) => n + 1);
   }, [gameSettingsTarget]);
 
@@ -977,18 +1029,22 @@ export function CollectionsView({ session, onLogout }: Props) {
     if (!game || !isTauri()) return;
     const key = getSteamGridDbApiKey()?.trim();
     if (!key) return;
-    const cur = getGamePrefs(game.key).coverSteamIndex ?? -1;
+    const cur = getGamePrefs(game.key, game.name).coverSteamIndex ?? -1;
     if (cur < 0) return;
     const next = cur - 1;
     if (next < 0) {
-      patchGamePrefs(game.key, { coverSteamIndex: -1 });
+      patchGamePrefs(game.key, { coverSteamIndex: -1 }, game.name);
       setPrefsRev((n) => n + 1);
       return;
     }
     const url = await fetchGameSteamGridCoverUrl(game, next);
-    patchGamePrefs(game.key, {
-      coverSteamIndex: url ? next : -1,
-    });
+    patchGamePrefs(
+      game.key,
+      {
+        coverSteamIndex: url ? next : -1,
+      },
+      game.name,
+    );
     setPrefsRev((n) => n + 1);
   }, [gameSettingsTarget]);
 
@@ -997,19 +1053,23 @@ export function CollectionsView({ session, onLogout }: Props) {
     if (!game || !isTauri()) return;
     const key = getSteamGridDbApiKey()?.trim();
     if (!key) return;
-    const cur = getGamePrefs(game.key).coverSteamIndex ?? -1;
+    const cur = getGamePrefs(game.key, game.name).coverSteamIndex ?? -1;
     const next = cur + 1;
     const url = await fetchGameSteamGridCoverUrl(game, next);
-    patchGamePrefs(game.key, {
-      coverSteamIndex: url ? next : -1,
-    });
+    patchGamePrefs(
+      game.key,
+      {
+        coverSteamIndex: url ? next : -1,
+      },
+      game.name,
+    );
     setPrefsRev((n) => n + 1);
   }, [gameSettingsTarget]);
 
   const clearGameCoverSteam = useCallback(() => {
     const game = gameSettingsTarget;
     if (!game) return;
-    patchGamePrefs(game.key, { coverSteamIndex: -1 });
+    patchGamePrefs(game.key, { coverSteamIndex: -1 }, game.name);
     setPrefsRev((n) => n + 1);
   }, [gameSettingsTarget]);
 
@@ -1194,6 +1254,20 @@ export function CollectionsView({ session, onLogout }: Props) {
     !inGamesView && visibleItems.length > 0 ? visibleItems[focusIndex] : undefined;
   const focusedGame =
     inGamesView && games.length > 0 ? games[gamesFocusIndex] : undefined;
+  const focusedGameExplicitBg = useMemo(() => {
+    if (!focusedGame) return { hasExplicit: false as const, url: undefined };
+    const identity = gameIdentity(focusedGame);
+    if (Object.prototype.hasOwnProperty.call(gameBackgroundOverrides, identity)) {
+      return {
+        hasExplicit: true as const,
+        url: gameBackgroundOverrides[identity],
+      };
+    }
+    const key = focusedGame.key;
+    const savedUrl = getGamePrefs(key, focusedGame.name).backgroundSteamUrl;
+    if (savedUrl) return { hasExplicit: true as const, url: savedUrl };
+    return { hasExplicit: false as const, url: undefined };
+  }, [focusedGame, gameBackgroundOverrides, prefsRev]);
   const defaultFocusedGameBgUrl =
     focusedGame?.backgroundUrl ?? focusedGame?.coverUrl;
   const cardCoverUrl = useMemo(() => {
@@ -1267,32 +1341,55 @@ export function CollectionsView({ session, onLogout }: Props) {
     }
 
     const key = focusedGame.key;
-    const heroIdx = getGamePrefs(focusedGame.key).backgroundSteamIndex ?? -1;
+    const identity = gameIdentity(focusedGame);
+    if (Object.prototype.hasOwnProperty.call(gameBackgroundOverrides, identity)) {
+      setGameHeroBg({ key, url: gameBackgroundOverrides[identity] });
+      return;
+    }
+
+    const gamePrefs = getGamePrefs(focusedGame.key, focusedGame.name);
+    const heroIdx = gamePrefs.backgroundSteamIndex ?? -1;
     if (heroIdx < 0) {
       setGameHeroBg({ key, url: undefined });
       return;
     }
 
-    setGameHeroBg({ key, url: undefined });
+    if (gamePrefs.backgroundSteamUrl) {
+      setGameHeroBg({ key, url: gamePrefs.backgroundSteamUrl });
+      return;
+    }
+
+    const cached = getCachedGameSteamGridBackgroundUrl(focusedGame, heroIdx);
+    setGameHeroBg({ key, url: cached });
+
+    if (cached) return;
+
     let cancelled = false;
     void (async () => {
       const url = await fetchGameSteamGridBackgroundUrl(focusedGame, heroIdx);
       if (cancelled) return;
+      setGameBackgroundOverrides((prev) => ({
+        ...prev,
+        [identity]: url ?? undefined,
+      }));
       setGameHeroBg({ key, url: url ?? undefined });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [focusedGame, steamSettingsRev, prefsRev]);
+  }, [focusedGame, gameBackgroundOverrides, steamSettingsRev, prefsRev]);
 
   const bgUrl = inGamesView
-    ? focusedGame &&
-      gameHeroBg &&
-      gameHeroBg.key === focusedGame.key &&
-      gameHeroBg.url
-      ? gameHeroBg.url
-      : defaultFocusedGameBgUrl
+    ? focusedGame
+      ? focusedGameExplicitBg.hasExplicit
+        ? (focusedGameExplicitBg.url ?? defaultFocusedGameBgUrl)
+        : gameHeroBg &&
+            gameHeroBg.key === focusedGame.key &&
+            gameHeroBg.url
+          ? gameHeroBg.url
+          : defaultFocusedGameBgUrl
+      : undefined
     : focusedCollection &&
         heroBg &&
         heroBg.key === collectionRowKey(focusedCollection)
@@ -1309,7 +1406,6 @@ export function CollectionsView({ session, onLogout }: Props) {
     if (!bgUrl) return;
 
     const normalizedBgUrl = bgUrl;
-    let shouldAnimate = false;
 
     if (bgFadeTimeoutRef.current !== null) {
       window.clearTimeout(bgFadeTimeoutRef.current);
@@ -1334,16 +1430,13 @@ export function CollectionsView({ session, onLogout }: Props) {
         active: false,
       };
       if (prev.length === 0) return [{ ...nextLayer, active: true }];
-      shouldAnimate = true;
       return [{ ...prev[prev.length - 1], active: true }, nextLayer];
     });
-
-    if (!shouldAnimate) return;
 
     bgActivateFrameRef.current = window.requestAnimationFrame(() => {
       bgActivateFrameRef.current = window.requestAnimationFrame(() => {
         setBgLayers((prev) => {
-          if (prev.length === 0) return prev;
+          if (prev.length <= 1) return prev;
           return prev.map((layer, index) => ({
             ...layer,
             active: index === prev.length - 1,
@@ -1352,6 +1445,7 @@ export function CollectionsView({ session, onLogout }: Props) {
         bgActivateFrameRef.current = null;
         bgFadeTimeoutRef.current = window.setTimeout(() => {
           setBgLayers((prev) => {
+            if (prev.length <= 1) return prev;
             const latest = prev[prev.length - 1];
             return latest ? [{ ...latest, active: true }] : prev;
           });

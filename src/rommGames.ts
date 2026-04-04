@@ -112,6 +112,51 @@ function romIdentifier(row: unknown): number | string | undefined {
   return undefined;
 }
 
+function normalizeIdentityPart(v: string): string {
+  return v.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function stableFallbackIdentifier(row: unknown): string | undefined {
+  if (!row || typeof row !== "object") return undefined;
+  const r = row as Record<string, unknown>;
+
+  for (const k of [
+    "rom_id",
+    "romId",
+    "igdb_id",
+    "igdbId",
+    "slug",
+    "path",
+    "rom_path",
+    "romPath",
+  ] as const) {
+    const v = r[k];
+    if (typeof v === "number" && Number.isFinite(v)) return `${k}:${v}`;
+    if (typeof v === "string") {
+      const t = normalizeIdentityPart(v);
+      if (t) return `${k}:${t}`;
+    }
+  }
+
+  const title = romTitleFromRow(row);
+  if (title) return `title:${normalizeIdentityPart(title)}`;
+
+  for (const k of [
+    "fs_name",
+    "fsName",
+    "filename",
+    "file_name",
+    "fileName",
+  ] as const) {
+    const v = r[k];
+    if (typeof v !== "string") continue;
+    const t = normalizeIdentityPart(stripExtension(v));
+    if (t) return `file:${t}`;
+  }
+
+  return undefined;
+}
+
 function screenshotUrlsForRow(
   apiBase: string,
   row: Record<string, unknown>,
@@ -175,7 +220,10 @@ function normalizeRommGame(
   row: unknown,
   fallbackIndex: number,
 ): RommGame {
-  const key = romIdentifier(row) ?? `fallback-${fallbackIndex}`;
+  const key =
+    romIdentifier(row) ??
+    stableFallbackIdentifier(row) ??
+    `fallback-${fallbackIndex}`;
   const name = romTitleFromRow(row) ?? `Game ${fallbackIndex + 1}`;
   const coverUrl = romCoverUrlFromRow(apiBase, row);
   return {

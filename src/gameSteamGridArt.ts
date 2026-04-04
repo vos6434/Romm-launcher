@@ -82,3 +82,14 @@ export async function fetchGameSteamGridBackgroundUrl(
 
   return undefined;
 }
+
+export function getCachedGameSteamGridBackgroundUrl(
+  game: SteamGridGame,
+  heroIndex: number,
+): string | undefined {
+  const steamKey = getSteamGridDbApiKey();
+  if (!steamKey) return undefined;
+
+  const searchQuery = searchQueryForGame(game);
+  return getCachedSteamGridHero(steamKey, game.key, searchQuery, heroIndex);
+}
