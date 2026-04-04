@@ -319,11 +319,14 @@ button.collections-settings-action:focus-visible {
 }
 
 .collections-carousel-track {
+  --collections-slot-width: clamp(100px, 14vw, 160px);
+  --collections-slot-gap: clamp(12px, 2.5vw, 28px);
+  position: relative;
   display: flex;
   flex-direction: row;
   align-items: flex-end;
   justify-content: flex-start;
-  gap: clamp(12px, 2.5vw, 28px);
+  gap: var(--collections-slot-gap);
   flex-shrink: 0;
   transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
@@ -331,7 +334,7 @@ button.collections-settings-action:focus-visible {
 
 .collection-slot {
   flex: 0 0 auto;
-  width: clamp(100px, 14vw, 160px);
+  width: var(--collections-slot-width);
   padding: 0;
   margin: 0;
   border: none;
@@ -348,6 +351,7 @@ button.collections-settings-action:focus-visible {
   appearance: none;
   -webkit-appearance: none;
   position: relative;
+  z-index: 1;
   opacity: 0.72;
   transition:
     transform 0.36s cubic-bezier(0.22, 1, 0.36, 1),
@@ -616,23 +620,50 @@ button.collections-settings-action:focus-visible {
   padding-top: 18px;
 }
 
-.collection-timeline {
+.collections-shared-timeline {
   position: absolute;
-  left: calc(clamp(12px, 2.5vw, 28px) * -0.5);
-  right: calc(clamp(12px, 2.5vw, 28px) * -0.5);
-  top: 0;
+  left: calc(
+    (var(--timeline-start-slot) * (var(--collections-slot-width) + var(--collections-slot-gap))) -
+      (var(--collections-slot-gap) * 0.5)
+  );
+  width: calc(
+    (var(--timeline-slot-count) * var(--collections-slot-width)) +
+      (var(--timeline-slot-count) * var(--collections-slot-gap))
+  );
+  top: calc((var(--collections-slot-width) * 1.5) + 12px);
   height: 14px;
   pointer-events: none;
+  z-index: 0;
   --timeline-line-color: #ffffff;
-  --timeline-line: linear-gradient(
+}
+
+.collections-shared-timeline::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 6px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--timeline-line-color);
+  -webkit-mask-image: linear-gradient(
     90deg,
-    var(--timeline-line-color) 0%,
-    var(--timeline-line-color) 100%
+    transparent 0,
+    #000 12px,
+    #000 calc(100% - 12px),
+    transparent 100%
   );
-  background-image: var(--timeline-line);
-  background-position: center 6px;
-  background-repeat: no-repeat;
-  background-size: 100% 2px;
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 12px,
+    #000 calc(100% - 12px),
+    transparent 100%
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
 }
 
 .collection-timeline-dot-wrap {
@@ -645,6 +676,7 @@ button.collections-settings-action:focus-visible {
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  z-index: 4;
   --timeline-dot-size: 10px;
   --timeline-cutout-extra-width: 6px;
   --timeline-cutout-extra-height: -2px;
@@ -659,8 +691,9 @@ button.collections-settings-action:focus-visible {
   height: calc(var(--timeline-dot-size) + var(--timeline-cutout-extra-height));
   transform: translate(-50%, -50%);
   border-radius: 999px;
-  background: rgba(10, 10, 10, 0.46);
-  backdrop-filter: blur(7px);
+  background: rgba(12, 14, 18, 0.86);
+  backdrop-filter: blur(9px);
+  box-shadow: 0 0 0 1px rgba(8, 10, 12, 0.22);
   z-index: 0;
 }
 
@@ -669,8 +702,8 @@ button.collections-settings-action:focus-visible {
 }
 
 .collection-timeline-dot-wrap--focus::before {
-  background: rgba(10, 10, 10, 0.54);
-  backdrop-filter: blur(8px);
+  background: rgba(12, 14, 18, 0.92);
+  backdrop-filter: blur(10px);
 }
 
 .collection-timeline-dot {
@@ -696,34 +729,6 @@ button.collections-settings-action:focus-visible {
   background: rgba(255, 255, 255, 0.62);
 }
 
-.collection-timeline--first {
-  --timeline-line: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0) 0%,
-    var(--timeline-line-color) 38%,
-    var(--timeline-line-color) 100%
-  );
-}
-
-.collection-timeline--last {
-  --timeline-line: linear-gradient(
-    90deg,
-    var(--timeline-line-color) 0%,
-    var(--timeline-line-color) 62%,
-    rgba(255, 255, 255, 0) 100%
-  );
-}
-
-.collection-timeline--first.collection-timeline--last {
-  --timeline-line: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0) 0%,
-    var(--timeline-line-color) 38%,
-    var(--timeline-line-color) 62%,
-    rgba(255, 255, 255, 0) 100%
-  );
-}
-
 .collection-slot--timeline.collection-slot--focus {
   /* Keep the timeline lane fixed; only the poster should animate in games view. */
   transform: scale(1) translateY(0) !important;
@@ -733,10 +738,6 @@ button.collections-settings-action:focus-visible {
   /* Collections scale the whole tile; bump the poster-only scale slightly so
      the focused game cover lands at the same visual height without moving the timeline. */
   transform: scale(var(--focused-game-poster-scale)) translateY(-3px);
-}
-
-.collection-timeline--hidden {
-  opacity: 0;
 }
 
 .collection-years {

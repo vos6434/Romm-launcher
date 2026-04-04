@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -1245,6 +1246,23 @@ export function CollectionsView({ session, onLogout }: Props) {
     activeCollection !== null
       ? Math.min(currentCards.length - 1, currentFocusIndex + slotRadius)
       : -1;
+  const timelineVisibleCount =
+    activeCollection !== null &&
+    timelineVisibleStartIndex >= 0 &&
+    timelineVisibleEndIndex >= timelineVisibleStartIndex
+      ? timelineVisibleEndIndex - timelineVisibleStartIndex + 1
+      : 0;
+  const timelineStartSlot =
+    activeCollection !== null && timelineVisibleStartIndex >= 0
+      ? timelineVisibleStartIndex - currentFocusIndex + slotRadius
+      : -1;
+  const sharedTimelineStyle =
+    timelineVisibleCount > 0 && timelineStartSlot >= 0
+      ? ({
+          ["--timeline-start-slot" as string]: String(timelineStartSlot),
+          ["--timeline-slot-count" as string]: String(timelineVisibleCount),
+        } as CSSProperties)
+      : undefined;
 
   const headerTitle = activeCollection ? "GAMES" : "COLLECTIONS";
   const headerSubtitle = activeCollection
@@ -1541,6 +1559,13 @@ export function CollectionsView({ session, onLogout }: Props) {
             ref={carouselTrackRef}
             role="list"
           >
+            {activeCollection && sharedTimelineStyle ? (
+              <span
+                className="collections-shared-timeline"
+                style={sharedTimelineStyle}
+                aria-hidden
+              />
+            ) : null}
             {slots.map((offset) => {
               const idx = currentFocusIndex + offset;
               const card = currentCards[idx];
@@ -1628,22 +1653,6 @@ export function CollectionsView({ session, onLogout }: Props) {
                           : " collection-meta--timeline-placeholder"
                       }`}
                     >
-                      <span
-                        className={`collection-timeline${
-                          card.showTimeline
-                            ? ""
-                            : " collection-timeline--hidden"
-                        }${
-                          idx === timelineVisibleStartIndex
-                            ? " collection-timeline--first"
-                            : ""
-                        }${
-                          idx === timelineVisibleEndIndex
-                            ? " collection-timeline--last"
-                            : ""
-                        }`}
-                        aria-hidden
-                      />
                       {card.showTimeline ? (
                         <span
                           className={`collection-timeline-dot-wrap${slideClass}${
