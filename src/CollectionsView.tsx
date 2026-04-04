@@ -158,10 +158,6 @@ const SETTINGS_NAV_SLOTS = 6;
 /** Hide + SteamGrid hero (prev/next/clear) + cover (prev/next/clear). */
 const COLLECTION_SETTINGS_NAV_SLOTS = 7;
 
-const CAROUSEL_SWAP_MS = 430;
-
-type CarouselSwap = { from: number; to: number };
-
 /** Track width: one centered slot is scaled (~1.05); matches `.collection-slot--focus`. */
 function carouselTrackWidthPx(n: number, slotW: number, gap: number): number {
   if (n < 1) return 0;
@@ -303,7 +299,6 @@ export function CollectionsView({ session, onLogout }: Props) {
   >({});
   const [items, setItems] = useState<RommCollection[]>([]);
   const [focusIndex, setFocusIndex] = useState(0);
-  const [carouselSwap, setCarouselSwap] = useState<CarouselSwap | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -315,9 +310,6 @@ export function CollectionsView({ session, onLogout }: Props) {
   const carouselTrackRef = useRef<HTMLDivElement>(null);
   const focusSlotRef = useRef<HTMLButtonElement | null>(null);
   const focusIndexRef = useRef(0);
-  const carouselSwapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
   const settingsWrapRef = useRef<HTMLDivElement>(null);
   const settingsRadioCollectionRef = useRef<HTMLInputElement>(null);
   const settingsRadioFranchiseRef = useRef<HTMLInputElement>(null);
@@ -380,24 +372,6 @@ export function CollectionsView({ session, onLogout }: Props) {
   useEffect(() => {
     focusIndexRef.current = focusIndex;
   }, [focusIndex]);
-
-  useEffect(() => {
-    return () => {
-      if (carouselSwapTimerRef.current) {
-        clearTimeout(carouselSwapTimerRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (visibleItems.length === 0) {
-      if (carouselSwapTimerRef.current) {
-        clearTimeout(carouselSwapTimerRef.current);
-        carouselSwapTimerRef.current = null;
-      }
-      setCarouselSwap(null);
-    }
-  }, [visibleItems.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -763,8 +737,15 @@ export function CollectionsView({ session, onLogout }: Props) {
     const align = () => {
       const vr = vp.getBoundingClientRect();
       const fr = focusEl.getBoundingClientRect();
-      const dx = vr.left + vr.width / 2 - (fr.left + fr.width / 2);
-      track.style.transform = `translateX(${dx}px)`;
+      const viewportCx = vr.left + vr.width / 2;
+      const focusCx = fr.left + fr.width / 2;
+      const delta = viewportCx - focusCx;
+      const ct = getComputedStyle(track).transform;
+      let curTx = 0;
+      if (ct && ct !== "none") {
+        curTx = new DOMMatrix(ct).m41;
+      }
+      track.style.transform = `translateX(${curTx + delta}px)`;
     };
 
     align();
@@ -833,44 +814,16 @@ export function CollectionsView({ session, onLogout }: Props) {
       ? (heroBg.url ?? cardCoverUrl)
       : cardCoverUrl;
 
-  const clearCarouselSwapTimer = useCallback(() => {
-    if (carouselSwapTimerRef.current) {
-      clearTimeout(carouselSwapTimerRef.current);
-      carouselSwapTimerRef.current = null;
-    }
-  }, []);
-
-  const beginCarouselSwap = useCallback(
-    (from: number, to: number) => {
-      if (from === to) return;
-      clearCarouselSwapTimer();
-      if (calmerCarousel) return;
-      if (
-        typeof window !== "undefined" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      ) {
-        return;
-      }
-      setCarouselSwap({ from, to });
-      carouselSwapTimerRef.current = setTimeout(() => {
-        setCarouselSwap(null);
-        carouselSwapTimerRef.current = null;
-      }, CAROUSEL_SWAP_MS);
-    },
-    [clearCarouselSwapTimer, calmerCarousel],
-  );
-
   const moveFocus = useCallback(
     (delta: number) => {
       if (visibleItems.length === 0) return;
       const n = visibleItems.length;
       const from = focusIndexRef.current;
       const next = (from + delta + n) % n;
-      if (next !== from) beginCarouselSwap(from, next);
       focusIndexRef.current = next;
       setFocusIndex(next);
     },
-    [visibleItems.length, beginCarouselSwap],
+    [visibleItems.length],
   );
 
   const hintsReady = !loading;
@@ -1368,26 +1321,22 @@ export function CollectionsView({ session, onLogout }: Props) {
                 c,
                 gridCovers,
               );
-              const swapLeave = carouselSwap?.from === idx;
-              const swapEnter = carouselSwap?.to === idx;
-              const posterFocus = isFocus || swapLeave;
               return (
                 <button
                   key={`${collectionRowKey(c)}-${idx}`}
                   ref={isFocus ? focusSlotRef : undefined}
                   type="button"
                   role="listitem"
-                  className={`collection-slot${isFocus ? " collection-slot--focus" : ""}${swapLeave ? " collection-slot--swap-leave" : ""}${swapEnter ? " collection-slot--swap-enter" : ""}${edgeClass}`}
+                  className={`collection-slot${isFocus ? " collection-slot--focus" : ""}${edgeClass}`}
                   onClick={() => {
                     const cur = focusIndexRef.current;
                     if (idx === cur) return;
-                    beginCarouselSwap(cur, idx);
                     focusIndexRef.current = idx;
                     setFocusIndex(idx);
                   }}
                 >
                 <div
-                  className={`collection-poster${posterFocus ? " collection-poster--focus" : ""}`}
+                  className={`collection-poster${isFocus ? " collection-poster--focus" : ""}`}
                 >
                   {cover ? (
                     <img src={cover} alt="" loading="lazy" />

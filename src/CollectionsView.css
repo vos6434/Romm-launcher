@@ -323,31 +323,6 @@ button.collections-settings-action:focus-visible {
   justify-content: flex-start;
   gap: clamp(12px, 2.5vw, 28px);
   flex-shrink: 0;
-  /* Smooth pan — gentler than aggressive console snap (easier on vestibular comfort). */
-  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform;
-}
-
-@keyframes carousel-swap-leave {
-  from {
-    transform: scale(1.05) translateY(-3px);
-    opacity: 1;
-  }
-  to {
-    transform: scale(1) translateY(0);
-    opacity: 0.72;
-  }
-}
-
-@keyframes carousel-swap-enter {
-  from {
-    transform: scale(1) translateY(0);
-    opacity: 0.72;
-  }
-  to {
-    transform: scale(1.05) translateY(-3px);
-    opacity: 1;
-  }
 }
 
 .collection-slot {
@@ -368,7 +343,6 @@ button.collections-settings-action:focus-visible {
   appearance: none;
   -webkit-appearance: none;
   position: relative;
-  transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
   opacity: 0.72;
 }
 
@@ -428,24 +402,6 @@ button.collections-settings-action:focus-visible {
   z-index: 3;
 }
 
-.collection-slot--focus:not(.collection-slot--swap-enter) {
-  transition:
-    transform 0.38s cubic-bezier(0.25, 0.88, 0.35, 1),
-    opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.collection-slot--swap-leave {
-  z-index: 4;
-  animation: carousel-swap-leave 0.42s cubic-bezier(0.25, 0.88, 0.35, 1) forwards;
-  transition: none !important;
-}
-
-.collection-slot--focus.collection-slot--swap-enter {
-  z-index: 5;
-  animation: carousel-swap-enter 0.42s cubic-bezier(0.25, 0.88, 0.35, 1) forwards;
-  transition: none !important;
-}
-
 .collection-slot--empty {
   pointer-events: none;
   opacity: 0.25;
@@ -460,9 +416,6 @@ button.collections-settings-action:focus-visible {
   background: #2a2a2a;
   border: 2px solid transparent;
   box-sizing: border-box;
-  transition:
-    border-color 0.32s cubic-bezier(0.34, 1.12, 0.48, 1),
-    box-shadow 0.32s cubic-bezier(0.34, 1.12, 0.48, 1);
 }
 
 .collection-poster--focus {
@@ -513,7 +466,6 @@ button.collections-settings-action:focus-visible {
   font-size: 0.8125rem;
   font-weight: 500;
   color: #ffffff;
-  transition: font-size 0.3s cubic-bezier(0.34, 1.12, 0.48, 1);
 }
 
 .collection-slot--focus .collection-years {
@@ -521,19 +473,9 @@ button.collections-settings-action:focus-visible {
   font-weight: 600;
 }
 
-/* Optional launcher setting: minimal motion, no paired shrink/grow (JS skips swap). */
-.collections-screen--calmer .collections-carousel-track {
-  transition: transform 0.24s ease-out;
-}
-
+/* Optional launcher setting: slightly smaller focus scale. */
 .collections-screen--calmer .collection-slot--focus {
   transform: scale(1.02) translateY(0);
-}
-
-.collections-screen--calmer .collection-slot--focus:not(.collection-slot--swap-enter) {
-  transition:
-    transform 0.18s ease-out,
-    opacity 0.22s ease-out;
 }
 
 .collections-screen--calmer .collection-poster--focus {
@@ -550,7 +492,6 @@ button.collections-settings-action:focus-visible {
 .collection-label {
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.55);
-  transition: color 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .collection-slot--focus .collection-label {
@@ -581,19 +522,6 @@ button.collections-settings-action:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .collections-carousel-track,
-  .collection-slot,
-  .collection-poster,
-  .collection-years,
-  .collection-label {
-    transition-duration: 0.01ms !important;
-  }
-
-  .collection-slot--swap-leave,
-  .collection-slot--swap-enter {
-    animation: none !important;
-  }
-
   .collection-slot--focus {
     transform: scale(1.02) translateY(0) !important;
   }
