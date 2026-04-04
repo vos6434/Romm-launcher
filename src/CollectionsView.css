@@ -624,27 +624,15 @@ button.collections-settings-action:focus-visible {
   height: 14px;
   pointer-events: none;
   --timeline-line-color: #ffffff;
-  --timeline-gap-half: 7px;
-}
-
-.collection-timeline::before,
-.collection-timeline::after {
-  content: "";
-  position: absolute;
-  top: 6px;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--timeline-line-color);
-}
-
-.collection-timeline::before {
-  left: 0;
-  right: calc(50% + var(--timeline-gap-half));
-}
-
-.collection-timeline::after {
-  left: calc(50% + var(--timeline-gap-half));
-  right: 0;
+  --timeline-line: linear-gradient(
+    90deg,
+    var(--timeline-line-color) 0%,
+    var(--timeline-line-color) 100%
+  );
+  background-image: var(--timeline-line);
+  background-position: center 6px;
+  background-repeat: no-repeat;
+  background-size: 100% 2px;
 }
 
 .collection-timeline-dot-wrap {
@@ -657,11 +645,39 @@ button.collections-settings-action:focus-visible {
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  --timeline-dot-size: 10px;
+  --timeline-cutout-extra-width: 6px;
+  --timeline-cutout-extra-height: -2px;
+}
+
+.collection-timeline-dot-wrap::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--timeline-dot-size) + var(--timeline-cutout-extra-width));
+  height: calc(var(--timeline-dot-size) + var(--timeline-cutout-extra-height));
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: rgba(10, 10, 10, 0.46);
+  backdrop-filter: blur(7px);
+  z-index: 0;
+}
+
+.collection-timeline-dot-wrap--focus {
+  --timeline-dot-size: 14px;
+}
+
+.collection-timeline-dot-wrap--focus::before {
+  background: rgba(10, 10, 10, 0.54);
+  backdrop-filter: blur(8px);
 }
 
 .collection-timeline-dot {
-  width: 10px;
-  height: 10px;
+  position: relative;
+  z-index: 1;
+  width: var(--timeline-dot-size);
+  height: var(--timeline-dot-size);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.7);
   transition:
@@ -672,8 +688,6 @@ button.collections-settings-action:focus-visible {
 }
 
 .collection-timeline-dot--focus {
-  width: 14px;
-  height: 14px;
   background: #ffffff;
 }
 
@@ -683,10 +697,7 @@ button.collections-settings-action:focus-visible {
 }
 
 .collection-timeline--first {
-}
-
-.collection-timeline--first::before {
-  background: linear-gradient(
+  --timeline-line: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0%,
     var(--timeline-line-color) 38%,
@@ -695,10 +706,7 @@ button.collections-settings-action:focus-visible {
 }
 
 .collection-timeline--last {
-}
-
-.collection-timeline--last::after {
-  background: linear-gradient(
+  --timeline-line: linear-gradient(
     90deg,
     var(--timeline-line-color) 0%,
     var(--timeline-line-color) 62%,
@@ -707,21 +715,10 @@ button.collections-settings-action:focus-visible {
 }
 
 .collection-timeline--first.collection-timeline--last {
-}
-
-.collection-timeline--first.collection-timeline--last::before {
-  background: linear-gradient(
+  --timeline-line: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0%,
     var(--timeline-line-color) 38%,
-    var(--timeline-line-color) 100%
-  );
-}
-
-.collection-timeline--first.collection-timeline--last::after {
-  background: linear-gradient(
-    90deg,
-    var(--timeline-line-color) 0%,
     var(--timeline-line-color) 62%,
     rgba(255, 255, 255, 0) 100%
   );
@@ -730,10 +727,6 @@ button.collections-settings-action:focus-visible {
 .collection-slot--timeline.collection-slot--focus {
   /* Keep the timeline lane fixed; only the poster should animate in games view. */
   transform: scale(1) translateY(0) !important;
-}
-
-.collection-slot--timeline.collection-slot--focus .collection-timeline {
-  --timeline-gap-half: 9px;
 }
 
 .collection-slot--timeline.collection-slot--focus .collection-poster {

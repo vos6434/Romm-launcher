@@ -1646,7 +1646,9 @@ export function CollectionsView({ session, onLogout }: Props) {
                       />
                       {card.showTimeline ? (
                         <span
-                          className={`collection-timeline-dot-wrap${slideClass}`}
+                          className={`collection-timeline-dot-wrap${slideClass}${
+                            isFocus ? " collection-timeline-dot-wrap--focus" : ""
+                          }`}
                           aria-hidden
                         >
                           <span
