@@ -323,6 +323,13 @@ button.collections-settings-action:focus-visible {
   justify-content: flex-start;
   gap: clamp(12px, 2.5vw, 28px);
   flex-shrink: 0;
+  transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.collections-screen--calmer .collections-carousel-track {
+  transition-duration: 0.28s;
+  transition-timing-function: ease-out;
 }
 
 .collection-slot {
@@ -400,6 +407,109 @@ button.collections-settings-action:focus-visible {
   opacity: 1;
   transform: scale(1.05) translateY(-3px);
   z-index: 3;
+}
+
+/* Whole tile (frame + art + labels) slides; focus stays at flex offset 0 so track barely moves. */
+.collection-slot-content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+}
+
+@keyframes collection-slot-slide-next {
+  from {
+    transform: translateX(18px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes collection-slot-slide-prev {
+  from {
+    transform: translateX(-18px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.collection-slot-content--slide-next {
+  animation: collection-slot-slide-next 0.36s cubic-bezier(0.22, 1, 0.36, 1)
+    forwards;
+}
+
+.collection-slot-content--slide-prev {
+  animation: collection-slot-slide-prev 0.36s cubic-bezier(0.22, 1, 0.36, 1)
+    forwards;
+}
+
+/* Demoted focus: start offset toward prior center, ease into side slot (next → from +X). */
+@keyframes collection-slot-leave-next {
+  from {
+    transform: translateX(18px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes collection-slot-leave-prev {
+  from {
+    transform: translateX(-18px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.collection-slot-content--leave-next {
+  animation: collection-slot-leave-next 0.36s cubic-bezier(0.22, 1, 0.36, 1)
+    forwards;
+}
+
+.collection-slot-content--leave-prev {
+  animation: collection-slot-leave-prev 0.36s cubic-bezier(0.22, 1, 0.36, 1)
+    forwards;
+}
+
+/* New tile scrolled into the far edge of the strip. */
+@keyframes collection-slot-enter-next {
+  from {
+    transform: translateX(20px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes collection-slot-enter-prev {
+  from {
+    transform: translateX(-20px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.collection-slot-content--enter-next {
+  animation: collection-slot-enter-next 0.36s cubic-bezier(0.22, 1, 0.36, 1)
+    forwards;
+}
+
+.collection-slot-content--enter-prev {
+  animation: collection-slot-enter-prev 0.36s cubic-bezier(0.22, 1, 0.36, 1)
+    forwards;
+}
+
+.collections-screen--calmer .collection-slot-content--slide-next,
+.collections-screen--calmer .collection-slot-content--slide-prev,
+.collections-screen--calmer .collection-slot-content--leave-next,
+.collections-screen--calmer .collection-slot-content--leave-prev,
+.collections-screen--calmer .collection-slot-content--enter-next,
+.collections-screen--calmer .collection-slot-content--enter-prev {
+  animation-duration: 0.26s;
 }
 
 .collection-slot--empty {
@@ -522,6 +632,10 @@ button.collections-settings-action:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .collections-carousel-track {
+    transition: none !important;
+  }
+
   .collection-slot--focus {
     transform: scale(1.02) translateY(0) !important;
   }

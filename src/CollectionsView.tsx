@@ -158,6 +158,54 @@ const SETTINGS_NAV_SLOTS = 6;
 /** Hide + SteamGrid hero (prev/next/clear) + cover (prev/next/clear). */
 const COLLECTION_SETTINGS_NAV_SLOTS = 7;
 
+/**
+ * Signed minimal index delta on the ring → slide direction.
+ * (The old “forward modular distance ≤ n/2” rule breaks for n=2: both steps are length 1
+ * but left must be “prev”, not “next”.)
+ */
+function focusNavSlideDir(from: number, to: number, len: number): "next" | "prev" {
+  if (len <= 1) return "next";
+  let d = to - from;
+  if (d > len / 2) d -= len;
+  if (d < -len / 2) d += len;
+  return d > 0 ? "next" : "prev";
+}
+
+type CarouselTransition = { dir: "next" | "prev"; from: number; to: number };
+
+function carouselSlotContentAnimClass(
+  t: CarouselTransition | null,
+  p: {
+    idx: number;
+    offset: number;
+    isFocus: boolean;
+    isPlaceholder: boolean;
+    slotRadius: number;
+  },
+): string {
+  if (!t || p.isPlaceholder) return "";
+  if (p.isFocus) {
+    return t.dir === "next"
+      ? " collection-slot-content--slide-next"
+      : " collection-slot-content--slide-prev";
+  }
+  if (p.idx === t.from) {
+    return t.dir === "next"
+      ? " collection-slot-content--leave-next"
+      : " collection-slot-content--leave-prev";
+  }
+  const r = p.slotRadius;
+  if (r > 0) {
+    if (t.dir === "next" && p.offset === r) {
+      return " collection-slot-content--enter-next";
+    }
+    if (t.dir === "prev" && p.offset === -r) {
+      return " collection-slot-content--enter-prev";
+    }
+  }
+  return "";
+}
+
 /** Track width: one centered slot is scaled (~1.05); matches `.collection-slot--focus`. */
 function carouselTrackWidthPx(n: number, slotW: number, gap: number): number {
   if (n < 1) return 0;
@@ -310,6 +358,9 @@ export function CollectionsView({ session, onLogout }: Props) {
   const carouselTrackRef = useRef<HTMLDivElement>(null);
   const focusSlotRef = useRef<HTMLButtonElement | null>(null);
   const focusIndexRef = useRef(0);
+  const prevFocusForSlideRef = useRef<number | null>(null);
+  const [carouselTransition, setCarouselTransition] =
+    useState<CarouselTransition | null>(null);
   const settingsWrapRef = useRef<HTMLDivElement>(null);
   const settingsRadioCollectionRef = useRef<HTMLInputElement>(null);
   const settingsRadioFranchiseRef = useRef<HTMLInputElement>(null);
@@ -372,6 +423,39 @@ export function CollectionsView({ session, onLogout }: Props) {
   useEffect(() => {
     focusIndexRef.current = focusIndex;
   }, [focusIndex]);
+
+  useLayoutEffect(() => {
+    if (visibleItems.length <= 1) {
+      prevFocusForSlideRef.current = focusIndex;
+      return;
+    }
+    const prev = prevFocusForSlideRef.current;
+    if (prev === null) {
+      prevFocusForSlideRef.current = focusIndex;
+      return;
+    }
+    if (prev === focusIndex) return;
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      prevFocusForSlideRef.current = focusIndex;
+      return;
+    }
+    setCarouselTransition({
+      dir: focusNavSlideDir(prev, focusIndex, visibleItems.length),
+      from: prev,
+      to: focusIndex,
+    });
+    prevFocusForSlideRef.current = focusIndex;
+  }, [focusIndex, visibleItems.length]);
+
+  useEffect(() => {
+    if (!carouselTransition) return;
+    const ms = calmerCarousel ? 300 : 420;
+    const timer = window.setTimeout(() => setCarouselTransition(null), ms);
+    return () => window.clearTimeout(timer);
+  }, [carouselTransition, calmerCarousel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -734,7 +818,8 @@ export function CollectionsView({ session, onLogout }: Props) {
       return;
     }
 
-    const align = () => {
+    const align = (instant: boolean) => {
+      if (instant) track.style.transition = "none";
       const vr = vp.getBoundingClientRect();
       const fr = focusEl.getBoundingClientRect();
       const viewportCx = vr.left + vr.width / 2;
@@ -746,10 +831,14 @@ export function CollectionsView({ session, onLogout }: Props) {
         curTx = new DOMMatrix(ct).m41;
       }
       track.style.transform = `translateX(${curTx + delta}px)`;
+      if (instant) {
+        void track.offsetWidth;
+        track.style.removeProperty("transition");
+      }
     };
 
-    align();
-    const ro = new ResizeObserver(() => requestAnimationFrame(align));
+    align(false);
+    const ro = new ResizeObserver(() => requestAnimationFrame(() => align(true)));
     ro.observe(vp);
     ro.observe(track);
     return () => ro.disconnect();
@@ -1321,6 +1410,13 @@ export function CollectionsView({ session, onLogout }: Props) {
                 c,
                 gridCovers,
               );
+              const slideClass = carouselSlotContentAnimClass(carouselTransition, {
+                idx,
+                offset,
+                isFocus,
+                isPlaceholder: false,
+                slotRadius,
+              });
               return (
                 <button
                   key={`${collectionRowKey(c)}-${idx}`}
@@ -1335,24 +1431,28 @@ export function CollectionsView({ session, onLogout }: Props) {
                     setFocusIndex(idx);
                   }}
                 >
-                <div
-                  className={`collection-poster${isFocus ? " collection-poster--focus" : ""}`}
-                >
-                  {cover ? (
-                    <img src={cover} alt="" loading="lazy" />
-                  ) : (
-                    <span className="collection-poster-fallback">{c.name}</span>
-                  )}
-                </div>
-                <div className="collection-meta">
-                  <span className="collection-years">
-                    {metaPrimaryLine(
-                      releaseLabels[collectionRowKey(c)],
-                      yearSpansLoading,
-                    )}
-                  </span>
-                  <span className="collection-label">{c.name}</span>
-                </div>
+                  <div className={`collection-slot-content${slideClass}`}>
+                    <div
+                      className={`collection-poster${isFocus ? " collection-poster--focus" : ""}`}
+                    >
+                      {cover ? (
+                        <img src={cover} alt="" loading="lazy" />
+                      ) : (
+                        <span className="collection-poster-fallback">
+                          {c.name}
+                        </span>
+                      )}
+                    </div>
+                    <div className="collection-meta">
+                      <span className="collection-years">
+                        {metaPrimaryLine(
+                          releaseLabels[collectionRowKey(c)],
+                          yearSpansLoading,
+                        )}
+                      </span>
+                      <span className="collection-label">{c.name}</span>
+                    </div>
+                  </div>
                 </button>
               );
             })}
