@@ -512,12 +512,14 @@ button.collections-settings-action:focus-visible {
   position: relative;
   aspect-ratio: 2 / 3;
   width: 100%;
+  transform-origin: bottom center;
   border-radius: 10px;
   overflow: hidden;
   background: #2a2a2a;
   border: 2px solid transparent;
   box-sizing: border-box;
   transition:
+    transform 0.36s cubic-bezier(0.22, 1, 0.36, 1),
     border-color 0.34s cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 0.34s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -558,12 +560,61 @@ button.collections-settings-action:focus-visible {
 
 .collection-meta {
   margin-top: 12px;
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   /* Same reserved height as two text lines (incl. focused year size) so flex-end
      aligns poster edges across empty vs filled slots */
   min-height: 3.125rem;
+}
+
+.collection-meta--timeline,
+.collection-meta--timeline-placeholder {
+  padding-top: 18px;
+}
+
+.collection-meta--timeline::before {
+  content: "";
+  position: absolute;
+  left: -100vw;
+  right: -100vw;
+  top: 6px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.collection-timeline {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: rgba(184, 184, 184, 0.88);
+  box-shadow: 0 0 0 2px rgba(20, 20, 20, 0.2);
+  pointer-events: none;
+}
+
+.collection-slot--timeline.collection-slot--focus {
+  transform: none;
+}
+
+.collection-slot--timeline.collection-slot--focus .collection-poster {
+  transform: scale(1.05) translateY(-3px);
+}
+
+.collection-slot--timeline.collection-slot--focus .collection-timeline {
+  background: #ffffff;
+  box-shadow:
+    0 0 0 2px rgba(20, 20, 20, 0.24),
+    0 0 18px rgba(255, 255, 255, 0.28);
+}
+
+.collection-timeline--hidden {
+  opacity: 0;
 }
 
 .collection-years {

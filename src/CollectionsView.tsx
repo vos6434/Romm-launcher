@@ -92,6 +92,7 @@ type CarouselDisplayItem = {
   meta: string;
   coverUrl?: string;
   backgroundUrl?: string;
+  showTimeline: boolean;
 };
 
 function formatInvokeError(err: unknown): string {
@@ -486,6 +487,7 @@ export function CollectionsView({ session, onLogout }: Props) {
           yearSpansLoading,
         ),
         coverUrl: coverForCarouselSlot(session.apiBase, c, gridCovers),
+        showTimeline: false,
       })),
     [
       visibleItems,
@@ -505,6 +507,7 @@ export function CollectionsView({ session, onLogout }: Props) {
         meta: game.yearLabel,
         coverUrl: game.coverUrl,
         backgroundUrl: game.backgroundUrl,
+        showTimeline: true,
       })),
     [games],
   );
@@ -1551,10 +1554,16 @@ export function CollectionsView({ session, onLogout }: Props) {
                   <div
                     key={`empty-${offset}`}
                     className={`collection-slot collection-slot--empty${edgeClass}`}
-                        aria-hidden
+                    aria-hidden
                   >
                     <div className="collection-poster collection-poster--empty" />
-                    <div className="collection-meta">
+                    <div
+                      className={`collection-meta${
+                        activeCollection
+                          ? " collection-meta--timeline-placeholder"
+                          : ""
+                      }`}
+                    >
                       <span className="collection-years"> </span>
                       <span className="collection-label"> </span>
                     </div>
@@ -1575,7 +1584,9 @@ export function CollectionsView({ session, onLogout }: Props) {
                   ref={isFocus ? focusSlotRef : undefined}
                   type="button"
                   role="listitem"
-                  className={`collection-slot${isFocus ? " collection-slot--focus" : ""}${edgeClass}`}
+                  className={`collection-slot${isFocus ? " collection-slot--focus" : ""}${
+                    card.showTimeline ? " collection-slot--timeline" : ""
+                  }${edgeClass}`}
                   onClick={() => {
                     const cur = focusIndexRef.current;
                     if (idx === cur) {
@@ -1602,7 +1613,21 @@ export function CollectionsView({ session, onLogout }: Props) {
                         </span>
                       )}
                     </div>
-                    <div className="collection-meta">
+                    <div
+                      className={`collection-meta${
+                        card.showTimeline
+                          ? " collection-meta--timeline"
+                          : " collection-meta--timeline-placeholder"
+                      }`}
+                    >
+                      <span
+                        className={`collection-timeline${
+                          card.showTimeline
+                            ? ""
+                            : " collection-timeline--hidden"
+                        }`}
+                        aria-hidden
+                      />
                       <span className="collection-years">{card.meta}</span>
                       <span className="collection-label">{card.title}</span>
                     </div>
