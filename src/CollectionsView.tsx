@@ -36,11 +36,16 @@ import {
   patchCollectionPrefs,
   unhideAllCollections,
 } from "./collectionLauncherPrefs";
+import { getGamePrefs, patchGamePrefs } from "./gameLauncherPrefs";
 import {
   FETCH_CONCURRENCY,
   fetchReleaseYearLabel,
   mapPool,
 } from "./collectionReleaseYears";
+import {
+  fetchGameSteamGridBackgroundUrl,
+  fetchGameSteamGridCoverUrl,
+} from "./gameSteamGridArt";
 import { rommAssetUrl } from "./rommAssets";
 import { fetchGamesForCollection, type RommGame } from "./rommGames";
 import {
@@ -144,6 +149,18 @@ function coverForCarouselSlot(
   return coverForCollection(apiBase, c);
 }
 
+function coverForGameCarouselSlot(
+  game: RommGame,
+  gridCovers: Record<string, string | undefined>,
+): string | undefined {
+  const idx = getGamePrefs(game.key).coverSteamIndex ?? -1;
+  if (idx >= 0) {
+    const g = gridCovers[game.key];
+    if (g) return g;
+  }
+  return game.coverUrl;
+}
+
 /** First line under poster: min–max game release years from RomM `/roms` metadata. */
 function metaPrimaryLine(
   resolved: string | undefined,
@@ -175,6 +192,7 @@ const SETTINGS_NAV_SLOTS = 5;
 /** Per-collection panel: hide, next hero, next cover. */
 /** Hide + SteamGrid hero (prev/next/clear) + cover (prev/next/clear). */
 const COLLECTION_SETTINGS_NAV_SLOTS = 7;
+const GAME_SETTINGS_NAV_SLOTS = 6;
 
 /**
  * Signed minimal index delta on the ring → slide direction.
@@ -366,8 +384,15 @@ export function CollectionsView({ session, onLogout }: Props) {
     useState<RommCollection | null>(null);
   const [collectionSettingsNavIndex, setCollectionSettingsNavIndex] =
     useState(0);
+  const [gameSettingsOpen, setGameSettingsOpen] = useState(false);
+  const [gameSettingsTarget, setGameSettingsTarget] =
+    useState<RommGame | null>(null);
+  const [gameSettingsNavIndex, setGameSettingsNavIndex] = useState(0);
   const [prefsRev, setPrefsRev] = useState(0);
   const [gridCovers, setGridCovers] = useState<
+    Record<string, string | undefined>
+  >({});
+  const [gameGridCovers, setGameGridCovers] = useState<
     Record<string, string | undefined>
   >({});
   const [items, setItems] = useState<RommCollection[]>([]);
@@ -406,6 +431,12 @@ export function CollectionsView({ session, onLogout }: Props) {
   const collectionPrevCoverRef = useRef<HTMLButtonElement>(null);
   const collectionNextCoverRef = useRef<HTMLButtonElement>(null);
   const collectionClearCoverRef = useRef<HTMLButtonElement>(null);
+  const gamePrevHeroRef = useRef<HTMLButtonElement>(null);
+  const gameNextHeroRef = useRef<HTMLButtonElement>(null);
+  const gameClearHeroRef = useRef<HTMLButtonElement>(null);
+  const gamePrevCoverRef = useRef<HTMLButtonElement>(null);
+  const gameNextCoverRef = useRef<HTMLButtonElement>(null);
+  const gameClearCoverRef = useRef<HTMLButtonElement>(null);
   const [settingsNavIndex, setSettingsNavIndex] = useState(0);
   const [slotRadius, setSlotRadius] = useState(2);
   const [steamGridKeyDraft, setSteamGridKeyDraft] = useState(() =>
@@ -520,11 +551,11 @@ export function CollectionsView({ session, onLogout }: Props) {
         key: game.key,
         title: game.name,
         meta: game.yearLabel,
-        coverUrl: game.coverUrl,
+        coverUrl: coverForGameCarouselSlot(game, gameGridCovers),
         backgroundUrl: game.backgroundUrl,
         showTimeline: true,
       })),
-    [games],
+    [games, gameGridCovers, prefsRev],
   );
 
   const currentCards = inGamesView ? gameCards : collectionCards;
@@ -599,6 +630,36 @@ export function CollectionsView({ session, onLogout }: Props) {
   }, [items, prefsRev]);
 
   useEffect(() => {
+    if (!activeCollection || games.length === 0) {
+      setGameGridCovers({});
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const sgKey = getSteamGridDbApiKey()?.trim();
+      if (!isTauri() || !sgKey) {
+        if (!cancelled) setGameGridCovers({});
+        return;
+      }
+      const next: Record<string, string | undefined> = {};
+      for (const game of games) {
+        const idx = getGamePrefs(game.key).coverSteamIndex ?? -1;
+        if (idx >= 0) {
+          const url = await fetchGameSteamGridCoverUrl(game, idx);
+          if (cancelled) return;
+          if (url) next[game.key] = url;
+        }
+      }
+      if (!cancelled) setGameGridCovers(next);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCollection, games, prefsRev, steamSettingsRev]);
+
+  useEffect(() => {
     if (loading || items.length === 0) {
       setReleaseLabels({});
       setYearSpansLoading(false);
@@ -664,6 +725,8 @@ export function CollectionsView({ session, onLogout }: Props) {
   const toggleSettings = useCallback(() => {
     setCollectionSettingsOpen(false);
     setCollectionSettingsTarget(null);
+    setGameSettingsOpen(false);
+    setGameSettingsTarget(null);
     setSettingsOpen((prev) => {
       if (!prev) {
         setSteamGridKeyDraft(loadSteamGridDbApiKey());
@@ -676,6 +739,8 @@ export function CollectionsView({ session, onLogout }: Props) {
   const closeCollectionSettings = useCallback(() => {
     setCollectionSettingsOpen(false);
     setCollectionSettingsTarget(null);
+    setGameSettingsOpen(false);
+    setGameSettingsTarget(null);
   }, []);
 
   const openGamesView = useCallback(() => {
@@ -700,7 +765,19 @@ export function CollectionsView({ session, onLogout }: Props) {
   }, [activeCollection, onLogout]);
 
   const toggleCollectionSettings = useCallback(() => {
-    if (activeCollection) return;
+    if (activeCollection) {
+      if (gameSettingsOpen) {
+        closeCollectionSettings();
+        return;
+      }
+      if (settingsOpen || games.length === 0) return;
+      const target = games[gamesFocusIndex];
+      if (!target) return;
+      setGameSettingsTarget(target);
+      setGameSettingsNavIndex(0);
+      setGameSettingsOpen(true);
+      return;
+    }
     if (collectionSettingsOpen) {
       closeCollectionSettings();
       return;
@@ -718,6 +795,9 @@ export function CollectionsView({ session, onLogout }: Props) {
     visibleItems,
     focusIndex,
     activeCollection,
+    gameSettingsOpen,
+    games,
+    gamesFocusIndex,
   ]);
 
   const saveSteamGridKey = useCallback(() => {
@@ -851,6 +931,88 @@ export function CollectionsView({ session, onLogout }: Props) {
     setPrefsRev((n) => n + 1);
   }, [collectionSettingsTarget]);
 
+  const prevGameBackgroundSteam = useCallback(async () => {
+    const game = gameSettingsTarget;
+    if (!game || !isTauri()) return;
+    const key = getSteamGridDbApiKey()?.trim();
+    if (!key) return;
+    const cur = getGamePrefs(game.key).backgroundSteamIndex ?? -1;
+    if (cur < 0) return;
+    const next = cur - 1;
+    if (next < 0) {
+      patchGamePrefs(game.key, { backgroundSteamIndex: -1 });
+      setPrefsRev((n) => n + 1);
+      return;
+    }
+    const url = await fetchGameSteamGridBackgroundUrl(game, next);
+    patchGamePrefs(game.key, {
+      backgroundSteamIndex: url ? next : -1,
+    });
+    setPrefsRev((n) => n + 1);
+  }, [gameSettingsTarget]);
+
+  const nextGameBackgroundSteam = useCallback(async () => {
+    const game = gameSettingsTarget;
+    if (!game || !isTauri()) return;
+    const key = getSteamGridDbApiKey()?.trim();
+    if (!key) return;
+    const cur = getGamePrefs(game.key).backgroundSteamIndex ?? -1;
+    const next = cur + 1;
+    const url = await fetchGameSteamGridBackgroundUrl(game, next);
+    patchGamePrefs(game.key, {
+      backgroundSteamIndex: url ? next : -1,
+    });
+    setPrefsRev((n) => n + 1);
+  }, [gameSettingsTarget]);
+
+  const clearGameBackgroundSteam = useCallback(() => {
+    const game = gameSettingsTarget;
+    if (!game) return;
+    patchGamePrefs(game.key, { backgroundSteamIndex: -1 });
+    setPrefsRev((n) => n + 1);
+  }, [gameSettingsTarget]);
+
+  const prevGameCoverSteam = useCallback(async () => {
+    const game = gameSettingsTarget;
+    if (!game || !isTauri()) return;
+    const key = getSteamGridDbApiKey()?.trim();
+    if (!key) return;
+    const cur = getGamePrefs(game.key).coverSteamIndex ?? -1;
+    if (cur < 0) return;
+    const next = cur - 1;
+    if (next < 0) {
+      patchGamePrefs(game.key, { coverSteamIndex: -1 });
+      setPrefsRev((n) => n + 1);
+      return;
+    }
+    const url = await fetchGameSteamGridCoverUrl(game, next);
+    patchGamePrefs(game.key, {
+      coverSteamIndex: url ? next : -1,
+    });
+    setPrefsRev((n) => n + 1);
+  }, [gameSettingsTarget]);
+
+  const nextGameCoverSteam = useCallback(async () => {
+    const game = gameSettingsTarget;
+    if (!game || !isTauri()) return;
+    const key = getSteamGridDbApiKey()?.trim();
+    if (!key) return;
+    const cur = getGamePrefs(game.key).coverSteamIndex ?? -1;
+    const next = cur + 1;
+    const url = await fetchGameSteamGridCoverUrl(game, next);
+    patchGamePrefs(game.key, {
+      coverSteamIndex: url ? next : -1,
+    });
+    setPrefsRev((n) => n + 1);
+  }, [gameSettingsTarget]);
+
+  const clearGameCoverSteam = useCallback(() => {
+    const game = gameSettingsTarget;
+    if (!game) return;
+    patchGamePrefs(game.key, { coverSteamIndex: -1 });
+    setPrefsRev((n) => n + 1);
+  }, [gameSettingsTarget]);
+
   const activateCollectionSettingsNav = useCallback(() => {
     const c = collectionSettingsTarget;
     if (!c) return;
@@ -894,6 +1056,39 @@ export function CollectionsView({ session, onLogout }: Props) {
     prevHeroSteam,
   ]);
 
+  const activateGameSettingsNav = useCallback(() => {
+    switch (gameSettingsNavIndex) {
+      case 0:
+        void prevGameBackgroundSteam();
+        break;
+      case 1:
+        void nextGameBackgroundSteam();
+        break;
+      case 2:
+        clearGameBackgroundSteam();
+        break;
+      case 3:
+        void prevGameCoverSteam();
+        break;
+      case 4:
+        void nextGameCoverSteam();
+        break;
+      case 5:
+        clearGameCoverSteam();
+        break;
+      default:
+        break;
+    }
+  }, [
+    clearGameBackgroundSteam,
+    clearGameCoverSteam,
+    gameSettingsNavIndex,
+    nextGameBackgroundSteam,
+    nextGameCoverSteam,
+    prevGameBackgroundSteam,
+    prevGameCoverSteam,
+  ]);
+
   useLayoutEffect(() => {
     if (!settingsOpen) return;
     const refs = [
@@ -920,6 +1115,19 @@ export function CollectionsView({ session, onLogout }: Props) {
     ] as const;
     refs[collectionSettingsNavIndex]?.current?.focus();
   }, [collectionSettingsOpen, collectionSettingsNavIndex]);
+
+  useLayoutEffect(() => {
+    if (!gameSettingsOpen) return;
+    const refs = [
+      gamePrevHeroRef,
+      gameNextHeroRef,
+      gameClearHeroRef,
+      gamePrevCoverRef,
+      gameNextCoverRef,
+      gameClearCoverRef,
+    ] as const;
+    refs[gameSettingsNavIndex]?.current?.focus();
+  }, [gameSettingsOpen, gameSettingsNavIndex]);
 
   function selectVirtualType(next: VirtualCollectionType) {
     saveVirtualCollectionType(next);
@@ -986,20 +1194,29 @@ export function CollectionsView({ session, onLogout }: Props) {
     !inGamesView && visibleItems.length > 0 ? visibleItems[focusIndex] : undefined;
   const focusedGame =
     inGamesView && games.length > 0 ? games[gamesFocusIndex] : undefined;
+  const defaultFocusedGameBgUrl =
+    focusedGame?.backgroundUrl ?? focusedGame?.coverUrl;
   const cardCoverUrl = useMemo(() => {
     if (focusedCollection) {
       return coverForCarouselSlot(session.apiBase, focusedCollection, gridCovers);
     }
-    return focusedGame?.coverUrl;
+    return focusedGame
+      ? coverForGameCarouselSlot(focusedGame, gameGridCovers)
+      : undefined;
   }, [
     focusedCollection,
     focusedGame,
     session.apiBase,
     gridCovers,
+    gameGridCovers,
     prefsRev,
   ]);
 
   const [heroBg, setHeroBg] = useState<{
+    key: string;
+    url: string | undefined;
+  } | null>(null);
+  const [gameHeroBg, setGameHeroBg] = useState<{
     key: string;
     url: string | undefined;
   } | null>(null);
@@ -1043,8 +1260,39 @@ export function CollectionsView({ session, onLogout }: Props) {
     gridCovers,
   ]);
 
+  useEffect(() => {
+    if (!focusedGame) {
+      setGameHeroBg(null);
+      return;
+    }
+
+    const key = focusedGame.key;
+    const heroIdx = getGamePrefs(focusedGame.key).backgroundSteamIndex ?? -1;
+    if (heroIdx < 0) {
+      setGameHeroBg({ key, url: undefined });
+      return;
+    }
+
+    setGameHeroBg({ key, url: undefined });
+    let cancelled = false;
+    void (async () => {
+      const url = await fetchGameSteamGridBackgroundUrl(focusedGame, heroIdx);
+      if (cancelled) return;
+      setGameHeroBg({ key, url: url ?? undefined });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [focusedGame, steamSettingsRev, prefsRev]);
+
   const bgUrl = inGamesView
-    ? (focusedGame?.backgroundUrl ?? focusedGame?.coverUrl)
+    ? focusedGame &&
+      gameHeroBg &&
+      gameHeroBg.key === focusedGame.key &&
+      gameHeroBg.url
+      ? gameHeroBg.url
+      : defaultFocusedGameBgUrl
     : focusedCollection &&
         heroBg &&
         heroBg.key === collectionRowKey(focusedCollection)
@@ -1142,19 +1390,28 @@ export function CollectionsView({ session, onLogout }: Props) {
 
   const hintsReady = !currentLoading;
   const showMoveHints = hintsReady && currentCards.length > 0;
+  const itemSettingsOpen = collectionSettingsOpen || gameSettingsOpen;
+  const itemSettingsNav = collectionSettingsOpen
+    ? {
+        slotCount: COLLECTION_SETTINGS_NAV_SLOTS,
+        setFocusIndex: setCollectionSettingsNavIndex,
+        onActivate: activateCollectionSettingsNav,
+        onCloseSettings: closeCollectionSettings,
+      }
+    : gameSettingsOpen
+      ? {
+          slotCount: GAME_SETTINGS_NAV_SLOTS,
+          setFocusIndex: setGameSettingsNavIndex,
+          onActivate: activateGameSettingsNav,
+          onCloseSettings: closeCollectionSettings,
+        }
+      : null;
 
   useCollectionsGamepadNavigation({
     enabled: tauriShell && hintsReady,
     itemsLength: currentCards.length,
-    collectionSettingsOpen,
-    collectionSettingsNav: collectionSettingsOpen
-      ? {
-          slotCount: COLLECTION_SETTINGS_NAV_SLOTS,
-          setFocusIndex: setCollectionSettingsNavIndex,
-          onActivate: activateCollectionSettingsNav,
-          onCloseSettings: closeCollectionSettings,
-        }
-      : null,
+    collectionSettingsOpen: itemSettingsOpen,
+    collectionSettingsNav: itemSettingsNav,
     settingsOpen,
     settingsNav: settingsOpen
       ? {
@@ -1185,7 +1442,7 @@ export function CollectionsView({ session, onLogout }: Props) {
 
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        if (collectionSettingsOpen) {
+        if (itemSettingsOpen) {
           e.preventDefault();
           closeCollectionSettings();
           return;
@@ -1232,22 +1489,36 @@ export function CollectionsView({ session, onLogout }: Props) {
         }
       }
 
-      if (collectionSettingsOpen) {
+      if (itemSettingsOpen) {
         if (e.key === "ArrowUp") {
           e.preventDefault();
-          setCollectionSettingsNavIndex((i) => Math.max(0, i - 1));
+          if (collectionSettingsOpen) {
+            setCollectionSettingsNavIndex((i) => Math.max(0, i - 1));
+          } else {
+            setGameSettingsNavIndex((i) => Math.max(0, i - 1));
+          }
           return;
         }
         if (e.key === "ArrowDown") {
           e.preventDefault();
-          setCollectionSettingsNavIndex((i) =>
-            Math.min(COLLECTION_SETTINGS_NAV_SLOTS - 1, i + 1),
-          );
+          if (collectionSettingsOpen) {
+            setCollectionSettingsNavIndex((i) =>
+              Math.min(COLLECTION_SETTINGS_NAV_SLOTS - 1, i + 1),
+            );
+          } else {
+            setGameSettingsNavIndex((i) =>
+              Math.min(GAME_SETTINGS_NAV_SLOTS - 1, i + 1),
+            );
+          }
           return;
         }
         if (e.key === "Enter" && !e.repeat) {
           e.preventDefault();
-          activateCollectionSettingsNav();
+          if (collectionSettingsOpen) {
+            activateCollectionSettingsNav();
+          } else {
+            activateGameSettingsNav();
+          }
           return;
         }
         if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
@@ -1312,6 +1583,8 @@ export function CollectionsView({ session, onLogout }: Props) {
     onRefreshLibrary,
     settingsOpen,
     collectionSettingsOpen,
+    gameSettingsOpen,
+    itemSettingsOpen,
     toggleSettings,
     toggleCollectionSettings,
     closeCollectionSettings,
@@ -1319,6 +1592,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     visibleItems.length,
     activateSettingsNav,
     activateCollectionSettingsNav,
+    activateGameSettingsNav,
     refreshing,
   ]);
 
@@ -1356,6 +1630,9 @@ export function CollectionsView({ session, onLogout }: Props) {
     ? `Browse games in ${activeCollection.name}`
     : "Browse your game collections";
   const backLabel = activeCollection ? "Back to collections" : "Back to login";
+  const itemSettingsLabel = activeCollection
+    ? "Game settings"
+    : "Collection settings";
 
   const settingsPortal =
     settingsOpen && typeof document !== "undefined"
@@ -1470,6 +1747,7 @@ export function CollectionsView({ session, onLogout }: Props) {
 
   const collSteamDisabled =
     !isTauri() || !getSteamGridDbApiKey()?.trim();
+  const gameSteamDisabled = collSteamDisabled;
 
   const collectionSettingsPortal =
     collectionSettingsOpen &&
@@ -1576,12 +1854,95 @@ export function CollectionsView({ session, onLogout }: Props) {
         )
       : null;
 
+  const gameSettingsPortal =
+    gameSettingsOpen &&
+    gameSettingsTarget &&
+    typeof document !== "undefined"
+      ? createPortal(
+          <>
+            <div
+              className="collections-settings-backdrop"
+              aria-hidden
+              onPointerDown={() => closeCollectionSettings()}
+            />
+            <div
+              className="collections-settings-menu collections-settings-menu--popover"
+              role="dialog"
+              aria-label="Game settings"
+              aria-modal="true"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <p className="collections-settings-menu-title">Game settings</p>
+              <p className="collections-settings-menu-hint">
+                {gameSettingsTarget.name}
+              </p>
+              <button
+                ref={gamePrevHeroRef}
+                type="button"
+                className={`collections-settings-action${gameSettingsNavIndex === 0 ? " collections-settings-action--active" : ""}${gameSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setGameSettingsNavIndex(0)}
+                onClick={() => void prevGameBackgroundSteam()}
+              >
+                <strong>Previous SteamGrid background</strong>
+              </button>
+              <button
+                ref={gameNextHeroRef}
+                type="button"
+                className={`collections-settings-action${gameSettingsNavIndex === 1 ? " collections-settings-action--active" : ""}${gameSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setGameSettingsNavIndex(1)}
+                onClick={() => void nextGameBackgroundSteam()}
+              >
+                <strong>Next SteamGrid background</strong>
+              </button>
+              <button
+                ref={gameClearHeroRef}
+                type="button"
+                className={`collections-settings-action${gameSettingsNavIndex === 2 ? " collections-settings-action--active" : ""}`}
+                onFocus={() => setGameSettingsNavIndex(2)}
+                onClick={clearGameBackgroundSteam}
+              >
+                <strong>Clear SteamGrid background</strong>
+              </button>
+              <button
+                ref={gamePrevCoverRef}
+                type="button"
+                className={`collections-settings-action${gameSettingsNavIndex === 3 ? " collections-settings-action--active" : ""}${gameSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setGameSettingsNavIndex(3)}
+                onClick={() => void prevGameCoverSteam()}
+              >
+                <strong>Previous cover art</strong>
+              </button>
+              <button
+                ref={gameNextCoverRef}
+                type="button"
+                className={`collections-settings-action${gameSettingsNavIndex === 4 ? " collections-settings-action--active" : ""}${gameSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setGameSettingsNavIndex(4)}
+                onClick={() => void nextGameCoverSteam()}
+              >
+                <strong>Next cover art</strong>
+              </button>
+              <button
+                ref={gameClearCoverRef}
+                type="button"
+                className={`collections-settings-action${gameSettingsNavIndex === 5 ? " collections-settings-action--active" : ""}`}
+                onFocus={() => setGameSettingsNavIndex(5)}
+                onClick={clearGameCoverSteam}
+              >
+                <strong>Clear cover art</strong>
+              </button>
+            </div>
+          </>,
+          document.body,
+        )
+      : null;
+
   return (
     <div
       className="collections-screen"
     >
       {settingsPortal}
       {collectionSettingsPortal}
+      {gameSettingsPortal}
 
       <div className="collections-bg-stack" aria-hidden>
         {bgLayers.length > 0 ? (
@@ -1794,18 +2155,18 @@ export function CollectionsView({ session, onLogout }: Props) {
               <span>Select</span>
             </div>
           ) : null}
-          {!activeCollection ? (
-            <div
-              className={`collections-footer-hint${visibleItems.length === 0 ? " collections-footer-hint--disabled" : ""}`}
-            >
-              {showGamepadHints ? (
-                <GamepadCollectionSettingsPromptGlyph flavor={gamepadFlavor} />
-              ) : (
-                <KeyboardCollectionSettingsGlyph />
-              )}
-              <span>Collection settings</span>
-            </div>
-          ) : null}
+          <div
+            className={`collections-footer-hint${
+              currentCards.length === 0 ? " collections-footer-hint--disabled" : ""
+            }`}
+          >
+            {showGamepadHints ? (
+              <GamepadCollectionSettingsPromptGlyph flavor={gamepadFlavor} />
+            ) : (
+              <KeyboardCollectionSettingsGlyph />
+            )}
+            <span>{itemSettingsLabel}</span>
+          </div>
           <div className="collections-footer-hint">
             {showGamepadHints ? (
               <GamepadStartPromptGlyph flavor={gamepadFlavor} />
