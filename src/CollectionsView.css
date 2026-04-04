@@ -114,6 +114,57 @@
   line-height: 1.35;
 }
 
+.collections-settings-menu-title--spaced {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #3a3a3a;
+}
+
+.collections-settings-steamgrid {
+  margin-top: 4px;
+}
+
+.collections-settings-steamgrid .collections-settings-menu-hint a {
+  color: #93c5fd;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.collections-settings-steamgrid-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #4a4a4a;
+  background: rgba(0, 0, 0, 0.35);
+  color: #f0f0f0;
+  font-size: 0.8125rem;
+  font-family: inherit;
+}
+
+.collections-settings-steamgrid-input::placeholder {
+  color: #6b7280;
+}
+
+.collections-settings-steamgrid-save {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid #4a4a4a;
+  background: rgba(55, 55, 55, 0.95);
+  color: #ffffff;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.collections-settings-steamgrid-save:hover {
+  background: rgba(68, 68, 68, 0.98);
+  border-color: #5a5a5a;
+}
+
 .collections-refresh {
   position: absolute;
   top: 20px;

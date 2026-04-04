@@ -152,9 +152,10 @@ export function itemsFromRomsPage(page: unknown): unknown[] {
 export function romsQueryForCollection(
   c: CollectionRomsFilter,
   offset: number,
+  pageLimit: number = PAGE_LIMIT,
 ): string {
   const params = new URLSearchParams();
-  params.set("limit", String(PAGE_LIMIT));
+  params.set("limit", String(pageLimit));
   params.set("offset", String(offset));
   if (c.is_virtual) {
     params.set("virtual_collection_id", String(c.id));

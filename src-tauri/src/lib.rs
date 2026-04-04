@@ -158,11 +158,134 @@ async fn romm_api_get(
     Ok(body)
 }
 
+const SGDB_BASE: &str = "https://www.steamgriddb.com/api/v2";
+
+fn sgdb_extract_first_game_id(value: &serde_json::Value) -> Option<i64> {
+    let data = value.get("data")?;
+    let arr = data.as_array()?;
+    for item in arr {
+        if let Some(id) = item.get("id").and_then(|x| x.as_i64()) {
+            return Some(id);
+        }
+        if let Some(id) = item.get("id").and_then(|x| x.as_u64()) {
+            return Some(id as i64);
+        }
+        if let Some(inner) = item.get("data") {
+            if let Some(id) = inner.get("id").and_then(|x| x.as_i64()) {
+                return Some(id);
+            }
+            if let Some(id) = inner.get("id").and_then(|x| x.as_u64()) {
+                return Some(id as i64);
+            }
+        }
+    }
+    None
+}
+
+fn sgdb_first_hero_url(value: &serde_json::Value) -> Option<String> {
+    let data = value.get("data")?;
+    let arr = data.as_array()?;
+    for item in arr {
+        let url = item.get("url").and_then(|x| x.as_str())?;
+        if !url.is_empty() {
+            return Some(url.to_string());
+        }
+    }
+    None
+}
+
+/// SteamGridDB hero image for fullscreen backgrounds ([API v2](https://www.steamgriddb.com/api)).
+/// Searches by collection name, then loads static heroes for the first matching game.
+#[tauri::command]
+async fn steamgriddb_hero_url(api_key: String, search_query: String) -> Result<Option<String>, String> {
+    let key = api_key.trim();
+    if key.is_empty() {
+        return Ok(None);
+    }
+    let q = search_query.trim();
+    if q.is_empty() {
+        return Ok(None);
+    }
+
+    let client = reqwest::Client::builder()
+        .https_only(true)
+        .user_agent("RomM-Launcher/0.1")
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let search_url = format!(
+        "{SGDB_BASE}/search/autocomplete/{}",
+        urlencoding::encode(q)
+    );
+
+    let res = client
+        .get(&search_url)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            format!("Bearer {}", key),
+        )
+        .send()
+        .await
+        .map_err(|e| format!("SteamGridDB search failed: {e}"))?;
+
+    let status = res.status();
+    let body = res.text().await.map_err(|e| e.to_string())?;
+
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    if !status.is_success() {
+        let snippet: String = body.chars().take(200).collect();
+        return Err(format!("SteamGridDB search ({}): {}", status, snippet));
+    }
+
+    let search_json: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("SteamGridDB search JSON: {e}"))?;
+
+    let Some(game_id) = sgdb_extract_first_game_id(&search_json) else {
+        return Ok(None);
+    };
+
+    let heroes_url = format!(
+        "{SGDB_BASE}/heroes/game/{game_id}?types=static&nsfw=false&humor=false"
+    );
+
+    let res = client
+        .get(&heroes_url)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            format!("Bearer {}", key),
+        )
+        .send()
+        .await
+        .map_err(|e| format!("SteamGridDB heroes failed: {e}"))?;
+
+    let status = res.status();
+    let body = res.text().await.map_err(|e| e.to_string())?;
+
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    if !status.is_success() {
+        let snippet: String = body.chars().take(200).collect();
+        return Err(format!("SteamGridDB heroes ({}): {}", status, snippet));
+    }
+
+    let heroes_json: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("SteamGridDB heroes JSON: {e}"))?;
+
+    Ok(sgdb_first_hero_url(&heroes_json))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![romm_login, romm_api_get])
+        .invoke_handler(tauri::generate_handler![
+            romm_login,
+            romm_api_get,
+            steamgriddb_hero_url
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

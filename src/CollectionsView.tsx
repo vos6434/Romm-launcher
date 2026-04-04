@@ -15,12 +15,18 @@ import {
 } from "./KeyboardCollectionsHintGlyphs";
 import { useCollectionsGamepadNavigation } from "./useCollectionsGamepadNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
+import { fetchCollectionBackgroundUrl } from "./collectionBackground";
+import { collectionRowKey } from "./collectionKey";
 import {
   FETCH_CONCURRENCY,
   fetchReleaseYearLabel,
   mapPool,
 } from "./collectionReleaseYears";
 import { rommAssetUrl } from "./rommAssets";
+import {
+  loadSteamGridDbApiKey,
+  saveSteamGridDbApiKey,
+} from "./steamGridDbSettings";
 import {
   loadVirtualCollectionType,
   saveVirtualCollectionType,
@@ -86,12 +92,6 @@ function coverForCollection(apiBase: string, c: RommCollection): string | undefi
     firstCoverUrl(apiBase, c.path_covers_small) ??
     rommAssetUrl(apiBase, c.url_cover ?? undefined)
   );
-}
-
-function collectionRowKey(c: RommCollection): string {
-  if (c.is_virtual) return `v-${c.id}`;
-  if (c.is_smart) return `s-${c.id}`;
-  return `r-${c.id}`;
 }
 
 /** First line under poster: min–max game release years from RomM `/roms` metadata. */
@@ -262,6 +262,10 @@ export function CollectionsView({ session, onLogout }: Props) {
   const focusSlotRef = useRef<HTMLButtonElement | null>(null);
   const settingsWrapRef = useRef<HTMLDivElement>(null);
   const [slotRadius, setSlotRadius] = useState(2);
+  const [steamGridKeyDraft, setSteamGridKeyDraft] = useState(() =>
+    loadSteamGridDbApiKey(),
+  );
+  const [steamSettingsRev, setSteamSettingsRev] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -333,6 +337,10 @@ export function CollectionsView({ session, onLogout }: Props) {
   }, [session, virtualType]);
 
   useEffect(() => {
+    if (settingsOpen) setSteamGridKeyDraft(loadSteamGridDbApiKey());
+  }, [settingsOpen]);
+
+  useEffect(() => {
     if (!settingsOpen) return;
     function onPointerDown(e: MouseEvent | PointerEvent) {
       const el = settingsWrapRef.current;
@@ -395,10 +403,41 @@ export function CollectionsView({ session, onLogout }: Props) {
   }, [focusIndex, items.length, loading, refreshing, slotRadius]);
 
   const focused = items[focusIndex];
-  const bgUrl = useMemo(
+  const cardCoverUrl = useMemo(
     () => (focused ? coverForCollection(session.apiBase, focused) : undefined),
     [focused, session.apiBase],
   );
+
+  const [heroBg, setHeroBg] = useState<{
+    key: string;
+    url: string | undefined;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!focused) {
+      setHeroBg(null);
+      return;
+    }
+    const key = collectionRowKey(focused);
+    const cover = coverForCollection(session.apiBase, focused);
+    setHeroBg({ key, url: undefined });
+
+    let cancelled = false;
+    void (async () => {
+      const url = await fetchCollectionBackgroundUrl(session, focused, cover);
+      if (cancelled) return;
+      setHeroBg({ key, url: url ?? undefined });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [focused, session.apiBase, session.accessToken, steamSettingsRev]);
+
+  const bgUrl =
+    focused && heroBg && heroBg.key === collectionRowKey(focused)
+      ? (heroBg.url ?? cardCoverUrl)
+      : cardCoverUrl;
 
   const moveFocus = useCallback(
     (delta: number) => {
@@ -514,6 +553,41 @@ export function CollectionsView({ session, onLogout }: Props) {
                 </span>
               </span>
             </label>
+            <div className="collections-settings-steamgrid">
+              <p className="collections-settings-menu-title collections-settings-menu-title--spaced">
+                SteamGridDB backgrounds
+              </p>
+              <p className="collections-settings-menu-hint">
+                Optional API key for hero-style backdrop art (
+                <a
+                  href="https://www.steamgriddb.com/profile/preferences"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  create a key
+                </a>
+                ). Stored only on this device. If empty, RomM screenshots are
+                used instead.
+              </p>
+              <input
+                type="password"
+                className="collections-settings-steamgrid-input"
+                autoComplete="off"
+                placeholder="API key"
+                value={steamGridKeyDraft}
+                onChange={(e) => setSteamGridKeyDraft(e.target.value)}
+              />
+              <button
+                type="button"
+                className="collections-settings-steamgrid-save"
+                onClick={() => {
+                  saveSteamGridDbApiKey(steamGridKeyDraft);
+                  setSteamSettingsRev((n) => n + 1);
+                }}
+              >
+                Save key
+              </button>
+            </div>
           </div>
         ) : null}
       </div>
