@@ -323,14 +323,14 @@ button.collections-settings-action:focus-visible {
   justify-content: flex-start;
   gap: clamp(12px, 2.5vw, 28px);
   flex-shrink: 0;
-  /* Console shelf: long ease-out slide */
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Smooth pan — gentler than aggressive console snap (easier on vestibular comfort). */
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
 
 @keyframes carousel-swap-leave {
   from {
-    transform: scale(1.09) translateY(-8px);
+    transform: scale(1.05) translateY(-3px);
     opacity: 1;
   }
   to {
@@ -345,7 +345,7 @@ button.collections-settings-action:focus-visible {
     opacity: 0.72;
   }
   to {
-    transform: scale(1.09) translateY(-8px);
+    transform: scale(1.05) translateY(-3px);
     opacity: 1;
   }
 }
@@ -424,27 +424,25 @@ button.collections-settings-action:focus-visible {
 
 .collection-slot--focus {
   opacity: 1;
-  transform: scale(1.09) translateY(-8px);
+  transform: scale(1.05) translateY(-3px);
   z-index: 3;
 }
 
 .collection-slot--focus:not(.collection-slot--swap-enter) {
   transition:
-    transform 0.34s cubic-bezier(0.34, 1.12, 0.48, 1),
+    transform 0.38s cubic-bezier(0.25, 0.88, 0.35, 1),
     opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .collection-slot--swap-leave {
   z-index: 4;
-  animation: carousel-swap-leave 0.4s cubic-bezier(0.34, 1.12, 0.48, 1)
-    forwards;
+  animation: carousel-swap-leave 0.42s cubic-bezier(0.25, 0.88, 0.35, 1) forwards;
   transition: none !important;
 }
 
 .collection-slot--focus.collection-slot--swap-enter {
   z-index: 5;
-  animation: carousel-swap-enter 0.4s cubic-bezier(0.34, 1.12, 0.48, 1)
-    forwards;
+  animation: carousel-swap-enter 0.42s cubic-bezier(0.25, 0.88, 0.35, 1) forwards;
   transition: none !important;
 }
 
@@ -470,9 +468,9 @@ button.collections-settings-action:focus-visible {
 .collection-poster--focus {
   border-color: #ffffff;
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.72),
-    0 0 28px rgba(147, 197, 253, 0.32),
-    0 18px 52px rgba(0, 0, 0, 0.55);
+    0 0 0 1px rgba(255, 255, 255, 0.65),
+    0 0 20px rgba(147, 197, 253, 0.22),
+    0 14px 40px rgba(0, 0, 0, 0.48);
 }
 
 .collection-poster--empty {
@@ -523,6 +521,32 @@ button.collections-settings-action:focus-visible {
   font-weight: 600;
 }
 
+/* Optional launcher setting: minimal motion, no paired shrink/grow (JS skips swap). */
+.collections-screen--calmer .collections-carousel-track {
+  transition: transform 0.24s ease-out;
+}
+
+.collections-screen--calmer .collection-slot--focus {
+  transform: scale(1.02) translateY(0);
+}
+
+.collections-screen--calmer .collection-slot--focus:not(.collection-slot--swap-enter) {
+  transition:
+    transform 0.18s ease-out,
+    opacity 0.22s ease-out;
+}
+
+.collections-screen--calmer .collection-poster--focus {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.5),
+    0 0 14px rgba(147, 197, 253, 0.12),
+    0 10px 28px rgba(0, 0, 0, 0.4);
+}
+
+.collections-screen--calmer .collection-slot--focus .collection-years {
+  font-size: 0.875rem;
+}
+
 .collection-label {
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.55);
@@ -568,5 +592,9 @@ button.collections-settings-action:focus-visible {
   .collection-slot--swap-leave,
   .collection-slot--swap-enter {
     animation: none !important;
+  }
+
+  .collection-slot--focus {
+    transform: scale(1.02) translateY(0) !important;
   }
 }

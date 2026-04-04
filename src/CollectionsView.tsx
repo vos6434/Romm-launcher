@@ -28,6 +28,7 @@ import { fetchCollectionBackgroundUrl } from "./collectionBackground";
 import { fetchCollectionGridCoverUrl } from "./collectionGridCover";
 import { fetchSteamGridSearchQuery } from "./collectionSteamGridSearch";
 import { collectionRowKey } from "./collectionKey";
+import { loadCalmerCarousel, saveCalmerCarousel } from "./calmerCarousel";
 import {
   getCollectionPrefs,
   isCollectionHidden,
@@ -150,21 +151,21 @@ function estimateCollectionGapPx(): number {
 
 const MAX_CAROUSEL_SLOT_RADIUS = 30;
 
-/** Settings panel: IGDB collection, franchise, SteamGrid key, save. */
-const SETTINGS_NAV_SLOTS = 5;
+/** Settings panel: IGDB, franchise, SteamGrid key, save, unhide, calmer carousel. */
+const SETTINGS_NAV_SLOTS = 6;
 
 /** Per-collection panel: hide, next hero, next cover. */
 /** Hide + SteamGrid hero (prev/next/clear) + cover (prev/next/clear). */
 const COLLECTION_SETTINGS_NAV_SLOTS = 7;
 
-const CAROUSEL_SWAP_MS = 400;
+const CAROUSEL_SWAP_MS = 430;
 
 type CarouselSwap = { from: number; to: number };
 
-/** Track width: one centered slot is `scale(1.09)`; others stay base width. */
+/** Track width: one centered slot is scaled (~1.05); matches `.collection-slot--focus`. */
 function carouselTrackWidthPx(n: number, slotW: number, gap: number): number {
   if (n < 1) return 0;
-  return (n - 1) * slotW + slotW * 1.09 + (n - 1) * gap;
+  return (n - 1) * slotW + slotW * 1.05 + (n - 1) * gap;
 }
 
 /**
@@ -323,6 +324,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   const settingsSteamKeyRef = useRef<HTMLInputElement>(null);
   const settingsSaveRef = useRef<HTMLButtonElement>(null);
   const settingsUnhideAllRef = useRef<HTMLButtonElement>(null);
+  const settingsCalmerRef = useRef<HTMLButtonElement>(null);
   const collectionHideRef = useRef<HTMLButtonElement>(null);
   const collectionPrevHeroRef = useRef<HTMLButtonElement>(null);
   const collectionNextHeroRef = useRef<HTMLButtonElement>(null);
@@ -336,6 +338,9 @@ export function CollectionsView({ session, onLogout }: Props) {
     loadSteamGridDbApiKey(),
   );
   const [steamSettingsRev, setSteamSettingsRev] = useState(0);
+  const [calmerCarousel, setCalmerCarousel] = useState(() =>
+    loadCalmerCarousel(),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -512,6 +517,14 @@ export function CollectionsView({ session, onLogout }: Props) {
     setPrefsRev((n) => n + 1);
   }, []);
 
+  const toggleCalmerCarousel = useCallback(() => {
+    setCalmerCarousel((prev) => {
+      const next = !prev;
+      saveCalmerCarousel(next);
+      return next;
+    });
+  }, []);
+
   const activateSettingsNav = useCallback(() => {
     switch (settingsNavIndex) {
       case 0:
@@ -529,10 +542,18 @@ export function CollectionsView({ session, onLogout }: Props) {
       case 4:
         onUnhideAllCollections();
         break;
+      case 5:
+        toggleCalmerCarousel();
+        break;
       default:
         break;
     }
-  }, [settingsNavIndex, saveSteamGridKey, onUnhideAllCollections]);
+  }, [
+    settingsNavIndex,
+    saveSteamGridKey,
+    onUnhideAllCollections,
+    toggleCalmerCarousel,
+  ]);
 
   const prevHeroSteam = useCallback(async () => {
     const c = collectionSettingsTarget;
@@ -684,6 +705,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       settingsSteamKeyRef,
       settingsSaveRef,
       settingsUnhideAllRef,
+      settingsCalmerRef,
     ] as const;
     const el = refs[settingsNavIndex]?.current;
     el?.focus();
@@ -822,6 +844,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     (from: number, to: number) => {
       if (from === to) return;
       clearCarouselSwapTimer();
+      if (calmerCarousel) return;
       if (
         typeof window !== "undefined" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -834,7 +857,7 @@ export function CollectionsView({ session, onLogout }: Props) {
         carouselSwapTimerRef.current = null;
       }, CAROUSEL_SWAP_MS);
     },
-    [clearCarouselSwapTimer],
+    [clearCarouselSwapTimer, calmerCarousel],
   );
 
   const moveFocus = useCallback(
@@ -1128,6 +1151,15 @@ export function CollectionsView({ session, onLogout }: Props) {
                 >
                   Unhide all collections
                 </button>
+                <button
+                  ref={settingsCalmerRef}
+                  type="button"
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 5 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  onClick={toggleCalmerCarousel}
+                  onFocus={() => setSettingsNavIndex(5)}
+                >
+                  Softer carousel: {calmerCarousel ? "On" : "Off"}
+                </button>
               </div>
             </div>
           </>,
@@ -1244,7 +1276,9 @@ export function CollectionsView({ session, onLogout }: Props) {
       : null;
 
   return (
-    <div className="collections-screen">
+    <div
+      className={`collections-screen${calmerCarousel ? " collections-screen--calmer" : ""}`}
+    >
       {settingsPortal}
       {collectionSettingsPortal}
 
