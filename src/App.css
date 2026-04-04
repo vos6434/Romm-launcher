@@ -359,7 +359,8 @@ body {
 }
 
 .gp-prompt-img--kb-o,
-.gp-prompt-img--kb-r {
+.gp-prompt-img--kb-r,
+.gp-prompt-img--kb-i {
   height: 28px;
   width: auto;
   max-width: 32px;

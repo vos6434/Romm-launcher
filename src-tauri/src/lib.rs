@@ -182,37 +182,29 @@ fn sgdb_extract_first_game_id(value: &serde_json::Value) -> Option<i64> {
     None
 }
 
-fn sgdb_first_hero_url(value: &serde_json::Value) -> Option<String> {
-    let data = value.get("data")?;
-    let arr = data.as_array()?;
+fn sgdb_all_image_urls(value: &serde_json::Value) -> Vec<String> {
+    let mut out = Vec::new();
+    let Some(data) = value.get("data") else {
+        return out;
+    };
+    let Some(arr) = data.as_array() else {
+        return out;
+    };
     for item in arr {
-        let url = item.get("url").and_then(|x| x.as_str())?;
-        if !url.is_empty() {
-            return Some(url.to_string());
+        if let Some(url) = item.get("url").and_then(|x| x.as_str()) {
+            if !url.is_empty() {
+                out.push(url.to_string());
+            }
         }
     }
-    None
+    out
 }
 
-/// SteamGridDB hero image for fullscreen backgrounds ([API v2](https://www.steamgriddb.com/api)).
-/// Searches by collection name, then loads static heroes for the first matching game.
-#[tauri::command]
-async fn steamgriddb_hero_url(api_key: String, search_query: String) -> Result<Option<String>, String> {
-    let key = api_key.trim();
-    if key.is_empty() {
-        return Ok(None);
-    }
-    let q = search_query.trim();
-    if q.is_empty() {
-        return Ok(None);
-    }
-
-    let client = reqwest::Client::builder()
-        .https_only(true)
-        .user_agent("RomM-Launcher/0.1")
-        .build()
-        .map_err(|e| format!("HTTP client error: {e}"))?;
-
+async fn sgdb_game_id_for_query(
+    client: &reqwest::Client,
+    key: &str,
+    q: &str,
+) -> Result<Option<i64>, String> {
     let search_url = format!(
         "{SGDB_BASE}/search/autocomplete/{}",
         urlencoding::encode(q)
@@ -242,7 +234,39 @@ async fn steamgriddb_hero_url(api_key: String, search_query: String) -> Result<O
     let search_json: serde_json::Value =
         serde_json::from_str(&body).map_err(|e| format!("SteamGridDB search JSON: {e}"))?;
 
-    let Some(game_id) = sgdb_extract_first_game_id(&search_json) else {
+    Ok(sgdb_extract_first_game_id(&search_json))
+}
+
+/// SteamGridDB hero image for fullscreen backgrounds ([API v2](https://www.steamgriddb.com/api)).
+/// Searches by collection name, then loads static heroes for the first matching game.
+#[tauri::command]
+async fn steamgriddb_hero_url(api_key: String, search_query: String) -> Result<Option<String>, String> {
+    steamgriddb_hero_url_at(api_key, search_query, 0).await
+}
+
+/// Same as [`steamgriddb_hero_url`], but picks `index` modulo the number of static heroes (for cycling).
+#[tauri::command]
+async fn steamgriddb_hero_url_at(
+    api_key: String,
+    search_query: String,
+    index: u64,
+) -> Result<Option<String>, String> {
+    let key = api_key.trim();
+    if key.is_empty() {
+        return Ok(None);
+    }
+    let q = search_query.trim();
+    if q.is_empty() {
+        return Ok(None);
+    }
+
+    let client = reqwest::Client::builder()
+        .https_only(true)
+        .user_agent("RomM-Launcher/0.1")
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let Some(game_id) = sgdb_game_id_for_query(&client, key, q).await? else {
         return Ok(None);
     };
 
@@ -274,7 +298,74 @@ async fn steamgriddb_hero_url(api_key: String, search_query: String) -> Result<O
     let heroes_json: serde_json::Value =
         serde_json::from_str(&body).map_err(|e| format!("SteamGridDB heroes JSON: {e}"))?;
 
-    Ok(sgdb_first_hero_url(&heroes_json))
+    let urls = sgdb_all_image_urls(&heroes_json);
+    let i = index as usize;
+    if i >= urls.len() {
+        return Ok(None);
+    }
+    Ok(Some(urls[i].clone()))
+}
+
+/// SteamGridDB box-style grid art for a game; `index` selects modulo returned static grids.
+#[tauri::command]
+async fn steamgriddb_grid_url_at(
+    api_key: String,
+    search_query: String,
+    index: u64,
+) -> Result<Option<String>, String> {
+    let key = api_key.trim();
+    if key.is_empty() {
+        return Ok(None);
+    }
+    let q = search_query.trim();
+    if q.is_empty() {
+        return Ok(None);
+    }
+
+    let client = reqwest::Client::builder()
+        .https_only(true)
+        .user_agent("RomM-Launcher/0.1")
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let Some(game_id) = sgdb_game_id_for_query(&client, key, q).await? else {
+        return Ok(None);
+    };
+
+    let grids_url = format!(
+        "{SGDB_BASE}/grids/game/{game_id}?types=static&nsfw=false&humor=false"
+    );
+
+    let res = client
+        .get(&grids_url)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            format!("Bearer {}", key),
+        )
+        .send()
+        .await
+        .map_err(|e| format!("SteamGridDB grids failed: {e}"))?;
+
+    let status = res.status();
+    let body = res.text().await.map_err(|e| e.to_string())?;
+
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    if !status.is_success() {
+        let snippet: String = body.chars().take(200).collect();
+        return Err(format!("SteamGridDB grids ({}): {}", status, snippet));
+    }
+
+    let grids_json: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("SteamGridDB grids JSON: {e}"))?;
+
+    let urls = sgdb_all_image_urls(&grids_json);
+    let i = index as usize;
+    if i >= urls.len() {
+        return Ok(None);
+    }
+    Ok(Some(urls[i].clone()))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -284,7 +375,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             romm_login,
             romm_api_get,
-            steamgriddb_hero_url
+            steamgriddb_hero_url,
+            steamgriddb_hero_url_at,
+            steamgriddb_grid_url_at
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

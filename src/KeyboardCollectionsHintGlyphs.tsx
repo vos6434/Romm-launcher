@@ -51,3 +51,16 @@ export function KeyboardRefreshGlyph() {
     </span>
   );
 }
+
+export function KeyboardCollectionSettingsGlyph() {
+  return (
+    <span className="gp-prompt-svg-wrap" aria-hidden>
+      <img
+        src={keyboardPromptUrls.iOutline}
+        alt=""
+        className="gp-prompt-img gp-prompt-img--kb-i"
+        draggable={false}
+      />
+    </span>
+  );
+}

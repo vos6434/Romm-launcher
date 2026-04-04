@@ -8,6 +8,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { GamepadCollectionSettingsPromptGlyph } from "./GamepadCollectionSettingsPromptGlyph";
 import { GamepadHorizontalNavPromptGlyphs } from "./GamepadHorizontalNavPromptGlyphs";
 import { GamepadPromptGlyph } from "./GamepadPromptGlyph";
 import {
@@ -16,6 +17,7 @@ import {
 } from "./GamepadStartSelectPromptGlyphs";
 import {
   KeyboardBackGlyph,
+  KeyboardCollectionSettingsGlyph,
   KeyboardMoveHorizontalGlyph,
   KeyboardRefreshGlyph,
   KeyboardSettingsGlyph,
@@ -23,7 +25,15 @@ import {
 import { useCollectionsGamepadNavigation } from "./useCollectionsGamepadNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
 import { fetchCollectionBackgroundUrl } from "./collectionBackground";
+import { fetchCollectionGridCoverUrl } from "./collectionGridCover";
+import { fetchSteamGridSearchQuery } from "./collectionSteamGridSearch";
 import { collectionRowKey } from "./collectionKey";
+import {
+  getCollectionPrefs,
+  isCollectionHidden,
+  patchCollectionPrefs,
+  unhideAllCollections,
+} from "./collectionLauncherPrefs";
 import {
   FETCH_CONCURRENCY,
   fetchReleaseYearLabel,
@@ -31,6 +41,7 @@ import {
 } from "./collectionReleaseYears";
 import { rommAssetUrl } from "./rommAssets";
 import {
+  getSteamGridDbApiKey,
   loadSteamGridDbApiKey,
   saveSteamGridDbApiKey,
 } from "./steamGridDbSettings";
@@ -101,6 +112,20 @@ function coverForCollection(apiBase: string, c: RommCollection): string | undefi
   );
 }
 
+function coverForCarouselSlot(
+  apiBase: string,
+  c: RommCollection,
+  gridCovers: Record<string, string | undefined>,
+): string | undefined {
+  const k = collectionRowKey(c);
+  const idx = getCollectionPrefs(k).coverSteamIndex ?? -1;
+  if (idx >= 0) {
+    const g = gridCovers[k];
+    if (g) return g;
+  }
+  return coverForCollection(apiBase, c);
+}
+
 /** First line under poster: min–max game release years from RomM `/roms` metadata. */
 function metaPrimaryLine(
   resolved: string | undefined,
@@ -126,7 +151,11 @@ function estimateCollectionGapPx(): number {
 const MAX_CAROUSEL_SLOT_RADIUS = 30;
 
 /** Settings panel: IGDB collection, franchise, SteamGrid key, save. */
-const SETTINGS_NAV_SLOTS = 4;
+const SETTINGS_NAV_SLOTS = 5;
+
+/** Per-collection panel: hide, next hero, next cover. */
+/** Hide + SteamGrid hero (prev/next/clear) + cover (prev/next/clear). */
+const COLLECTION_SETTINGS_NAV_SLOTS = 7;
 
 /** Track width: one centered slot is `scale(1.08)`; others stay base width. */
 function carouselTrackWidthPx(n: number, slotW: number, gap: number): number {
@@ -258,6 +287,15 @@ export function CollectionsView({ session, onLogout }: Props) {
     loadVirtualCollectionType(),
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [collectionSettingsOpen, setCollectionSettingsOpen] = useState(false);
+  const [collectionSettingsTarget, setCollectionSettingsTarget] =
+    useState<RommCollection | null>(null);
+  const [collectionSettingsNavIndex, setCollectionSettingsNavIndex] =
+    useState(0);
+  const [prefsRev, setPrefsRev] = useState(0);
+  const [gridCovers, setGridCovers] = useState<
+    Record<string, string | undefined>
+  >({});
   const [items, setItems] = useState<RommCollection[]>([]);
   const [focusIndex, setFocusIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -275,6 +313,14 @@ export function CollectionsView({ session, onLogout }: Props) {
   const settingsRadioFranchiseRef = useRef<HTMLInputElement>(null);
   const settingsSteamKeyRef = useRef<HTMLInputElement>(null);
   const settingsSaveRef = useRef<HTMLButtonElement>(null);
+  const settingsUnhideAllRef = useRef<HTMLButtonElement>(null);
+  const collectionHideRef = useRef<HTMLButtonElement>(null);
+  const collectionPrevHeroRef = useRef<HTMLButtonElement>(null);
+  const collectionNextHeroRef = useRef<HTMLButtonElement>(null);
+  const collectionClearHeroRef = useRef<HTMLButtonElement>(null);
+  const collectionPrevCoverRef = useRef<HTMLButtonElement>(null);
+  const collectionNextCoverRef = useRef<HTMLButtonElement>(null);
+  const collectionClearCoverRef = useRef<HTMLButtonElement>(null);
   const [settingsNavIndex, setSettingsNavIndex] = useState(0);
   const [slotRadius, setSlotRadius] = useState(2);
   const [steamGridKeyDraft, setSteamGridKeyDraft] = useState(() =>
@@ -303,6 +349,44 @@ export function CollectionsView({ session, onLogout }: Props) {
       cancelled = true;
     };
   }, [session, virtualType]);
+
+  const visibleItems = useMemo(
+    () => items.filter((c) => !isCollectionHidden(c)),
+    [items, prefsRev],
+  );
+
+  useEffect(() => {
+    if (visibleItems.length === 0) {
+      setFocusIndex(0);
+      return;
+    }
+    setFocusIndex((i) => Math.min(i, visibleItems.length - 1));
+  }, [visibleItems.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const sgKey = getSteamGridDbApiKey()?.trim();
+      if (!isTauri() || !sgKey) {
+        if (!cancelled) setGridCovers({});
+        return;
+      }
+      const next: Record<string, string | undefined> = {};
+      for (const c of items) {
+        const k = collectionRowKey(c);
+        const idx = getCollectionPrefs(k).coverSteamIndex ?? -1;
+        if (idx >= 0) {
+          const u = await fetchCollectionGridCoverUrl(session, c, idx);
+          if (cancelled) return;
+          if (u) next[k] = u;
+        }
+      }
+      if (!cancelled) setGridCovers(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [items, prefsRev]);
 
   useEffect(() => {
     if (loading || items.length === 0) {
@@ -352,6 +436,8 @@ export function CollectionsView({ session, onLogout }: Props) {
   }, [session, virtualType]);
 
   const toggleSettings = useCallback(() => {
+    setCollectionSettingsOpen(false);
+    setCollectionSettingsTarget(null);
     setSettingsOpen((prev) => {
       if (!prev) {
         setSteamGridKeyDraft(loadSteamGridDbApiKey());
@@ -361,10 +447,39 @@ export function CollectionsView({ session, onLogout }: Props) {
     });
   }, [virtualType]);
 
+  const closeCollectionSettings = useCallback(() => {
+    setCollectionSettingsOpen(false);
+    setCollectionSettingsTarget(null);
+  }, []);
+
+  const toggleCollectionSettings = useCallback(() => {
+    if (collectionSettingsOpen) {
+      closeCollectionSettings();
+      return;
+    }
+    if (settingsOpen || visibleItems.length === 0) return;
+    const t = visibleItems[focusIndex];
+    if (!t) return;
+    setCollectionSettingsTarget(t);
+    setCollectionSettingsNavIndex(0);
+    setCollectionSettingsOpen(true);
+  }, [
+    collectionSettingsOpen,
+    closeCollectionSettings,
+    settingsOpen,
+    visibleItems,
+    focusIndex,
+  ]);
+
   const saveSteamGridKey = useCallback(() => {
     saveSteamGridDbApiKey(steamGridKeyDraft);
     setSteamSettingsRev((n) => n + 1);
   }, [steamGridKeyDraft]);
+
+  const onUnhideAllCollections = useCallback(() => {
+    unhideAllCollections();
+    setPrefsRev((n) => n + 1);
+  }, []);
 
   const activateSettingsNav = useCallback(() => {
     switch (settingsNavIndex) {
@@ -380,10 +495,155 @@ export function CollectionsView({ session, onLogout }: Props) {
       case 3:
         saveSteamGridKey();
         break;
+      case 4:
+        onUnhideAllCollections();
+        break;
       default:
         break;
     }
-  }, [settingsNavIndex, saveSteamGridKey]);
+  }, [settingsNavIndex, saveSteamGridKey, onUnhideAllCollections]);
+
+  const prevHeroSteam = useCallback(async () => {
+    const c = collectionSettingsTarget;
+    if (!c || !isTauri()) return;
+    const key = getSteamGridDbApiKey()?.trim();
+    if (!key) return;
+    const rowKey = collectionRowKey(c);
+    const cur = getCollectionPrefs(rowKey).heroSteamIndex ?? 0;
+    if (cur <= 0) return;
+    const next = cur - 1;
+    const searchQuery = await fetchSteamGridSearchQuery(session, c);
+    try {
+      const url = await invoke<string | null>("steamgriddb_hero_url_at", {
+        apiKey: key,
+        searchQuery,
+        index: next,
+      });
+      patchCollectionPrefs(rowKey, {
+        heroSteamIndex: url && url.length > 0 ? next : 0,
+      });
+    } catch {
+      patchCollectionPrefs(rowKey, { heroSteamIndex: 0 });
+    }
+    setPrefsRev((n) => n + 1);
+  }, [collectionSettingsTarget, session]);
+
+  const nextHeroSteam = useCallback(async () => {
+    const c = collectionSettingsTarget;
+    if (!c || !isTauri()) return;
+    const key = getSteamGridDbApiKey()?.trim();
+    if (!key) return;
+    const rowKey = collectionRowKey(c);
+    const searchQuery = await fetchSteamGridSearchQuery(session, c);
+    const cur = getCollectionPrefs(rowKey).heroSteamIndex ?? 0;
+    const next = cur + 1;
+    try {
+      const url = await invoke<string | null>("steamgriddb_hero_url_at", {
+        apiKey: key,
+        searchQuery,
+        index: next,
+      });
+      patchCollectionPrefs(rowKey, {
+        heroSteamIndex: url && url.length > 0 ? next : 0,
+      });
+    } catch {
+      patchCollectionPrefs(rowKey, { heroSteamIndex: 0 });
+    }
+    setPrefsRev((n) => n + 1);
+  }, [collectionSettingsTarget, session]);
+
+  const clearHeroSteam = useCallback(() => {
+    const c = collectionSettingsTarget;
+    if (!c) return;
+    patchCollectionPrefs(collectionRowKey(c), { heroSteamIndex: 0 });
+    setPrefsRev((n) => n + 1);
+  }, [collectionSettingsTarget]);
+
+  const prevCoverSteam = useCallback(async () => {
+    const c = collectionSettingsTarget;
+    if (!c || !isTauri()) return;
+    const key = getSteamGridDbApiKey()?.trim();
+    if (!key) return;
+    const rowKey = collectionRowKey(c);
+    const cur = getCollectionPrefs(rowKey).coverSteamIndex ?? -1;
+    if (cur < 0) return;
+    const next = cur - 1;
+    if (next < 0) {
+      patchCollectionPrefs(rowKey, { coverSteamIndex: -1 });
+      setPrefsRev((n) => n + 1);
+      return;
+    }
+    const url = await fetchCollectionGridCoverUrl(session, c, next);
+    patchCollectionPrefs(rowKey, {
+      coverSteamIndex: url ? next : -1,
+    });
+    setPrefsRev((n) => n + 1);
+  }, [collectionSettingsTarget, session]);
+
+  const nextCoverSteam = useCallback(async () => {
+    const c = collectionSettingsTarget;
+    if (!c || !isTauri()) return;
+    const key = getSteamGridDbApiKey()?.trim();
+    if (!key) return;
+    const rowKey = collectionRowKey(c);
+    const cur = getCollectionPrefs(rowKey).coverSteamIndex ?? -1;
+    const next = cur + 1;
+    const url = await fetchCollectionGridCoverUrl(session, c, next);
+    patchCollectionPrefs(rowKey, {
+      coverSteamIndex: url ? next : -1,
+    });
+    setPrefsRev((n) => n + 1);
+  }, [collectionSettingsTarget, session]);
+
+  const clearCoverSteam = useCallback(() => {
+    const c = collectionSettingsTarget;
+    if (!c) return;
+    patchCollectionPrefs(collectionRowKey(c), { coverSteamIndex: -1 });
+    setPrefsRev((n) => n + 1);
+  }, [collectionSettingsTarget]);
+
+  const activateCollectionSettingsNav = useCallback(() => {
+    const c = collectionSettingsTarget;
+    if (!c) return;
+    const rowKey = collectionRowKey(c);
+    switch (collectionSettingsNavIndex) {
+      case 0: {
+        const h = getCollectionPrefs(rowKey).hidden;
+        patchCollectionPrefs(rowKey, { hidden: !h });
+        setPrefsRev((n) => n + 1);
+        break;
+      }
+      case 1:
+        void prevHeroSteam();
+        break;
+      case 2:
+        void nextHeroSteam();
+        break;
+      case 3:
+        clearHeroSteam();
+        break;
+      case 4:
+        void prevCoverSteam();
+        break;
+      case 5:
+        void nextCoverSteam();
+        break;
+      case 6:
+        clearCoverSteam();
+        break;
+      default:
+        break;
+    }
+  }, [
+    collectionSettingsNavIndex,
+    collectionSettingsTarget,
+    clearCoverSteam,
+    clearHeroSteam,
+    nextCoverSteam,
+    nextHeroSteam,
+    prevCoverSteam,
+    prevHeroSteam,
+  ]);
 
   useLayoutEffect(() => {
     if (!settingsOpen) return;
@@ -392,10 +652,25 @@ export function CollectionsView({ session, onLogout }: Props) {
       settingsRadioFranchiseRef,
       settingsSteamKeyRef,
       settingsSaveRef,
+      settingsUnhideAllRef,
     ] as const;
     const el = refs[settingsNavIndex]?.current;
     el?.focus();
   }, [settingsOpen, settingsNavIndex]);
+
+  useLayoutEffect(() => {
+    if (!collectionSettingsOpen) return;
+    const refs = [
+      collectionHideRef,
+      collectionPrevHeroRef,
+      collectionNextHeroRef,
+      collectionClearHeroRef,
+      collectionPrevCoverRef,
+      collectionNextCoverRef,
+      collectionClearCoverRef,
+    ] as const;
+    refs[collectionSettingsNavIndex]?.current?.focus();
+  }, [collectionSettingsOpen, collectionSettingsNavIndex]);
 
   function selectVirtualType(next: VirtualCollectionType) {
     saveVirtualCollectionType(next);
@@ -420,14 +695,14 @@ export function CollectionsView({ session, onLogout }: Props) {
       ro.disconnect();
       window.removeEventListener("resize", apply);
     };
-  }, [loading, items.length]);
+  }, [loading, visibleItems.length]);
 
   /** Keep the focused card’s horizontal center aligned with the viewport center. */
   useLayoutEffect(() => {
     const vp = carouselViewportRef.current;
     const track = carouselTrackRef.current;
     const focusEl = focusSlotRef.current;
-    if (!vp || !track || !focusEl || loading || items.length === 0) {
+    if (!vp || !track || !focusEl || loading || visibleItems.length === 0) {
       if (track) track.style.transform = "translateX(0)";
       return;
     }
@@ -444,12 +719,16 @@ export function CollectionsView({ session, onLogout }: Props) {
     ro.observe(vp);
     ro.observe(track);
     return () => ro.disconnect();
-  }, [focusIndex, items.length, loading, refreshing, slotRadius]);
+  }, [focusIndex, visibleItems.length, loading, refreshing, slotRadius]);
 
-  const focused = items[focusIndex];
+  const focused =
+    visibleItems.length > 0 ? visibleItems[focusIndex] : undefined;
   const cardCoverUrl = useMemo(
-    () => (focused ? coverForCollection(session.apiBase, focused) : undefined),
-    [focused, session.apiBase],
+    () =>
+      focused
+        ? coverForCarouselSlot(session.apiBase, focused, gridCovers)
+        : undefined,
+    [focused, session.apiBase, gridCovers, prefsRev],
   );
 
   const [heroBg, setHeroBg] = useState<{
@@ -463,12 +742,23 @@ export function CollectionsView({ session, onLogout }: Props) {
       return;
     }
     const key = collectionRowKey(focused);
-    const cover = coverForCollection(session.apiBase, focused);
+    const cover = coverForCarouselSlot(
+      session.apiBase,
+      focused,
+      gridCovers,
+    );
+    const heroIdx =
+      getCollectionPrefs(collectionRowKey(focused)).heroSteamIndex ?? 0;
     setHeroBg({ key, url: undefined });
 
     let cancelled = false;
     void (async () => {
-      const url = await fetchCollectionBackgroundUrl(session, focused, cover);
+      const url = await fetchCollectionBackgroundUrl(
+        session,
+        focused,
+        cover,
+        heroIdx,
+      );
       if (cancelled) return;
       setHeroBg({ key, url: url ?? undefined });
     })();
@@ -476,7 +766,14 @@ export function CollectionsView({ session, onLogout }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [focused, session.apiBase, session.accessToken, steamSettingsRev]);
+  }, [
+    focused,
+    session.apiBase,
+    session.accessToken,
+    steamSettingsRev,
+    prefsRev,
+    gridCovers,
+  ]);
 
   const bgUrl =
     focused && heroBg && heroBg.key === collectionRowKey(focused)
@@ -485,21 +782,30 @@ export function CollectionsView({ session, onLogout }: Props) {
 
   const moveFocus = useCallback(
     (delta: number) => {
-      if (items.length === 0) return;
+      if (visibleItems.length === 0) return;
       setFocusIndex((i) => {
-        const n = items.length;
+        const n = visibleItems.length;
         return (i + delta + n) % n;
       });
     },
-    [items.length],
+    [visibleItems.length],
   );
 
   const hintsReady = !loading;
-  const showMoveHints = hintsReady && items.length > 0;
+  const showMoveHints = hintsReady && visibleItems.length > 0;
 
   useCollectionsGamepadNavigation({
     enabled: tauriShell && hintsReady,
-    itemsLength: items.length,
+    itemsLength: visibleItems.length,
+    collectionSettingsOpen,
+    collectionSettingsNav: collectionSettingsOpen
+      ? {
+          slotCount: COLLECTION_SETTINGS_NAV_SLOTS,
+          setFocusIndex: setCollectionSettingsNavIndex,
+          onActivate: activateCollectionSettingsNav,
+          onCloseSettings: closeCollectionSettings,
+        }
+      : null,
     settingsOpen,
     settingsNav: settingsOpen
       ? {
@@ -513,6 +819,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     onMove: moveFocus,
     onBack: onLogout,
     onToggleSettings: toggleSettings,
+    onToggleCollectionSettings: toggleCollectionSettings,
     onRefresh: () => void onRefreshLibrary(),
   });
 
@@ -528,6 +835,11 @@ export function CollectionsView({ session, onLogout }: Props) {
 
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
+        if (collectionSettingsOpen) {
+          e.preventDefault();
+          closeCollectionSettings();
+          return;
+        }
         if (settingsOpen) {
           e.preventDefault();
           setSettingsOpen(false);
@@ -544,6 +856,11 @@ export function CollectionsView({ session, onLogout }: Props) {
           toggleSettings();
           return;
         }
+        if ((e.key === "i" || e.key === "I") && !settingsOpen) {
+          e.preventDefault();
+          toggleCollectionSettings();
+          return;
+        }
         if (
           (e.key === "r" || e.key === "R") &&
           !loading &&
@@ -553,6 +870,35 @@ export function CollectionsView({ session, onLogout }: Props) {
           void onRefreshLibrary();
           return;
         }
+      }
+
+      if (collectionSettingsOpen) {
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setCollectionSettingsNavIndex((i) => Math.max(0, i - 1));
+          return;
+        }
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setCollectionSettingsNavIndex((i) =>
+            Math.min(COLLECTION_SETTINGS_NAV_SLOTS - 1, i + 1),
+          );
+          return;
+        }
+        if (e.key === "Enter" && !e.repeat) {
+          e.preventDefault();
+          activateCollectionSettingsNav();
+          return;
+        }
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "Backspace" && !isShortcutTarget(e.target)) {
+          e.preventDefault();
+          return;
+        }
+        return;
       }
 
       if (settingsOpen) {
@@ -603,12 +949,14 @@ export function CollectionsView({ session, onLogout }: Props) {
     onLogout,
     onRefreshLibrary,
     settingsOpen,
+    collectionSettingsOpen,
     toggleSettings,
+    toggleCollectionSettings,
+    closeCollectionSettings,
     activateSettingsNav,
+    activateCollectionSettingsNav,
     loading,
     refreshing,
-    items,
-    focusIndex,
   ]);
 
   const slots = useMemo(() => {
@@ -631,7 +979,7 @@ export function CollectionsView({ session, onLogout }: Props) {
               id="collections-settings-menu"
               className="collections-settings-menu collections-settings-menu--popover"
               role="dialog"
-              aria-label="Collection settings"
+              aria-label="Launcher settings"
               aria-modal="true"
               onPointerDown={(e) => e.stopPropagation()}
             >
@@ -712,7 +1060,124 @@ export function CollectionsView({ session, onLogout }: Props) {
                 >
                   Save key
                 </button>
+                <button
+                  ref={settingsUnhideAllRef}
+                  type="button"
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 4 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  onClick={onUnhideAllCollections}
+                  onFocus={() => setSettingsNavIndex(4)}
+                >
+                  Unhide all collections
+                </button>
               </div>
+            </div>
+          </>,
+          document.body,
+        )
+      : null;
+
+  const collSteamDisabled =
+    !isTauri() || !getSteamGridDbApiKey()?.trim();
+
+  const collectionSettingsPortal =
+    collectionSettingsOpen &&
+    collectionSettingsTarget &&
+    typeof document !== "undefined"
+      ? createPortal(
+          <>
+            <div
+              className="collections-settings-backdrop"
+              aria-hidden
+              onPointerDown={() => closeCollectionSettings()}
+            />
+            <div
+              className="collections-settings-menu collections-settings-menu--popover"
+              role="dialog"
+              aria-label="Collection settings"
+              aria-modal="true"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <p className="collections-settings-menu-title">
+                Collection settings
+              </p>
+              <p className="collections-settings-menu-hint">
+                {collectionSettingsTarget.name}
+              </p>
+              <button
+                ref={collectionHideRef}
+                type="button"
+                className={`collections-settings-action${collectionSettingsNavIndex === 0 ? " collections-settings-action--active" : ""}`}
+                onFocus={() => setCollectionSettingsNavIndex(0)}
+                onClick={() => {
+                  const c = collectionSettingsTarget;
+                  if (!c) return;
+                  const rowKey = collectionRowKey(c);
+                  const h = getCollectionPrefs(rowKey).hidden;
+                  patchCollectionPrefs(rowKey, { hidden: !h });
+                  setPrefsRev((n) => n + 1);
+                }}
+              >
+                <strong>
+                  {getCollectionPrefs(collectionRowKey(collectionSettingsTarget))
+                    .hidden
+                    ? "Show in launcher"
+                    : "Hide from launcher"}
+                </strong>
+              </button>
+              <button
+                ref={collectionPrevHeroRef}
+                type="button"
+                className={`collections-settings-action${collectionSettingsNavIndex === 1 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setCollectionSettingsNavIndex(1)}
+                onClick={() => void prevHeroSteam()}
+              >
+                <strong>Previous SteamGrid background</strong>
+              </button>
+              <button
+                ref={collectionNextHeroRef}
+                type="button"
+                className={`collections-settings-action${collectionSettingsNavIndex === 2 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setCollectionSettingsNavIndex(2)}
+                onClick={() => void nextHeroSteam()}
+              >
+                <strong>Next SteamGrid background</strong>
+              </button>
+              <button
+                ref={collectionClearHeroRef}
+                type="button"
+                className={`collections-settings-action${collectionSettingsNavIndex === 3 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setCollectionSettingsNavIndex(3)}
+                onClick={clearHeroSteam}
+              >
+                <strong>Clear SteamGrid background</strong>
+              </button>
+              <button
+                ref={collectionPrevCoverRef}
+                type="button"
+                className={`collections-settings-action${collectionSettingsNavIndex === 4 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setCollectionSettingsNavIndex(4)}
+                onClick={() => void prevCoverSteam()}
+              >
+                <strong>Previous cover art</strong>
+              </button>
+              <button
+                ref={collectionNextCoverRef}
+                type="button"
+                className={`collections-settings-action${collectionSettingsNavIndex === 5 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setCollectionSettingsNavIndex(5)}
+                onClick={() => void nextCoverSteam()}
+              >
+                <strong>Next cover art</strong>
+              </button>
+              <button
+                ref={collectionClearCoverRef}
+                type="button"
+                className={`collections-settings-action${collectionSettingsNavIndex === 6 ? " collections-settings-action--active" : ""}${collSteamDisabled ? " collections-settings-action--disabled" : ""}`}
+                onFocus={() => setCollectionSettingsNavIndex(6)}
+                onClick={clearCoverSteam}
+              >
+                <strong>Clear cover art</strong>
+              </button>
             </div>
           </>,
           document.body,
@@ -722,6 +1187,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   return (
     <div className="collections-screen">
       {settingsPortal}
+      {collectionSettingsPortal}
 
       <div
         className="collections-bg"
@@ -756,7 +1222,15 @@ export function CollectionsView({ session, onLogout }: Props) {
         </p>
       ) : null}
 
-      {!loading && items.length > 0 ? (
+      {!loading && !error && items.length > 0 && visibleItems.length === 0 ? (
+        <p className="collections-status">
+          Every collection is hidden. Clear this launcher’s saved preferences
+          (for example the <code>romm-launcher-collection-prefs-v1</code>{" "}
+          localStorage key) and reload to show collections again.
+        </p>
+      ) : null}
+
+      {!loading && visibleItems.length > 0 ? (
         <div
           className="collections-carousel-viewport"
           ref={carouselViewportRef}
@@ -768,9 +1242,9 @@ export function CollectionsView({ session, onLogout }: Props) {
           >
             {slots.map((offset) => {
               const idx = focusIndex + offset;
-              const c = items[idx];
+              const c = visibleItems[idx];
               const isFocus = offset === 0;
-              const isPlaceholder = idx < 0 || idx >= items.length;
+              const isPlaceholder = idx < 0 || idx >= visibleItems.length;
               const edgeClass =
                 slots.length > 1
                   ? offset === -slotRadius
@@ -796,7 +1270,11 @@ export function CollectionsView({ session, onLogout }: Props) {
                 );
               }
 
-              const cover = coverForCollection(session.apiBase, c);
+              const cover = coverForCarouselSlot(
+                session.apiBase,
+                c,
+                gridCovers,
+              );
               return (
                 <button
                   key={`${collectionRowKey(c)}-${idx}`}
@@ -843,13 +1321,23 @@ export function CollectionsView({ session, onLogout }: Props) {
               <span>Move</span>
             </div>
           ) : null}
+          <div
+            className={`collections-footer-hint${visibleItems.length === 0 ? " collections-footer-hint--disabled" : ""}`}
+          >
+            {showGamepadHints ? (
+              <GamepadCollectionSettingsPromptGlyph flavor={gamepadFlavor} />
+            ) : (
+              <KeyboardCollectionSettingsGlyph />
+            )}
+            <span>Collection settings</span>
+          </div>
           <div className="collections-footer-hint">
             {showGamepadHints ? (
               <GamepadStartPromptGlyph flavor={gamepadFlavor} />
             ) : (
               <KeyboardSettingsGlyph />
             )}
-            <span>Settings</span>
+            <span>Launcher settings</span>
           </div>
           <div
             className={`collections-footer-hint${loading || refreshing ? " collections-footer-hint--disabled" : ""}`}

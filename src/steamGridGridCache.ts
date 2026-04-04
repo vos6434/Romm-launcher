@@ -1,5 +1,4 @@
-const STORAGE_KEY = "romm-launcher-steamgriddb-hero-cache-v1";
-/** How long a resolved hero URL is reused before re-querying SteamGridDB. */
+const STORAGE_KEY = "romm-launcher-steamgriddb-grid-cache-v1";
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_ENTRIES = 250;
 
@@ -50,7 +49,7 @@ function saveStore(store: CacheStore): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
   } catch {
-    /* quota / private mode */
+    /* ignore */
   }
 }
 
@@ -72,7 +71,7 @@ function trimToMax(entries: Record<string, CacheEntry>): void {
   for (let i = 0; i < drop; i++) delete entries[keys[i]!];
 }
 
-export function getCachedSteamGridHero(
+export function getCachedSteamGridGrid(
   apiKey: string,
   collectionKey: string,
   searchName: string,
@@ -93,7 +92,7 @@ export function getCachedSteamGridHero(
   return hit.url;
 }
 
-export function setCachedSteamGridHero(
+export function setCachedSteamGridGrid(
   apiKey: string,
   collectionKey: string,
   searchName: string,

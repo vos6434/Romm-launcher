@@ -58,6 +58,51 @@
   color: #888888;
 }
 
+button.collections-settings-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 10px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: rgba(0, 0, 0, 0.2);
+  color: #e8e8e8;
+  font-size: 0.8125rem;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.collections-settings-action:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+button.collections-settings-action:focus,
+button.collections-settings-action:focus-visible {
+  outline: none;
+}
+
+.collections-settings-action--active,
+.collections-settings-action--active:focus,
+.collections-settings-action--active:focus-visible {
+  box-shadow:
+    0 0 0 2px rgba(28, 28, 28, 0.98),
+    0 0 0 4px rgba(255, 255, 255, 0.92);
+}
+
+.collections-settings-action--disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.collections-settings-action--disabled:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+
 .collections-settings-option {
   display: flex;
   gap: 10px;
@@ -168,6 +213,9 @@
 }
 
 .collections-settings-steamgrid-save {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
   padding: 8px 14px;
   border-radius: 6px;
   border: 1px solid #4a4a4a;
@@ -182,6 +230,12 @@
 .collections-settings-steamgrid-save:hover {
   background: rgba(68, 68, 68, 0.98);
   border-color: #5a5a5a;
+}
+
+.collections-settings-steamgrid
+  .collections-settings-steamgrid-save
+  + .collections-settings-steamgrid-save {
+  margin-top: 10px;
 }
 
 .collections-bg {
@@ -433,7 +487,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 20px 28px;
+  gap: 14px 18px;
   margin-top: auto;
   padding-top: 32px;
   font-size: 0.875rem;

@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { getActiveGamepad } from "./gamepadAccess";
 import {
   GP_FACE_EAST,
+  GP_FACE_NORTH,
   GP_FACE_SOUTH,
   GP_SELECT,
   GP_START,
@@ -27,12 +28,15 @@ export type CollectionsSettingsNavApi = {
 type Options = {
   enabled: boolean;
   itemsLength: number;
+  collectionSettingsOpen: boolean;
+  collectionSettingsNav: CollectionsSettingsNavApi | null;
   settingsOpen: boolean;
   settingsNav: CollectionsSettingsNavApi | null;
   refreshDisabled: boolean;
   onMove: (delta: number) => void;
   onBack: () => void;
   onToggleSettings: () => void;
+  onToggleCollectionSettings: () => void;
   onRefresh: () => void;
 };
 
@@ -40,24 +44,33 @@ type Options = {
 export function useCollectionsGamepadNavigation({
   enabled,
   itemsLength,
+  collectionSettingsOpen,
+  collectionSettingsNav,
   settingsOpen,
   settingsNav,
   refreshDisabled,
   onMove,
   onBack,
   onToggleSettings,
+  onToggleCollectionSettings,
   onRefresh,
 }: Options): void {
   const onMoveRef = useRef(onMove);
   const onBackRef = useRef(onBack);
   const onToggleSettingsRef = useRef(onToggleSettings);
+  const onToggleCollectionSettingsRef = useRef(onToggleCollectionSettings);
   const onRefreshRef = useRef(onRefresh);
   const settingsNavRef = useRef<CollectionsSettingsNavApi | null>(null);
+  const collectionSettingsNavRef = useRef<CollectionsSettingsNavApi | null>(
+    null,
+  );
   onMoveRef.current = onMove;
   onBackRef.current = onBack;
   onToggleSettingsRef.current = onToggleSettings;
+  onToggleCollectionSettingsRef.current = onToggleCollectionSettings;
   onRefreshRef.current = onRefresh;
   settingsNavRef.current = settingsNav;
+  collectionSettingsNavRef.current = collectionSettingsNav;
 
   const prevBtnRef = useRef<boolean[] | null>(null);
   const stickHoldRef = useRef<{ xSign: -1 | 0 | 1; lastStep: number }>({
@@ -72,12 +85,12 @@ export function useCollectionsGamepadNavigation({
   const lastGamepadIndexRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (settingsOpen) {
+    if (settingsOpen || collectionSettingsOpen) {
       stickHoldRef.current = { xSign: 0, lastStep: 0 };
     } else {
       settingsStickHoldRef.current = { ySign: 0, lastStep: 0 };
     }
-  }, [settingsOpen]);
+  }, [settingsOpen, collectionSettingsOpen]);
 
   useEffect(() => {
     if (!enabled || typeof navigator === "undefined" || !("getGamepads" in navigator)) {
@@ -116,8 +129,14 @@ export function useCollectionsGamepadNavigation({
       );
       const prev = prevBtnRef.current ?? pressed.map(() => false);
 
-      if (settingsOpen) {
-        const nav = settingsNavRef.current;
+      const overlayNav = collectionSettingsOpen
+        ? collectionSettingsNavRef.current
+        : settingsOpen
+          ? settingsNavRef.current
+          : null;
+
+      if (collectionSettingsOpen || settingsOpen) {
+        const nav = overlayNav;
         if (nav && nav.slotCount > 0) {
           let navigated = false;
           const up = pressed[DPAD_UP] ?? false;
@@ -170,23 +189,27 @@ export function useCollectionsGamepadNavigation({
         if (now - lastActionRef.current >= ACTION_DEBOUNCE_MS) {
           const south = pressed[GP_FACE_SOUTH] ?? false;
           const prevSouth = prev[GP_FACE_SOUTH] ?? false;
-          if (south && !prevSouth && settingsNavRef.current) {
+          if (south && !prevSouth && overlayNav) {
             lastActionRef.current = now;
-            settingsNavRef.current.onActivate();
+            overlayNav.onActivate();
           }
 
           const east = pressed[GP_FACE_EAST] ?? false;
           const prevEast = prev[GP_FACE_EAST] ?? false;
-          if (east && !prevEast && settingsNavRef.current) {
+          if (east && !prevEast && overlayNav) {
             lastActionRef.current = now;
-            settingsNavRef.current.onCloseSettings();
+            overlayNav.onCloseSettings();
           }
 
           const start = pressed[GP_START] ?? false;
           const prevStart = prev[GP_START] ?? false;
           if (start && !prevStart) {
             lastActionRef.current = now;
-            onToggleSettingsRef.current();
+            if (collectionSettingsOpen) {
+              onToggleCollectionSettingsRef.current();
+            } else {
+              onToggleSettingsRef.current();
+            }
           }
 
           const select = pressed[GP_SELECT] ?? false;
@@ -248,6 +271,13 @@ export function useCollectionsGamepadNavigation({
           onToggleSettingsRef.current();
         }
 
+        const north = pressed[GP_FACE_NORTH] ?? false;
+        const prevNorth = prev[GP_FACE_NORTH] ?? false;
+        if (itemsLength > 0 && north && !prevNorth) {
+          lastActionRef.current = now;
+          onToggleCollectionSettingsRef.current();
+        }
+
         const select = pressed[GP_SELECT] ?? false;
         const prevSelect = prev[GP_SELECT] ?? false;
         if (!refreshDisabled && select && !prevSelect) {
@@ -269,5 +299,11 @@ export function useCollectionsGamepadNavigation({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [enabled, itemsLength, settingsOpen, refreshDisabled]);
+  }, [
+    enabled,
+    itemsLength,
+    settingsOpen,
+    collectionSettingsOpen,
+    refreshDisabled,
+  ]);
 }

@@ -4,6 +4,7 @@ import kbEnter from "./assets/kenney prompts/Keyboard & Mouse/Vector/keyboard_en
 import kbEscapeOutline from "./assets/kenney prompts/Keyboard & Mouse/Vector/keyboard_escape_outline.svg?url";
 import kbOOutline from "./assets/kenney prompts/Keyboard & Mouse/Vector/keyboard_o_outline.svg?url";
 import kbROutline from "./assets/kenney prompts/Keyboard & Mouse/Vector/keyboard_r_outline.svg?url";
+import kbIOutline from "./assets/kenney prompts/Keyboard & Mouse/Vector/keyboard_i_outline.svg?url";
 
 export const keyboardPromptUrls = {
   arrowsVerticalOutline: kbArrowsVerticalOutline,
@@ -12,4 +13,5 @@ export const keyboardPromptUrls = {
   escapeOutline: kbEscapeOutline,
   oOutline: kbOOutline,
   rOutline: kbROutline,
+  iOutline: kbIOutline,
 } as const;
