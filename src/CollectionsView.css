@@ -603,7 +603,9 @@ button.collections-settings-action:focus-visible {
 }
 
 .collection-slot--timeline.collection-slot--focus .collection-poster {
-  transform: scale(1.05) translateY(-3px);
+  /* Collections scale the whole tile; bump the poster-only scale slightly so
+     the focused game cover lands at the same visual height without moving the timeline. */
+  transform: scale(1.063) translateY(-3px);
 }
 
 .collection-slot--timeline.collection-slot--focus .collection-timeline {
