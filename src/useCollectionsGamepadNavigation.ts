@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { getActiveGamepad } from "./gamepadAccess";
-import { GP_FACE_EAST } from "./gamepadFlavor";
+import { GP_FACE_EAST, GP_SELECT, GP_START } from "./gamepadFlavor";
 
 const DPAD_LEFT = 14;
 const DPAD_RIGHT = 15;
@@ -13,22 +13,32 @@ type Options = {
   enabled: boolean;
   itemsLength: number;
   settingsOpen: boolean;
+  refreshDisabled: boolean;
   onMove: (delta: number) => void;
   onBack: () => void;
+  onToggleSettings: () => void;
+  onRefresh: () => void;
 };
 
-/** D-pad / stick horizontal to change collection; east face (B / ○ / A) → back. */
+/** D-pad / stick horizontal → move; Start → settings; Select → refresh; east face → back. */
 export function useCollectionsGamepadNavigation({
   enabled,
   itemsLength,
   settingsOpen,
+  refreshDisabled,
   onMove,
   onBack,
+  onToggleSettings,
+  onRefresh,
 }: Options): void {
   const onMoveRef = useRef(onMove);
   const onBackRef = useRef(onBack);
+  const onToggleSettingsRef = useRef(onToggleSettings);
+  const onRefreshRef = useRef(onRefresh);
   onMoveRef.current = onMove;
   onBackRef.current = onBack;
+  onToggleSettingsRef.current = onToggleSettings;
+  onRefreshRef.current = onRefresh;
 
   const prevBtnRef = useRef<boolean[] | null>(null);
   const stickHoldRef = useRef<{ xSign: -1 | 0 | 1; lastStep: number }>({
@@ -61,16 +71,6 @@ export function useCollectionsGamepadNavigation({
         return;
       }
 
-      if (settingsOpen) {
-        const pressed = g.buttons.map(
-          (b) =>
-            b.pressed || (typeof b.value === "number" && b.value > 0.5),
-        );
-        prevBtnRef.current = pressed;
-        raf = requestAnimationFrame(tick);
-        return;
-      }
-
       if (lastGamepadIndexRef.current !== g.index) {
         lastGamepadIndexRef.current = g.index;
         prevBtnRef.current = null;
@@ -82,6 +82,31 @@ export function useCollectionsGamepadNavigation({
         (b) => b.pressed || (typeof b.value === "number" && b.value > 0.5),
       );
       const prev = prevBtnRef.current ?? pressed.map(() => false);
+
+      if (settingsOpen) {
+        if (now - lastActionRef.current >= ACTION_DEBOUNCE_MS) {
+          const start = pressed[GP_START] ?? false;
+          const prevStart = prev[GP_START] ?? false;
+          if (start && !prevStart) {
+            lastActionRef.current = now;
+            onToggleSettingsRef.current();
+          }
+
+          const select = pressed[GP_SELECT] ?? false;
+          const prevSelect = prev[GP_SELECT] ?? false;
+          if (
+            !refreshDisabled &&
+            select &&
+            !prevSelect
+          ) {
+            lastActionRef.current = now;
+            onRefreshRef.current();
+          }
+        }
+        prevBtnRef.current = pressed;
+        raf = requestAnimationFrame(tick);
+        return;
+      }
 
       if (itemsLength > 0) {
         let navigated = false;
@@ -122,6 +147,20 @@ export function useCollectionsGamepadNavigation({
       }
 
       if (now - lastActionRef.current >= ACTION_DEBOUNCE_MS) {
+        const start = pressed[GP_START] ?? false;
+        const prevStart = prev[GP_START] ?? false;
+        if (start && !prevStart) {
+          lastActionRef.current = now;
+          onToggleSettingsRef.current();
+        }
+
+        const select = pressed[GP_SELECT] ?? false;
+        const prevSelect = prev[GP_SELECT] ?? false;
+        if (!refreshDisabled && select && !prevSelect) {
+          lastActionRef.current = now;
+          onRefreshRef.current();
+        }
+
         const east = pressed[GP_FACE_EAST] ?? false;
         const prevEast = prev[GP_FACE_EAST] ?? false;
         if (east && !prevEast) {
@@ -136,5 +175,5 @@ export function useCollectionsGamepadNavigation({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [enabled, itemsLength, settingsOpen]);
+  }, [enabled, itemsLength, settingsOpen, refreshDisabled]);
 }

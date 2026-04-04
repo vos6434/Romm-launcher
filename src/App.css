@@ -358,6 +358,24 @@ body {
   object-position: center;
 }
 
+.gp-prompt-img--kb-o,
+.gp-prompt-img--kb-r {
+  height: 28px;
+  width: auto;
+  max-width: 32px;
+  object-fit: contain;
+  object-position: center;
+}
+
+.gp-prompt-img--gp-start,
+.gp-prompt-img--gp-select {
+  height: 28px;
+  width: auto;
+  max-width: 36px;
+  object-fit: contain;
+  object-position: center;
+}
+
 .login-error {
   margin: 16px 0 0;
   font-size: 0.875rem;

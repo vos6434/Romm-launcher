@@ -25,3 +25,7 @@ export function flavorFromGamepadId(id: string): GamepadFlavor {
 /** Standard Gamepad face buttons (bottom / east). */
 export const GP_FACE_SOUTH = 0;
 export const GP_FACE_EAST = 1;
+
+/** Typical Chromium mapping: Select (Back), Start (Forward). */
+export const GP_SELECT = 8;
+export const GP_START = 9;

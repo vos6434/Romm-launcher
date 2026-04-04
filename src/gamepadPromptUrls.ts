@@ -14,6 +14,14 @@ import switchA from "./assets/kenney prompts/Nintendo Switch/Vector/switch_butto
 import switchB from "./assets/kenney prompts/Nintendo Switch/Vector/switch_button_b.svg?url";
 import switchDpadVerticalOutline from "./assets/kenney prompts/Nintendo Switch/Vector/switch_dpad_vertical_outline.svg?url";
 import switchDpadHorizontalOutline from "./assets/kenney prompts/Nintendo Switch/Vector/switch_dpad_horizontal_outline.svg?url";
+import switchPlusOutline from "./assets/kenney prompts/Nintendo Switch/Vector/switch_button_plus_outline.svg?url";
+import switchMinusOutline from "./assets/kenney prompts/Nintendo Switch/Vector/switch_button_minus_outline.svg?url";
+
+import xboxMenuOutline from "./assets/kenney prompts/Xbox Series/Vector/xbox_button_menu_outline.svg?url";
+import xboxViewOutline from "./assets/kenney prompts/Xbox Series/Vector/xbox_button_view_outline.svg?url";
+
+import ps5Options from "./assets/kenney prompts/PlayStation Series/Vector/playstation5_button_options.svg?url";
+import ps5Create from "./assets/kenney prompts/PlayStation Series/Vector/playstation5_button_create.svg?url";
 
 /** South / confirm (A, Cross, B on Switch). */
 export function primaryPromptUrl(flavor: GamepadFlavor): string {
@@ -54,4 +62,32 @@ export function dpadHorizontalOutlineUrl(flavor: GamepadFlavor): string {
   if (flavor === "playstation") return psDpadHorizontalOutline;
   if (flavor === "nintendo") return switchDpadHorizontalOutline;
   return xboxDpadHorizontalOutline;
+}
+
+/** Start (Xbox Menu / PS5 Options / Switch +). */
+export function startPromptUrl(flavor: GamepadFlavor): string {
+  switch (flavor) {
+    case "playstation":
+      return ps5Options;
+    case "nintendo":
+      return switchPlusOutline;
+    case "xbox":
+    case "generic":
+    default:
+      return xboxMenuOutline;
+  }
+}
+
+/** Select (Xbox View / PS5 Create / Switch −). */
+export function selectPromptUrl(flavor: GamepadFlavor): string {
+  switch (flavor) {
+    case "playstation":
+      return ps5Create;
+    case "nintendo":
+      return switchMinusOutline;
+    case "xbox":
+    case "generic":
+    default:
+      return xboxViewOutline;
+  }
 }
