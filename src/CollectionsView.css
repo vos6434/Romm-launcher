@@ -404,6 +404,36 @@ button.collections-settings-action:focus-visible {
   opacity: 0.34;
 }
 
+.collection-slot--timeline {
+  opacity: 1;
+}
+
+.collection-slot--timeline.collection-slot--edge-start:not(.collection-slot--focus):not(.collection-slot--empty),
+.collection-slot--timeline.collection-slot--edge-end:not(.collection-slot--focus):not(.collection-slot--empty) {
+  opacity: 1;
+}
+
+.collection-slot--timeline:not(.collection-slot--focus) .collection-poster,
+.collection-slot--timeline:not(.collection-slot--focus) .collection-years,
+.collection-slot--timeline:not(.collection-slot--focus) .collection-label {
+  opacity: 0.72;
+}
+
+.collection-slot--timeline.collection-slot--edge-start:not(.collection-slot--focus):not(.collection-slot--empty) .collection-poster,
+.collection-slot--timeline.collection-slot--edge-start:not(.collection-slot--focus):not(.collection-slot--empty) .collection-years,
+.collection-slot--timeline.collection-slot--edge-start:not(.collection-slot--focus):not(.collection-slot--empty) .collection-label,
+.collection-slot--timeline.collection-slot--edge-end:not(.collection-slot--focus):not(.collection-slot--empty) .collection-poster,
+.collection-slot--timeline.collection-slot--edge-end:not(.collection-slot--focus):not(.collection-slot--empty) .collection-years,
+.collection-slot--timeline.collection-slot--edge-end:not(.collection-slot--focus):not(.collection-slot--empty) .collection-label {
+  opacity: 0.68;
+}
+
+.collection-slot--timeline.collection-slot--focus .collection-poster,
+.collection-slot--timeline.collection-slot--focus .collection-years,
+.collection-slot--timeline.collection-slot--focus .collection-label {
+  opacity: 1;
+}
+
 .collection-slot--focus {
   opacity: 1;
   transform: scale(1.05) translateY(-3px);
@@ -522,7 +552,8 @@ button.collections-settings-action:focus-visible {
   transition:
     transform 0.36s cubic-bezier(0.22, 1, 0.36, 1),
     border-color 0.34s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .collection-poster--focus {
@@ -582,8 +613,8 @@ button.collections-settings-action:focus-visible {
   top: 0;
   height: 14px;
   pointer-events: none;
-  --timeline-line-color: rgba(255, 255, 255, 0.72);
-  --timeline-dot-color: rgba(255, 255, 255, 0.72);
+  --timeline-line-color: #ffffff;
+  --timeline-dot-color: #ffffff;
   --timeline-line: linear-gradient(
     90deg,
     var(--timeline-line-color) 0%,
@@ -646,16 +677,6 @@ button.collections-settings-action:focus-visible {
   transform: scale(var(--focused-game-poster-scale)) translateY(-3px);
 }
 
-.collection-slot--timeline.collection-slot--focus .collection-timeline {
-  --timeline-dot-color: #ffffff;
-}
-
-.collection-slot--timeline.collection-slot--focus .collection-timeline::after {
-  box-shadow:
-    0 0 0 2px rgba(20, 20, 20, 0.24),
-    0 0 18px rgba(255, 255, 255, 0.28);
-}
-
 .collection-timeline--hidden {
   opacity: 0;
 }
@@ -666,6 +687,7 @@ button.collections-settings-action:focus-visible {
   line-height: 1rem;
   font-weight: 500;
   color: #ffffff;
+  transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .collection-slot--focus .collection-years {
@@ -681,6 +703,7 @@ button.collections-settings-action:focus-visible {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .collection-slot--focus .collection-label {
