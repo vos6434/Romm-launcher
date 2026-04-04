@@ -1535,6 +1535,7 @@ export function CollectionsView({ session, onLogout }: Props) {
         if (
           e.key === "Enter" &&
           !e.repeat &&
+          !itemSettingsOpen &&
           !activeCollection &&
           visibleItems.length > 0
         ) {
