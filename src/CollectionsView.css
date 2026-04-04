@@ -649,15 +649,27 @@ button.collections-settings-action:focus-visible {
   -webkit-mask-image: linear-gradient(
     90deg,
     transparent 0,
+    rgba(0, 0, 0, 0.2) 3px,
+    rgba(0, 0, 0, 0.48) 6px,
+    rgba(0, 0, 0, 0.78) 9px,
     #000 12px,
     #000 calc(100% - 12px),
+    rgba(0, 0, 0, 0.78) calc(100% - 9px),
+    rgba(0, 0, 0, 0.48) calc(100% - 6px),
+    rgba(0, 0, 0, 0.2) calc(100% - 3px),
     transparent 100%
   );
   mask-image: linear-gradient(
     90deg,
     transparent 0,
+    rgba(0, 0, 0, 0.2) 3px,
+    rgba(0, 0, 0, 0.48) 6px,
+    rgba(0, 0, 0, 0.78) 9px,
     #000 12px,
     #000 calc(100% - 12px),
+    rgba(0, 0, 0, 0.78) calc(100% - 9px),
+    rgba(0, 0, 0, 0.48) calc(100% - 6px),
+    rgba(0, 0, 0, 0.2) calc(100% - 3px),
     transparent 100%
   );
   -webkit-mask-repeat: no-repeat;
