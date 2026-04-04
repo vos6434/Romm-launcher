@@ -240,6 +240,13 @@ button.collections-settings-action:focus-visible {
   margin-top: 10px;
 }
 
+.collections-bg-stack {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
 .collections-bg {
   position: absolute;
   inset: 0;
@@ -248,7 +255,17 @@ button.collections-settings-action:focus-visible {
   background-color: #1a1a1a;
   filter: blur(28px) brightness(0.35);
   transform: scale(1.08);
-  z-index: 0;
+  opacity: 0;
+  transition: opacity 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity;
+}
+
+.collections-bg--active {
+  opacity: 1;
+}
+
+.collections-bg--inactive {
+  opacity: 0;
 }
 
 .collections-bg-scrim {
@@ -265,7 +282,7 @@ button.collections-settings-action:focus-visible {
 /* Do not force position:relative on corner controls — it overrides their
    position:absolute and pulls them into the flex column (overlapping the title). */
 .collections-screen
-  > *:not(.collections-bg):not(.collections-bg-scrim):not(
+  > *:not(.collections-bg-stack):not(.collections-bg-scrim):not(
     .collections-settings-wrap
   ):not(.collections-refresh) {
   position: relative;
@@ -834,6 +851,10 @@ button.collections-settings-action:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .collections-bg {
+    transition: none !important;
+  }
+
   .collections-carousel-track {
     transition: none !important;
   }

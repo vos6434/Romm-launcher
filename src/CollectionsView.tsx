@@ -96,6 +96,12 @@ type CarouselDisplayItem = {
   showTimeline: boolean;
 };
 
+type BackgroundLayer = {
+  id: number;
+  url?: string;
+  active: boolean;
+};
+
 function formatInvokeError(err: unknown): string {
   if (typeof err === "string") return err;
   if (err instanceof Error) return err.message;
@@ -161,6 +167,7 @@ function estimateCollectionGapPx(): number {
 }
 
 const MAX_CAROUSEL_SLOT_RADIUS = 30;
+const BACKGROUND_CROSSFADE_MS = 320;
 
 /** Settings panel: IGDB, franchise, SteamGrid key, save, unhide. */
 const SETTINGS_NAV_SLOTS = 5;
@@ -215,6 +222,13 @@ function carouselSlotContentAnimClass(
     }
   }
   return "";
+}
+
+function backgroundImageStyle(url: string | undefined): CSSProperties | undefined {
+  if (!url) return undefined;
+  return {
+    backgroundImage: `url("${url.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`,
+  };
 }
 
 /** Track width: one centered slot is scaled (~1.05); matches `.collection-slot--focus`. */
@@ -1036,6 +1050,50 @@ export function CollectionsView({ session, onLogout }: Props) {
         heroBg.key === collectionRowKey(focusedCollection)
       ? (heroBg.url ?? cardCoverUrl)
       : cardCoverUrl;
+  const bgLayerIdRef = useRef(0);
+  const bgFadeTimeoutRef = useRef<number | null>(null);
+  const [bgLayers, setBgLayers] = useState<BackgroundLayer[]>(() =>
+    bgUrl ? [{ id: 0, url: bgUrl, active: true }] : [],
+  );
+
+  useEffect(() => {
+    const normalizedBgUrl = bgUrl ?? "";
+    setBgLayers((prev) => {
+      const latest = prev[prev.length - 1];
+      const latestUrl = latest?.url ?? "";
+      if (latestUrl === normalizedBgUrl) {
+        if (prev.length <= 1) return prev;
+        return latest ? [{ ...latest, active: true }] : prev;
+      }
+
+      const nextLayer: BackgroundLayer = {
+        id: ++bgLayerIdRef.current,
+        url: bgUrl,
+        active: true,
+      };
+      if (prev.length === 0) return [nextLayer];
+      return [{ ...prev[prev.length - 1], active: false }, nextLayer];
+    });
+
+    if (bgFadeTimeoutRef.current !== null) {
+      window.clearTimeout(bgFadeTimeoutRef.current);
+    }
+    bgFadeTimeoutRef.current = window.setTimeout(() => {
+      setBgLayers((prev) => {
+        const latest = prev[prev.length - 1];
+        return latest ? [{ ...latest, active: true }] : prev;
+      });
+      bgFadeTimeoutRef.current = null;
+    }, BACKGROUND_CROSSFADE_MS);
+  }, [bgUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (bgFadeTimeoutRef.current !== null) {
+        window.clearTimeout(bgFadeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const moveFocus = useCallback(
     (delta: number) => {
@@ -1496,16 +1554,19 @@ export function CollectionsView({ session, onLogout }: Props) {
       {settingsPortal}
       {collectionSettingsPortal}
 
-      <div
-        className="collections-bg"
-        style={
-          bgUrl
-            ? {
-                backgroundImage: `url("${bgUrl.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`,
-              }
-            : undefined
-        }
-      />
+      <div className="collections-bg-stack" aria-hidden>
+        {bgLayers.length > 0 ? (
+          bgLayers.map((layer) => (
+            <div
+              key={layer.id}
+              className={`collections-bg${layer.active ? " collections-bg--active" : " collections-bg--inactive"}`}
+              style={backgroundImageStyle(layer.url)}
+            />
+          ))
+        ) : (
+          <div className="collections-bg collections-bg--active" />
+        )}
+      </div>
       <div className="collections-bg-scrim" />
 
       <header className="collections-header">
