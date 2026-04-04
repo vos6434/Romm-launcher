@@ -1052,15 +1052,29 @@ export function CollectionsView({ session, onLogout }: Props) {
       : cardCoverUrl;
   const bgLayerIdRef = useRef(0);
   const bgFadeTimeoutRef = useRef<number | null>(null);
+  const bgActivateFrameRef = useRef<number | null>(null);
   const [bgLayers, setBgLayers] = useState<BackgroundLayer[]>(() =>
     bgUrl ? [{ id: 0, url: bgUrl, active: true }] : [],
   );
 
   useEffect(() => {
-    const normalizedBgUrl = bgUrl ?? "";
+    if (!bgUrl) return;
+
+    const normalizedBgUrl = bgUrl;
+    let shouldAnimate = false;
+
+    if (bgFadeTimeoutRef.current !== null) {
+      window.clearTimeout(bgFadeTimeoutRef.current);
+      bgFadeTimeoutRef.current = null;
+    }
+    if (bgActivateFrameRef.current !== null) {
+      window.cancelAnimationFrame(bgActivateFrameRef.current);
+      bgActivateFrameRef.current = null;
+    }
+
     setBgLayers((prev) => {
       const latest = prev[prev.length - 1];
-      const latestUrl = latest?.url ?? "";
+      const latestUrl = latest?.url;
       if (latestUrl === normalizedBgUrl) {
         if (prev.length <= 1) return prev;
         return latest ? [{ ...latest, active: true }] : prev;
@@ -1068,29 +1082,44 @@ export function CollectionsView({ session, onLogout }: Props) {
 
       const nextLayer: BackgroundLayer = {
         id: ++bgLayerIdRef.current,
-        url: bgUrl,
-        active: true,
+        url: normalizedBgUrl,
+        active: false,
       };
-      if (prev.length === 0) return [nextLayer];
-      return [{ ...prev[prev.length - 1], active: false }, nextLayer];
+      if (prev.length === 0) return [{ ...nextLayer, active: true }];
+      shouldAnimate = true;
+      return [{ ...prev[prev.length - 1], active: true }, nextLayer];
     });
 
-    if (bgFadeTimeoutRef.current !== null) {
-      window.clearTimeout(bgFadeTimeoutRef.current);
-    }
-    bgFadeTimeoutRef.current = window.setTimeout(() => {
-      setBgLayers((prev) => {
-        const latest = prev[prev.length - 1];
-        return latest ? [{ ...latest, active: true }] : prev;
+    if (!shouldAnimate) return;
+
+    bgActivateFrameRef.current = window.requestAnimationFrame(() => {
+      bgActivateFrameRef.current = window.requestAnimationFrame(() => {
+        setBgLayers((prev) => {
+          if (prev.length === 0) return prev;
+          return prev.map((layer, index) => ({
+            ...layer,
+            active: index === prev.length - 1,
+          }));
+        });
+        bgActivateFrameRef.current = null;
+        bgFadeTimeoutRef.current = window.setTimeout(() => {
+          setBgLayers((prev) => {
+            const latest = prev[prev.length - 1];
+            return latest ? [{ ...latest, active: true }] : prev;
+          });
+          bgFadeTimeoutRef.current = null;
+        }, BACKGROUND_CROSSFADE_MS);
       });
-      bgFadeTimeoutRef.current = null;
-    }, BACKGROUND_CROSSFADE_MS);
+    });
   }, [bgUrl]);
 
   useEffect(() => {
     return () => {
       if (bgFadeTimeoutRef.current !== null) {
         window.clearTimeout(bgFadeTimeoutRef.current);
+      }
+      if (bgActivateFrameRef.current !== null) {
+        window.cancelAnimationFrame(bgActivateFrameRef.current);
       }
     };
   }, []);
