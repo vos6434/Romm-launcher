@@ -16,10 +16,10 @@ export async function fetchCollectionBackgroundUrl(
   session: RommSession,
   collection: CollectionRomsFilter & { name: string },
   cardCoverUrl: string | undefined,
-  heroSteamIndex = 0,
+  heroSteamIndex = -1,
 ): Promise<string | undefined> {
   const steamKey = getSteamGridDbApiKey();
-  if (steamKey && isTauri()) {
+  if (steamKey && isTauri() && heroSteamIndex >= 0) {
     const rowKey = collectionRowKey(collection);
     const searchName = await fetchSteamGridSearchQuery(session, collection);
     const cached = getCachedSteamGridHero(

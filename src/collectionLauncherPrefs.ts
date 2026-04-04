@@ -6,7 +6,7 @@ const STORAGE_KEY = "romm-launcher-collection-prefs-v1";
 export type CollectionLauncherPrefs = {
   /** When true, collection is omitted from the launcher carousel. */
   hidden?: boolean;
-  /** SteamGridDB hero index (cycles modulo API list). */
+  /** `-1` or omitted = RomM background; `>= 0` = SteamGridDB hero index. */
   heroSteamIndex?: number;
   /** `-1` or omitted = RomM cover; `>= 0` = SteamGridDB grid index. */
   coverSteamIndex?: number;

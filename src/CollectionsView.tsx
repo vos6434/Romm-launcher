@@ -162,10 +162,6 @@ function coverForGameCarouselSlot(
   return game.coverUrl;
 }
 
-function gameIdentity(game: Pick<RommGame, "name">): string {
-  return game.name.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
 /** First line under poster: min–max game release years from RomM `/roms` metadata. */
 function metaPrimaryLine(
   resolved: string | undefined,
@@ -398,9 +394,6 @@ export function CollectionsView({ session, onLogout }: Props) {
     Record<string, string | undefined>
   >({});
   const [gameGridCovers, setGameGridCovers] = useState<
-    Record<string, string | undefined>
-  >({});
-  const [gameBackgroundOverrides, setGameBackgroundOverrides] = useState<
     Record<string, string | undefined>
   >({});
   const [items, setItems] = useState<RommCollection[]>([]);
@@ -846,9 +839,15 @@ export function CollectionsView({ session, onLogout }: Props) {
     const key = getSteamGridDbApiKey()?.trim();
     if (!key) return;
     const rowKey = collectionRowKey(c);
-    const cur = getCollectionPrefs(rowKey).heroSteamIndex ?? 0;
-    if (cur <= 0) return;
+    const cur = getCollectionPrefs(rowKey).heroSteamIndex ?? -1;
+    if (cur < 0) return;
     const next = cur - 1;
+    if (next < 0) {
+      patchCollectionPrefs(rowKey, { heroSteamIndex: -1 });
+      setHeroBg(null);
+      setPrefsRev((n) => n + 1);
+      return;
+    }
     const searchQuery = await fetchSteamGridSearchQuery(session, c);
     try {
       const url = await invoke<string | null>("steamgriddb_hero_url_at", {
@@ -856,11 +855,11 @@ export function CollectionsView({ session, onLogout }: Props) {
         searchQuery,
         index: next,
       });
-      patchCollectionPrefs(rowKey, {
-        heroSteamIndex: url && url.length > 0 ? next : 0,
-      });
+      if (!url || url.length === 0) return;
+      patchCollectionPrefs(rowKey, { heroSteamIndex: next });
+      setHeroBg({ key: rowKey, url });
     } catch {
-      patchCollectionPrefs(rowKey, { heroSteamIndex: 0 });
+      return;
     }
     setPrefsRev((n) => n + 1);
   }, [collectionSettingsTarget, session]);
@@ -872,7 +871,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     if (!key) return;
     const rowKey = collectionRowKey(c);
     const searchQuery = await fetchSteamGridSearchQuery(session, c);
-    const cur = getCollectionPrefs(rowKey).heroSteamIndex ?? 0;
+    const cur = getCollectionPrefs(rowKey).heroSteamIndex ?? -1;
     const next = cur + 1;
     try {
       const url = await invoke<string | null>("steamgriddb_hero_url_at", {
@@ -880,11 +879,11 @@ export function CollectionsView({ session, onLogout }: Props) {
         searchQuery,
         index: next,
       });
-      patchCollectionPrefs(rowKey, {
-        heroSteamIndex: url && url.length > 0 ? next : 0,
-      });
+      if (!url || url.length === 0) return;
+      patchCollectionPrefs(rowKey, { heroSteamIndex: next });
+      setHeroBg({ key: rowKey, url });
     } catch {
-      patchCollectionPrefs(rowKey, { heroSteamIndex: 0 });
+      return;
     }
     setPrefsRev((n) => n + 1);
   }, [collectionSettingsTarget, session]);
@@ -892,7 +891,8 @@ export function CollectionsView({ session, onLogout }: Props) {
   const clearHeroSteam = useCallback(() => {
     const c = collectionSettingsTarget;
     if (!c) return;
-    patchCollectionPrefs(collectionRowKey(c), { heroSteamIndex: 0 });
+    patchCollectionPrefs(collectionRowKey(c), { heroSteamIndex: -1 });
+    setHeroBg(null);
     setPrefsRev((n) => n + 1);
   }, [collectionSettingsTarget]);
 
@@ -907,13 +907,14 @@ export function CollectionsView({ session, onLogout }: Props) {
     const next = cur - 1;
     if (next < 0) {
       patchCollectionPrefs(rowKey, { coverSteamIndex: -1 });
+      setGridCovers((prev) => ({ ...prev, [rowKey]: undefined }));
       setPrefsRev((n) => n + 1);
       return;
     }
     const url = await fetchCollectionGridCoverUrl(session, c, next);
-    patchCollectionPrefs(rowKey, {
-      coverSteamIndex: url ? next : -1,
-    });
+    if (!url) return;
+    patchCollectionPrefs(rowKey, { coverSteamIndex: next });
+    setGridCovers((prev) => ({ ...prev, [rowKey]: url }));
     setPrefsRev((n) => n + 1);
   }, [collectionSettingsTarget, session]);
 
@@ -926,16 +927,18 @@ export function CollectionsView({ session, onLogout }: Props) {
     const cur = getCollectionPrefs(rowKey).coverSteamIndex ?? -1;
     const next = cur + 1;
     const url = await fetchCollectionGridCoverUrl(session, c, next);
-    patchCollectionPrefs(rowKey, {
-      coverSteamIndex: url ? next : -1,
-    });
+    if (!url) return;
+    patchCollectionPrefs(rowKey, { coverSteamIndex: next });
+    setGridCovers((prev) => ({ ...prev, [rowKey]: url }));
     setPrefsRev((n) => n + 1);
   }, [collectionSettingsTarget, session]);
 
   const clearCoverSteam = useCallback(() => {
     const c = collectionSettingsTarget;
     if (!c) return;
-    patchCollectionPrefs(collectionRowKey(c), { coverSteamIndex: -1 });
+    const rowKey = collectionRowKey(c);
+    patchCollectionPrefs(rowKey, { coverSteamIndex: -1 });
+    setGridCovers((prev) => ({ ...prev, [rowKey]: undefined }));
     setPrefsRev((n) => n + 1);
   }, [collectionSettingsTarget]);
 
@@ -951,15 +954,11 @@ export function CollectionsView({ session, onLogout }: Props) {
       patchGamePrefs(
         game.key,
         {
-        backgroundSteamIndex: -1,
-        backgroundSteamUrl: undefined,
+          backgroundSteamIndex: -1,
+          backgroundSteamUrl: undefined,
         },
         game.name,
       );
-      setGameBackgroundOverrides((prev) => ({
-        ...prev,
-        [gameIdentity(game)]: undefined,
-      }));
       setGameHeroBg({ key: game.key, url: undefined });
       setPrefsRev((n) => n + 1);
       return;
@@ -973,10 +972,6 @@ export function CollectionsView({ session, onLogout }: Props) {
       },
       game.name,
     );
-    setGameBackgroundOverrides((prev) => ({
-      ...prev,
-      [gameIdentity(game)]: url ?? undefined,
-    }));
     setGameHeroBg({ key: game.key, url: url ?? undefined });
     setPrefsRev((n) => n + 1);
   }, [gameSettingsTarget]);
@@ -997,10 +992,6 @@ export function CollectionsView({ session, onLogout }: Props) {
       },
       game.name,
     );
-    setGameBackgroundOverrides((prev) => ({
-      ...prev,
-      [gameIdentity(game)]: url ?? undefined,
-    }));
     setGameHeroBg({ key: game.key, url: url ?? undefined });
     setPrefsRev((n) => n + 1);
   }, [gameSettingsTarget]);
@@ -1016,10 +1007,6 @@ export function CollectionsView({ session, onLogout }: Props) {
       },
       game.name,
     );
-    setGameBackgroundOverrides((prev) => ({
-      ...prev,
-      [gameIdentity(game)]: undefined,
-    }));
     setGameHeroBg({ key: game.key, url: undefined });
     setPrefsRev((n) => n + 1);
   }, [gameSettingsTarget]);
@@ -1254,20 +1241,6 @@ export function CollectionsView({ session, onLogout }: Props) {
     !inGamesView && visibleItems.length > 0 ? visibleItems[focusIndex] : undefined;
   const focusedGame =
     inGamesView && games.length > 0 ? games[gamesFocusIndex] : undefined;
-  const focusedGameExplicitBg = useMemo(() => {
-    if (!focusedGame) return { hasExplicit: false as const, url: undefined };
-    const identity = gameIdentity(focusedGame);
-    if (Object.prototype.hasOwnProperty.call(gameBackgroundOverrides, identity)) {
-      return {
-        hasExplicit: true as const,
-        url: gameBackgroundOverrides[identity],
-      };
-    }
-    const key = focusedGame.key;
-    const savedUrl = getGamePrefs(key, focusedGame.name).backgroundSteamUrl;
-    if (savedUrl) return { hasExplicit: true as const, url: savedUrl };
-    return { hasExplicit: false as const, url: undefined };
-  }, [focusedGame, gameBackgroundOverrides, prefsRev]);
   const defaultFocusedGameBgUrl =
     focusedGame?.backgroundUrl ?? focusedGame?.coverUrl;
   const cardCoverUrl = useMemo(() => {
@@ -1307,7 +1280,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       gridCovers,
     );
     const heroIdx =
-      getCollectionPrefs(collectionRowKey(focusedCollection)).heroSteamIndex ?? 0;
+      getCollectionPrefs(collectionRowKey(focusedCollection)).heroSteamIndex ?? -1;
     setHeroBg({ key, url: undefined });
 
     let cancelled = false;
@@ -1341,12 +1314,6 @@ export function CollectionsView({ session, onLogout }: Props) {
     }
 
     const key = focusedGame.key;
-    const identity = gameIdentity(focusedGame);
-    if (Object.prototype.hasOwnProperty.call(gameBackgroundOverrides, identity)) {
-      setGameHeroBg({ key, url: gameBackgroundOverrides[identity] });
-      return;
-    }
-
     const gamePrefs = getGamePrefs(focusedGame.key, focusedGame.name);
     const heroIdx = gamePrefs.backgroundSteamIndex ?? -1;
     if (heroIdx < 0) {
@@ -1368,27 +1335,21 @@ export function CollectionsView({ session, onLogout }: Props) {
     void (async () => {
       const url = await fetchGameSteamGridBackgroundUrl(focusedGame, heroIdx);
       if (cancelled) return;
-      setGameBackgroundOverrides((prev) => ({
-        ...prev,
-        [identity]: url ?? undefined,
-      }));
       setGameHeroBg({ key, url: url ?? undefined });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [focusedGame, gameBackgroundOverrides, steamSettingsRev, prefsRev]);
+  }, [focusedGame, steamSettingsRev, prefsRev]);
 
   const bgUrl = inGamesView
     ? focusedGame
-      ? focusedGameExplicitBg.hasExplicit
-        ? (focusedGameExplicitBg.url ?? defaultFocusedGameBgUrl)
-        : gameHeroBg &&
-            gameHeroBg.key === focusedGame.key &&
-            gameHeroBg.url
-          ? gameHeroBg.url
-          : defaultFocusedGameBgUrl
+      ? gameHeroBg &&
+          gameHeroBg.key === focusedGame.key &&
+          gameHeroBg.url
+        ? gameHeroBg.url
+        : defaultFocusedGameBgUrl
       : undefined
     : focusedCollection &&
         heroBg &&
