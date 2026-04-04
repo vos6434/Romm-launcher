@@ -24,11 +24,22 @@
   backdrop-filter: blur(12px);
 }
 
+.collections-settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.52);
+}
+
 .collections-settings-menu--popover {
   position: fixed;
-  top: 24px;
-  left: 24px;
-  z-index: 11;
+  top: max(24px, env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 101;
+  max-height: min(560px, calc(100vh - 48px));
+  overflow-y: auto;
+  margin: 0;
 }
 
 .collections-settings-menu-title {
@@ -63,10 +74,49 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
-.collections-settings-option input {
+.collections-settings-option input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
   margin-top: 3px;
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
-  accent-color: #3b82f6;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.42);
+  border-radius: 5px;
+  background: rgba(12, 12, 14, 0.9);
+  cursor: pointer;
+}
+
+.collections-settings-option input[type="radio"]:checked {
+  border-color: #ffffff;
+  background-color: #ffffff;
+  /* SVG dot avoids diamond-shaped aliasing from tiny radial-gradient stops on the pixel grid. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Ccircle cx='9' cy='9' r='2.75' fill='%230a0a0a'/%3E%3C/svg%3E");
+  background-size: 18px 18px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.collections-settings-option input[type="radio"]:focus,
+.collections-settings-option input[type="radio"]:focus-visible {
+  outline: none;
+}
+
+.collections-settings-option--active input[type="radio"],
+.collections-settings-option--active input[type="radio"]:focus,
+.collections-settings-option--active input[type="radio"]:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(28, 28, 28, 0.98),
+    0 0 0 4px rgba(255, 255, 255, 0.92);
+}
+
+.collections-settings-steamgrid-input--active,
+.collections-settings-steamgrid-save--active {
+  outline: 2px solid rgba(255, 255, 255, 0.92);
+  outline-offset: 2px;
 }
 
 .collections-settings-option strong {

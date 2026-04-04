@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { GamepadHorizontalNavPromptGlyphs } from "./GamepadHorizontalNavPromptGlyphs";
 import { GamepadPromptGlyph } from "./GamepadPromptGlyph";
@@ -123,6 +124,9 @@ function estimateCollectionGapPx(): number {
 }
 
 const MAX_CAROUSEL_SLOT_RADIUS = 30;
+
+/** Settings panel: IGDB collection, franchise, SteamGrid key, save. */
+const SETTINGS_NAV_SLOTS = 4;
 
 /** Track width: one centered slot is `scale(1.08)`; others stay base width. */
 function carouselTrackWidthPx(n: number, slotW: number, gap: number): number {
@@ -267,6 +271,11 @@ export function CollectionsView({ session, onLogout }: Props) {
   const carouselTrackRef = useRef<HTMLDivElement>(null);
   const focusSlotRef = useRef<HTMLButtonElement | null>(null);
   const settingsWrapRef = useRef<HTMLDivElement>(null);
+  const settingsRadioCollectionRef = useRef<HTMLInputElement>(null);
+  const settingsRadioFranchiseRef = useRef<HTMLInputElement>(null);
+  const settingsSteamKeyRef = useRef<HTMLInputElement>(null);
+  const settingsSaveRef = useRef<HTMLButtonElement>(null);
+  const [settingsNavIndex, setSettingsNavIndex] = useState(0);
   const [slotRadius, setSlotRadius] = useState(2);
   const [steamGridKeyDraft, setSteamGridKeyDraft] = useState(() =>
     loadSteamGridDbApiKey(),
@@ -343,29 +352,54 @@ export function CollectionsView({ session, onLogout }: Props) {
   }, [session, virtualType]);
 
   const toggleSettings = useCallback(() => {
-    setSettingsOpen((o) => !o);
-  }, []);
-
-  useEffect(() => {
-    if (settingsOpen) setSteamGridKeyDraft(loadSteamGridDbApiKey());
-  }, [settingsOpen]);
-
-  useEffect(() => {
-    if (!settingsOpen) return;
-    function onPointerDown(e: MouseEvent | PointerEvent) {
-      const el = settingsWrapRef.current;
-      if (el && !el.contains(e.target as Node)) {
-        setSettingsOpen(false);
+    setSettingsOpen((prev) => {
+      if (!prev) {
+        setSteamGridKeyDraft(loadSteamGridDbApiKey());
+        setSettingsNavIndex(virtualType === "franchise" ? 1 : 0);
       }
+      return !prev;
+    });
+  }, [virtualType]);
+
+  const saveSteamGridKey = useCallback(() => {
+    saveSteamGridDbApiKey(steamGridKeyDraft);
+    setSteamSettingsRev((n) => n + 1);
+  }, [steamGridKeyDraft]);
+
+  const activateSettingsNav = useCallback(() => {
+    switch (settingsNavIndex) {
+      case 0:
+        settingsRadioCollectionRef.current?.click();
+        break;
+      case 1:
+        settingsRadioFranchiseRef.current?.click();
+        break;
+      case 2:
+        settingsSteamKeyRef.current?.focus();
+        break;
+      case 3:
+        saveSteamGridKey();
+        break;
+      default:
+        break;
     }
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [settingsOpen]);
+  }, [settingsNavIndex, saveSteamGridKey]);
+
+  useLayoutEffect(() => {
+    if (!settingsOpen) return;
+    const refs = [
+      settingsRadioCollectionRef,
+      settingsRadioFranchiseRef,
+      settingsSteamKeyRef,
+      settingsSaveRef,
+    ] as const;
+    const el = refs[settingsNavIndex]?.current;
+    el?.focus();
+  }, [settingsOpen, settingsNavIndex]);
 
   function selectVirtualType(next: VirtualCollectionType) {
     saveVirtualCollectionType(next);
     setVirtualType(next);
-    setSettingsOpen(false);
   }
 
   useEffect(() => {
@@ -467,6 +501,14 @@ export function CollectionsView({ session, onLogout }: Props) {
     enabled: tauriShell && hintsReady,
     itemsLength: items.length,
     settingsOpen,
+    settingsNav: settingsOpen
+      ? {
+          slotCount: SETTINGS_NAV_SLOTS,
+          setFocusIndex: setSettingsNavIndex,
+          onActivate: activateSettingsNav,
+          onCloseSettings: () => setSettingsOpen(false),
+        }
+      : null,
     refreshDisabled: loading || refreshing,
     onMove: moveFocus,
     onBack: onLogout,
@@ -513,7 +555,36 @@ export function CollectionsView({ session, onLogout }: Props) {
         }
       }
 
-      if (settingsOpen) return;
+      if (settingsOpen) {
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setSettingsNavIndex((i) => Math.max(0, i - 1));
+          return;
+        }
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setSettingsNavIndex((i) =>
+            Math.min(SETTINGS_NAV_SLOTS - 1, i + 1),
+          );
+          return;
+        }
+        if (e.key === "Enter" && !e.repeat) {
+          if (e.target instanceof HTMLTextAreaElement) return;
+          e.preventDefault();
+          activateSettingsNav();
+          return;
+        }
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "Backspace" && !isShortcutTarget(e.target)) {
+          e.preventDefault();
+          return;
+        }
+        return;
+      }
+
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         moveFocus(-1);
@@ -533,6 +604,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     onRefreshLibrary,
     settingsOpen,
     toggleSettings,
+    activateSettingsNav,
     loading,
     refreshing,
     items,
@@ -545,88 +617,111 @@ export function CollectionsView({ session, onLogout }: Props) {
     return Array.from({ length: len }, (_, i) => i - r);
   }, [slotRadius]);
 
-  return (
-    <div className="collections-screen">
-      {settingsOpen ? (
-        <div
-          ref={settingsWrapRef}
-          id="collections-settings-menu"
-          className="collections-settings-menu collections-settings-menu--popover"
-          role="dialog"
-          aria-label="Collection settings"
-          aria-modal="false"
-        >
-            <p className="collections-settings-menu-title">
-              Autogenerated groups
-            </p>
-            <p className="collections-settings-menu-hint">
-              Same option as RomM’s virtual collection type (IGDB metadata).
-            </p>
-            <label className="collections-settings-option">
-              <input
-                type="radio"
-                name="virtual-type"
-                checked={virtualType === "collection"}
-                onChange={() => selectVirtualType("collection")}
-              />
-              <span>
-                <strong>IGDB collection</strong>
-                <span className="collections-settings-option-desc">
-                  Series / collection names from IGDB (RomM default).
-                </span>
-              </span>
-            </label>
-            <label className="collections-settings-option">
-              <input
-                type="radio"
-                name="virtual-type"
-                checked={virtualType === "franchise"}
-                onChange={() => selectVirtualType("franchise")}
-              />
-              <span>
-                <strong>Franchise</strong>
-                <span className="collections-settings-option-desc">
-                  Group by franchise (e.g. Super Mario).
-                </span>
-              </span>
-            </label>
-            <div className="collections-settings-steamgrid">
-              <p className="collections-settings-menu-title collections-settings-menu-title--spaced">
-                SteamGridDB backgrounds
+  const settingsPortal =
+    settingsOpen && typeof document !== "undefined"
+      ? createPortal(
+          <>
+            <div
+              className="collections-settings-backdrop"
+              aria-hidden
+              onPointerDown={() => setSettingsOpen(false)}
+            />
+            <div
+              ref={settingsWrapRef}
+              id="collections-settings-menu"
+              className="collections-settings-menu collections-settings-menu--popover"
+              role="dialog"
+              aria-label="Collection settings"
+              aria-modal="true"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <p className="collections-settings-menu-title">
+                Autogenerated groups
               </p>
               <p className="collections-settings-menu-hint">
-                Optional API key for hero-style backdrop art (
-                <a
-                  href="https://www.steamgriddb.com/profile/preferences"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  create a key
-                </a>
-                ). Stored only on this device. If empty, RomM screenshots are
-                used instead.
+                Same option as RomM’s virtual collection type (IGDB metadata).
               </p>
-              <input
-                type="password"
-                className="collections-settings-steamgrid-input"
-                autoComplete="off"
-                placeholder="API key"
-                value={steamGridKeyDraft}
-                onChange={(e) => setSteamGridKeyDraft(e.target.value)}
-              />
-              <button
-                type="button"
-                className="collections-settings-steamgrid-save"
-                onClick={() => {
-                  saveSteamGridDbApiKey(steamGridKeyDraft);
-                  setSteamSettingsRev((n) => n + 1);
-                }}
+              <label
+                className={`collections-settings-option${settingsNavIndex === 0 ? " collections-settings-option--active" : ""}`}
               >
-                Save key
-              </button>
+                <input
+                  ref={settingsRadioCollectionRef}
+                  type="radio"
+                  name="virtual-type"
+                  checked={virtualType === "collection"}
+                  onChange={() => selectVirtualType("collection")}
+                  onFocus={() => setSettingsNavIndex(0)}
+                />
+                <span>
+                  <strong>IGDB collection</strong>
+                  <span className="collections-settings-option-desc">
+                    Series / collection names from IGDB (RomM default).
+                  </span>
+                </span>
+              </label>
+              <label
+                className={`collections-settings-option${settingsNavIndex === 1 ? " collections-settings-option--active" : ""}`}
+              >
+                <input
+                  ref={settingsRadioFranchiseRef}
+                  type="radio"
+                  name="virtual-type"
+                  checked={virtualType === "franchise"}
+                  onChange={() => selectVirtualType("franchise")}
+                  onFocus={() => setSettingsNavIndex(1)}
+                />
+                <span>
+                  <strong>Franchise</strong>
+                  <span className="collections-settings-option-desc">
+                    Group by franchise (e.g. Super Mario).
+                  </span>
+                </span>
+              </label>
+              <div className="collections-settings-steamgrid">
+                <p className="collections-settings-menu-title collections-settings-menu-title--spaced">
+                  SteamGridDB backgrounds
+                </p>
+                <p className="collections-settings-menu-hint">
+                  Optional API key for hero-style backdrop art (
+                  <a
+                    href="https://www.steamgriddb.com/profile/preferences"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    create a key
+                  </a>
+                  ). Stored only on this device. If empty, RomM screenshots are
+                  used instead.
+                </p>
+                <input
+                  ref={settingsSteamKeyRef}
+                  type="password"
+                  className={`collections-settings-steamgrid-input${settingsNavIndex === 2 ? " collections-settings-steamgrid-input--active" : ""}`}
+                  autoComplete="off"
+                  placeholder="API key"
+                  value={steamGridKeyDraft}
+                  onChange={(e) => setSteamGridKeyDraft(e.target.value)}
+                  onFocus={() => setSettingsNavIndex(2)}
+                />
+                <button
+                  ref={settingsSaveRef}
+                  type="button"
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 3 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  onClick={saveSteamGridKey}
+                  onFocus={() => setSettingsNavIndex(3)}
+                >
+                  Save key
+                </button>
+              </div>
             </div>
-        </div>
-      ) : null}
+          </>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <div className="collections-screen">
+      {settingsPortal}
 
       <div
         className="collections-bg"

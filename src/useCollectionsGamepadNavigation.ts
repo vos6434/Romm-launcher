@@ -1,18 +1,34 @@
+import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useRef } from "react";
 import { getActiveGamepad } from "./gamepadAccess";
-import { GP_FACE_EAST, GP_SELECT, GP_START } from "./gamepadFlavor";
+import {
+  GP_FACE_EAST,
+  GP_FACE_SOUTH,
+  GP_SELECT,
+  GP_START,
+} from "./gamepadFlavor";
 
 const DPAD_LEFT = 14;
 const DPAD_RIGHT = 15;
+const DPAD_UP = 12;
+const DPAD_DOWN = 13;
 
 const STICK_DEAD = 0.42;
 const STICK_REPEAT_MS = 140;
 const ACTION_DEBOUNCE_MS = 360;
 
+export type CollectionsSettingsNavApi = {
+  slotCount: number;
+  setFocusIndex: Dispatch<SetStateAction<number>>;
+  onActivate: () => void;
+  onCloseSettings: () => void;
+};
+
 type Options = {
   enabled: boolean;
   itemsLength: number;
   settingsOpen: boolean;
+  settingsNav: CollectionsSettingsNavApi | null;
   refreshDisabled: boolean;
   onMove: (delta: number) => void;
   onBack: () => void;
@@ -20,11 +36,12 @@ type Options = {
   onRefresh: () => void;
 };
 
-/** D-pad / stick horizontal → move; Start → settings; Select → refresh; east face → back. */
+/** Carousel: D-pad / stick horizontal; settings open: vertical slots + south = activate, east = close panel. */
 export function useCollectionsGamepadNavigation({
   enabled,
   itemsLength,
   settingsOpen,
+  settingsNav,
   refreshDisabled,
   onMove,
   onBack,
@@ -35,18 +52,32 @@ export function useCollectionsGamepadNavigation({
   const onBackRef = useRef(onBack);
   const onToggleSettingsRef = useRef(onToggleSettings);
   const onRefreshRef = useRef(onRefresh);
+  const settingsNavRef = useRef<CollectionsSettingsNavApi | null>(null);
   onMoveRef.current = onMove;
   onBackRef.current = onBack;
   onToggleSettingsRef.current = onToggleSettings;
   onRefreshRef.current = onRefresh;
+  settingsNavRef.current = settingsNav;
 
   const prevBtnRef = useRef<boolean[] | null>(null);
   const stickHoldRef = useRef<{ xSign: -1 | 0 | 1; lastStep: number }>({
     xSign: 0,
     lastStep: 0,
   });
+  const settingsStickHoldRef = useRef<{ ySign: -1 | 0 | 1; lastStep: number }>({
+    ySign: 0,
+    lastStep: 0,
+  });
   const lastActionRef = useRef(0);
   const lastGamepadIndexRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (settingsOpen) {
+      stickHoldRef.current = { xSign: 0, lastStep: 0 };
+    } else {
+      settingsStickHoldRef.current = { ySign: 0, lastStep: 0 };
+    }
+  }, [settingsOpen]);
 
   useEffect(() => {
     if (!enabled || typeof navigator === "undefined" || !("getGamepads" in navigator)) {
@@ -67,6 +98,7 @@ export function useCollectionsGamepadNavigation({
         lastGamepadIndexRef.current = null;
         prevBtnRef.current = null;
         stickHoldRef.current = { xSign: 0, lastStep: 0 };
+        settingsStickHoldRef.current = { ySign: 0, lastStep: 0 };
         raf = requestAnimationFrame(tick);
         return;
       }
@@ -75,6 +107,7 @@ export function useCollectionsGamepadNavigation({
         lastGamepadIndexRef.current = g.index;
         prevBtnRef.current = null;
         stickHoldRef.current = { xSign: 0, lastStep: 0 };
+        settingsStickHoldRef.current = { ySign: 0, lastStep: 0 };
       }
 
       const now = performance.now();
@@ -84,7 +117,71 @@ export function useCollectionsGamepadNavigation({
       const prev = prevBtnRef.current ?? pressed.map(() => false);
 
       if (settingsOpen) {
+        const nav = settingsNavRef.current;
+        if (nav && nav.slotCount > 0) {
+          let navigated = false;
+          const up = pressed[DPAD_UP] ?? false;
+          const down = pressed[DPAD_DOWN] ?? false;
+          const prevUp = prev[DPAD_UP] ?? false;
+          const prevDown = prev[DPAD_DOWN] ?? false;
+
+          if (up && !prevUp) {
+            nav.setFocusIndex((i) => Math.max(0, i - 1));
+            navigated = true;
+          } else if (down && !prevDown) {
+            nav.setFocusIndex((i) =>
+              Math.min(nav.slotCount - 1, i + 1),
+            );
+            navigated = true;
+          }
+
+          if (!navigated) {
+            const ax = g.axes[0] ?? 0;
+            const ay = g.axes[1] ?? 0;
+            let ySign: -1 | 0 | 1 = 0;
+            if (Math.abs(ay) > STICK_DEAD && Math.abs(ay) >= Math.abs(ax)) {
+              ySign = ay < 0 ? -1 : 1;
+            }
+
+            const hold = settingsStickHoldRef.current;
+
+            if (ySign === 0) {
+              settingsStickHoldRef.current = { ySign: 0, lastStep: 0 };
+            } else if (ySign !== hold.ySign) {
+              nav.setFocusIndex((i) =>
+                Math.min(
+                  nav.slotCount - 1,
+                  Math.max(0, i + ySign),
+                ),
+              );
+              settingsStickHoldRef.current = { ySign, lastStep: now };
+            } else if (now - hold.lastStep >= STICK_REPEAT_MS) {
+              nav.setFocusIndex((i) =>
+                Math.min(
+                  nav.slotCount - 1,
+                  Math.max(0, i + ySign),
+                ),
+              );
+              settingsStickHoldRef.current = { ySign, lastStep: now };
+            }
+          }
+        }
+
         if (now - lastActionRef.current >= ACTION_DEBOUNCE_MS) {
+          const south = pressed[GP_FACE_SOUTH] ?? false;
+          const prevSouth = prev[GP_FACE_SOUTH] ?? false;
+          if (south && !prevSouth && settingsNavRef.current) {
+            lastActionRef.current = now;
+            settingsNavRef.current.onActivate();
+          }
+
+          const east = pressed[GP_FACE_EAST] ?? false;
+          const prevEast = prev[GP_FACE_EAST] ?? false;
+          if (east && !prevEast && settingsNavRef.current) {
+            lastActionRef.current = now;
+            settingsNavRef.current.onCloseSettings();
+          }
+
           const start = pressed[GP_START] ?? false;
           const prevStart = prev[GP_START] ?? false;
           if (start && !prevStart) {
@@ -94,15 +191,12 @@ export function useCollectionsGamepadNavigation({
 
           const select = pressed[GP_SELECT] ?? false;
           const prevSelect = prev[GP_SELECT] ?? false;
-          if (
-            !refreshDisabled &&
-            select &&
-            !prevSelect
-          ) {
+          if (!refreshDisabled && select && !prevSelect) {
             lastActionRef.current = now;
             onRefreshRef.current();
           }
         }
+
         prevBtnRef.current = pressed;
         raf = requestAnimationFrame(tick);
         return;
