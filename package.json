@@ -1,7 +1,7 @@
 {
   "name": "tauri-app",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,8 +12,8 @@
     "tauri:build:windows": "tauri build --bundles msi,nsis",
     "tauri:build:steamdeck": "tauri build --bundles appimage",
     "tauri:build:steamdeck:container": "bash ./scripts/build-steamdeck-appimage-container.sh",
-    "steamdeck:run": "bash ./scripts/run-extracted-appdir-on-steamdeck.sh",
-    "steamdeck:install-desktop": "bash ./scripts/install-steamdeck-desktop-entry.sh"
+    "tauri:build:steamdeck:single-file-installer": "bash ./scripts/build-steamdeck-single-file-installer.sh",
+    "steamdeck:run": "bash ./scripts/run-extracted-appdir-on-steamdeck.sh"
   },
   "dependencies": {
     "react": "^19.1.0",

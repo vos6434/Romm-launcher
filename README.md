@@ -61,6 +61,7 @@ This repo includes GitHub Actions workflow:
 It runs on tag push (for example `v0.1.0`) or manual dispatch and uploads:
 
 - `AppImage` (`src-tauri/target/release/bundle/appimage/*.AppImage`)
+- single-file installer (`dist/RomM-Launcher-SteamDeck-Installer.sh`)
 
 To build Steam Deck artifact locally:
 
@@ -117,18 +118,43 @@ You can also call it through npm:
 npm run steamdeck:run -- "src-tauri/target/release/bundle/appimage/RomM Launcher_0.1.0_amd64.AppImage"
 ```
 
-Install a click-launch desktop entry (no terminal command needed):
+### Single-file installer (AppImage bundled inside)
+
+If you want users to download exactly one file and run it offline, build a self-extracting installer that embeds the AppImage payload:
 
 ```bash
-npm run steamdeck:install-desktop
+npm run tauri:build:steamdeck:single-file-installer
 ```
 
-This creates:
+Output:
 
-- `~/.local/bin/romm-launcher`
-- `~/.local/share/applications/romm-launcher.desktop`
+- `dist/RomM-Launcher-SteamDeck-Installer.sh`
 
-After running it, search and launch `RomM Launcher` from the Steam Deck desktop app menu.
+User flow:
+
+- download `RomM-Launcher-SteamDeck-Installer.sh`
+- make executable and run it
+- installer extracts bundled AppImage and installs launcher + desktop entry under the user home directory
+
+Installer options:
+
+- choose a custom install location interactively when run in terminal
+- uninstall existing installation via `--uninstall`
+
+Examples:
+
+```bash
+./RomM-Launcher-SteamDeck-Installer.sh --install-dir "$HOME/Games/romm-launcher"
+./RomM-Launcher-SteamDeck-Installer.sh --uninstall
+```
+
+You can also pass custom paths:
+
+```bash
+bash ./scripts/build-steamdeck-single-file-installer.sh \
+	"/path/to/RomM Launcher_0.1.0_amd64.AppImage" \
+	"/path/to/output/RomM-Launcher-SteamDeck-Installer.sh"
+```
 
 ### Rust build fails with `link.exe` not found (Windows)
 

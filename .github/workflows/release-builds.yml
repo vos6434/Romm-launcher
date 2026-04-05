@@ -108,9 +108,13 @@ jobs:
       - name: Build Tauri app (Linux)
         run: npm run tauri build -- --bundles appimage
 
+      - name: Build single-file Steam Deck installer
+        run: npm run tauri:build:steamdeck:single-file-installer
+
       - name: Upload Steam Deck artifacts
         uses: actions/upload-artifact@v4
         with:
           name: steamdeck-build-${{ github.ref_name }}
           path: |
             src-tauri/target/release/bundle/appimage/*.AppImage
+            dist/RomM-Launcher-SteamDeck-Installer.sh
