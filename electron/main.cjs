@@ -4,6 +4,8 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
 
+let lastSteamKeyboardRequestAt = 0;
+
 function normalizeBaseUrl(host) {
   let s = String(host || "").trim();
   if (!s) throw new Error("RomM host is required.");
@@ -356,6 +358,36 @@ async function invokeCommand(command, args) {
       await fsp.mkdir(resolved, { recursive: true });
       await shell.openPath(resolved);
       return null;
+    }
+    case "open_steam_keyboard": {
+      if (process.platform !== "linux") return false;
+
+      const now = Date.now();
+      if (now - lastSteamKeyboardRequestAt < 800) {
+        return true;
+      }
+      lastSteamKeyboardRequestAt = now;
+
+      // Prefer Steam URL handling first; it is the most reliable path on Steam Deck.
+      try {
+        await shell.openExternal("steam://open/keyboard");
+        return true;
+      } catch {
+        // Fall through to command-based fallbacks.
+      }
+
+      const attempts = [
+        ["steam", ["-ifrunning", "steam://open/keyboard"]],
+        ["/usr/bin/steam", ["-ifrunning", "steam://open/keyboard"]],
+        ["xdg-open", ["steam://open/keyboard"]],
+        ["/usr/bin/xdg-open", ["steam://open/keyboard"]],
+      ];
+
+      for (const [program, a] of attempts) {
+        if (await commandSucceeds(program, a)) return true;
+      }
+
+      return false;
     }
     case "launch_retroarch": {
       const romPath = String(args.romPath || "").trim();

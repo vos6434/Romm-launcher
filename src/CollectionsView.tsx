@@ -634,6 +634,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   const settingsMinimizeOnLaunchRef = useRef<HTMLInputElement>(null);
   const settingsPickDownloadsDirRef = useRef<HTMLButtonElement>(null);
   const settingsOpenDownloadsDirRef = useRef<HTMLButtonElement>(null);
+  const lastKeyboardRequestAtRef = useRef(0);
   const collectionHideRef = useRef<HTMLButtonElement>(null);
   const collectionPickHeroRef = useRef<HTMLButtonElement>(null);
   const collectionClearHeroRef = useRef<HTMLButtonElement>(null);
@@ -1235,6 +1236,16 @@ export function CollectionsView({ session, onLogout }: Props) {
     saveSteamGridDbApiKey(steamGridKeyDraft);
     setSteamSettingsRev((n) => n + 1);
   }, [steamGridKeyDraft]);
+
+  const requestSteamKeyboard = useCallback(() => {
+    if (!desktopShell) return;
+    const now = Date.now();
+    if (now - lastKeyboardRequestAtRef.current < 800) return;
+    lastKeyboardRequestAtRef.current = now;
+    void invoke<boolean>("open_steam_keyboard").catch(() => {
+      // Ignore keyboard-open failures on non-Steam environments.
+    });
+  }, [desktopShell]);
 
   const onUnhideAllCollections = useCallback(() => {
     unhideAllCollections();
@@ -1971,6 +1982,7 @@ export function CollectionsView({ session, onLogout }: Props) {
         break;
       case 2:
         settingsSteamKeyRef.current?.focus();
+        requestSteamKeyboard();
         break;
       case 3:
         saveSteamGridKey();
@@ -1983,6 +1995,7 @@ export function CollectionsView({ session, onLogout }: Props) {
         break;
       case 6:
         settingsRetroArchPathRef.current?.focus();
+        requestSteamKeyboard();
         break;
       case 7:
         void pickRetroArchPath();
@@ -2004,6 +2017,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     openRomsDownloadDir,
     pickRetroArchPath,
     pickRomsDownloadDir,
+    requestSteamKeyboard,
     scanFlatpakRetroArch,
     saveSteamGridKey,
     settingsNavIndex,

@@ -79,6 +79,7 @@ function App() {
   const rememberRef = useRef<HTMLInputElement>(null);
   const submitRef = useRef<HTMLButtonElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
+  const lastKeyboardRequestAtRef = useRef(0);
 
   const { flavor: gamepadFlavor, gamepadConnected } = useGamepadInput();
   const desktopShell = hasDesktopBridge();
@@ -161,6 +162,16 @@ function App() {
       focusUnlisten?.();
       resizeUnlisten?.();
     };
+  }, [desktopShell]);
+
+  const requestSteamKeyboard = useCallback(() => {
+    if (!desktopShell) return;
+    const now = Date.now();
+    if (now - lastKeyboardRequestAtRef.current < 800) return;
+    lastKeyboardRequestAtRef.current = now;
+    void invoke<boolean>("open_steam_keyboard").catch(() => {
+      // Ignore keyboard-open failures on non-Steam environments.
+    });
   }, [desktopShell]);
 
   useEffect(() => {
@@ -252,6 +263,21 @@ function App() {
 
   const activateLoginSlot = useCallback(() => {
     const id = slotOrder[gpFocusIndex];
+    if (id === "host") {
+      hostRef.current?.focus();
+      requestSteamKeyboard();
+      return;
+    }
+    if (id === "username") {
+      usernameRef.current?.focus();
+      requestSteamKeyboard();
+      return;
+    }
+    if (id === "password") {
+      passwordRef.current?.focus();
+      requestSteamKeyboard();
+      return;
+    }
     if (id === "togglePassword") {
       toggleRef.current?.click();
       return;
@@ -268,7 +294,7 @@ function App() {
       onRetry();
       return;
     }
-  }, [slotOrder, gpFocusIndex, onRetry]);
+  }, [slotOrder, gpFocusIndex, onRetry, requestSteamKeyboard]);
 
   useLoginKeyboardNavigation({
     enabled: slotNavChrome && inputActive,
