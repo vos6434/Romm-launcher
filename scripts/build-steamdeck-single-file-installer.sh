@@ -26,10 +26,10 @@ fi
 mkdir -p "$(dirname -- "${output_path}")"
 
 appimage_name="$(basename -- "${appimage_path}")"
-icon_path="${repo_root}/src-tauri/icons/128x128.png"
-icon_b64=""
-if [[ -f "${icon_path}" ]]; then
-  icon_b64="$(base64 -w 0 "${icon_path}")"
+icon_source_path="${repo_root}/src/assets/kenney prompts/Flairs/Vector/controller_generic.svg"
+icon_svg_b64=""
+if [[ -f "${icon_source_path}" ]]; then
+  icon_svg_b64="$(base64 -w 0 "${icon_source_path}")"
 fi
 
 cat > "${output_path}" <<EOF
@@ -43,9 +43,47 @@ fi
 
 default_install_root="\${HOME}/.local/share/romm-launcher"
 state_path="\${HOME}/.local/share/romm-launcher/install-state.env"
+state_dir="\${HOME}/.local/share/romm-launcher"
 wrapper_path="\${HOME}/.local/bin/romm-launcher"
 desktop_path="\${HOME}/.local/share/applications/romm-launcher.desktop"
-icon_path="\${HOME}/.local/share/icons/hicolor/128x128/apps/romm-launcher.png"
+icon_path="\${HOME}/.local/share/icons/hicolor/scalable/apps/romm-launcher.svg"
+gui_tool=""
+
+if [[ -n "\${WAYLAND_DISPLAY:-}\${DISPLAY:-}" ]]; then
+  if command -v zenity >/dev/null 2>&1; then
+    gui_tool="zenity"
+  elif command -v kdialog >/dev/null 2>&1; then
+    gui_tool="kdialog"
+  fi
+fi
+
+icon_svg_b64='${icon_svg_b64}'
+mkdir -p "\${HOME}/.local/share/icons/hicolor/scalable/apps"
+if [[ -n "\${icon_svg_b64}" ]]; then
+  printf '%s' "\${icon_svg_b64}" | base64 -d > "\${icon_path}" 2>/dev/null || true
+fi
+
+gui_info() {
+  local msg="\$1"
+  if [[ "\${gui_tool}" == "zenity" ]]; then
+    zenity --info --window-icon="\${icon_path}" --title="RomM Launcher Installer" --text="\${msg}" --width=420 >/dev/null 2>&1 || true
+  elif [[ "\${gui_tool}" == "kdialog" ]]; then
+    kdialog --icon "\${icon_path}" --title "RomM Launcher Installer" --msgbox "\${msg}" >/dev/null 2>&1 || true
+  else
+    echo "\${msg}"
+  fi
+}
+
+gui_error() {
+  local msg="\$1"
+  if [[ "\${gui_tool}" == "zenity" ]]; then
+    zenity --error --window-icon="\${icon_path}" --title="RomM Launcher Installer" --text="\${msg}" --width=420 >/dev/null 2>&1 || true
+  elif [[ "\${gui_tool}" == "kdialog" ]]; then
+    kdialog --icon "\${icon_path}" --title "RomM Launcher Installer" --error "\${msg}" >/dev/null 2>&1 || true
+  else
+    echo "\${msg}" >&2
+  fi
+}
 
 usage() {
   cat <<USAGE
@@ -91,7 +129,20 @@ while [[ \$# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "\${action}" && -t 0 && -t 1 ]]; then
+if [[ -z "\${action}" && -n "\${gui_tool}" ]]; then
+  if [[ "\${gui_tool}" == "zenity" ]]; then
+    choice="\$(zenity --list --radiolist --window-icon="\${icon_path}" --title="RomM Launcher Installer" --text="Choose an action" --column="" --column="Action" TRUE "Install or update" FALSE "Uninstall" --height=220 --width=420 2>/dev/null || true)"
+  else
+    choice="\$(kdialog --icon "\${icon_path}" --title "RomM Launcher Installer" --menu "Choose an action" install "Install or update" uninstall "Uninstall" 2>/dev/null || true)"
+  fi
+
+  case "\${choice}" in
+    "Uninstall"|"uninstall") action="uninstall" ;;
+    "Install or update"|"install") action="install" ;;
+    "") exit 0 ;;
+    *) action="install" ;;
+  esac
+elif [[ -z "\${action}" && -t 0 && -t 1 ]]; then
   echo "RomM Launcher installer"
   echo "1) Install or update"
   echo "2) Uninstall"
@@ -108,8 +159,19 @@ if [[ -z "\${action}" ]]; then
 fi
 
 install_root="\${default_install_root}"
+state_install_root=""
 if [[ -n "\${install_root_override}" ]]; then
   install_root="\${install_root_override}"
+elif [[ "\${action}" == "install" && -n "\${gui_tool}" ]]; then
+  if [[ "\${gui_tool}" == "zenity" ]]; then
+    chosen_dir="\$(zenity --file-selection --directory --window-icon="\${icon_path}" --title="Select install location" --filename="\${default_install_root}/" 2>/dev/null || true)"
+  else
+    chosen_dir="\$(kdialog --icon "\${icon_path}" --title "RomM Launcher Installer" --getexistingdirectory "\${default_install_root}" 2>/dev/null || true)"
+  fi
+
+  if [[ -n "\${chosen_dir}" ]]; then
+    install_root="\${chosen_dir}"
+  fi
 elif [[ "\${action}" == "install" && -t 0 && -t 1 ]]; then
   printf "Install location for bundled app files [%s]: " "\${default_install_root}"
   read -r user_install_root
@@ -122,6 +184,7 @@ if [[ "\${action}" == "uninstall" && -f "\${state_path}" ]]; then
   # shellcheck disable=SC1090
   source "\${state_path}"
   if [[ -n "\${INSTALL_ROOT:-}" ]]; then
+    state_install_root="\${INSTALL_ROOT}"
     install_root="\${INSTALL_ROOT}"
   fi
 fi
@@ -130,8 +193,19 @@ appimage_path="\${install_root}/RomM Launcher.AppImage"
 
 do_uninstall() {
   rm -f "\${wrapper_path}" "\${desktop_path}" "\${icon_path}" "\${state_path}"
+
+  # Remove payload from current target root.
   rm -f "\${appimage_path}"
   rmdir "\${install_root}" >/dev/null 2>&1 || true
+
+  # If state root differs from computed root, remove payload there as well.
+  if [[ -n "\${state_install_root}" && "\${state_install_root}" != "\${install_root}" ]]; then
+    rm -f "\${state_install_root}/RomM Launcher.AppImage"
+    rmdir "\${state_install_root}" >/dev/null 2>&1 || true
+  fi
+
+  # Remove installer state directory when empty.
+  rmdir "\${state_dir}" >/dev/null 2>&1 || true
 
   if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database "\${HOME}/.local/share/applications" >/dev/null 2>&1 || true
@@ -142,18 +216,29 @@ do_uninstall() {
 }
 
 if [[ "\${action}" == "uninstall" ]]; then
+  if [[ -n "\${gui_tool}" ]]; then
+    if [[ "\${gui_tool}" == "zenity" ]]; then
+      zenity --question --window-icon="\${icon_path}" --title="RomM Launcher Installer" --text="Uninstall RomM Launcher from:\n\n\${install_root}" --width=420 >/dev/null 2>&1 || exit 0
+    else
+      kdialog --icon "\${icon_path}" --title "RomM Launcher Installer" --warningyesno "Uninstall RomM Launcher from:\n\n\${install_root}" >/dev/null 2>&1 || exit 0
+    fi
+  fi
+
   do_uninstall
+  if [[ -n "\${gui_tool}" ]]; then
+    gui_info "Uninstall complete."
+  fi
   exit 0
 fi
 
-mkdir -p "\${install_root}" "\${HOME}/.local/bin" "\${HOME}/.local/share/applications" "\${HOME}/.local/share/icons/hicolor/128x128/apps" "\${HOME}/.local/share/romm-launcher"
+mkdir -p "\${install_root}" "\${HOME}/.local/bin" "\${HOME}/.local/share/applications" "\${HOME}/.local/share/icons/hicolor/scalable/apps" "\${HOME}/.local/share/romm-launcher"
 
 tmp_dir="\$(mktemp -d)"
 trap 'rm -rf "\${tmp_dir}"' EXIT
 
 payload_line="\$(awk '/^__APPIMAGE_PAYLOAD_BELOW__$/ {print NR + 1; exit 0; }' "\$0")"
 if [[ -z "\${payload_line}" ]]; then
-  echo "Installer payload marker not found." >&2
+  gui_error "Installer payload marker not found."
   exit 2
 fi
 
@@ -161,9 +246,8 @@ tail -n +"\${payload_line}" "\$0" | base64 -d > "\${tmp_dir}/RomM Launcher.AppIm
 cp -f "\${tmp_dir}/RomM Launcher.AppImage" "\${appimage_path}"
 chmod +x "\${appimage_path}"
 
-icon_b64='${icon_b64}'
-if [[ -n "\${icon_b64}" ]]; then
-  printf '%s' "\${icon_b64}" | base64 -d > "\${icon_path}" || true
+if [[ -n "\${icon_svg_b64}" ]]; then
+  printf '%s' "\${icon_svg_b64}" | base64 -d > "\${icon_path}" || true
 fi
 
 cat > "\${wrapper_path}" <<'WRAPEOF'
@@ -221,7 +305,7 @@ Terminal=false
 Type=Application
 Categories=Game;
 StartupNotify=true
-Icon=romm-launcher
+Icon=\${icon_path}
 DESKTOPEOF
 
 if command -v update-desktop-database >/dev/null 2>&1; then
@@ -234,6 +318,9 @@ echo "Install root: \${install_root}"
 echo "AppImage: \${appimage_path}"
 echo "Launcher: \${wrapper_path}"
 echo "Desktop entry: \${desktop_path}"
+if [[ -n "\${gui_tool}" ]]; then
+  gui_info "Install complete.\n\nLauncher is now available in your applications menu."
+fi
 exit 0
 
 __APPIMAGE_PAYLOAD_BELOW__
