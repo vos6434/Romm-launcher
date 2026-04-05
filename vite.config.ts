@@ -7,6 +7,8 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
+  // Keep build output file-path friendly for AppImage/local webview loading.
+  base: "./",
 
   build: {
     // SteamOS WebKitGTK can lag modern browser syntax support.
