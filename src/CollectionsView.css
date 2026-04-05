@@ -322,6 +322,12 @@ button.collections-settings-action:focus-visible {
   gap: 8px;
 }
 
+.steamgrid-picker-pane--active {
+  box-shadow:
+    inset 0 0 0 1px rgba(34, 211, 238, 0.75),
+    0 0 0 1px rgba(34, 211, 238, 0.35);
+}
+
 .steamgrid-picker-filters-title {
   margin: 6px 0 2px;
   font-size: 0.74rem;
@@ -331,7 +337,7 @@ button.collections-settings-action:focus-visible {
 }
 
 .steamgrid-picker-input,
-.steamgrid-picker-select {
+.steamgrid-picker-sort-trigger {
   width: 100%;
   box-sizing: border-box;
   border: 1px solid #334155;
@@ -342,12 +348,62 @@ button.collections-settings-action:focus-visible {
   font-size: 0.82rem;
 }
 
+.steamgrid-picker-sort-wrap {
+  position: relative;
+}
+
+.steamgrid-picker-sort-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.steamgrid-picker-sort-caret {
+  opacity: 0.8;
+  font-size: 0.8rem;
+}
+
+.steamgrid-picker-sort-menu {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.95);
+  padding: 6px;
+}
+
+.steamgrid-picker-sort-option {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.55);
+  color: #e2e8f0;
+  padding: 7px 8px;
+  text-align: left;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.steamgrid-picker-sort-option--selected {
+  background: rgba(14, 116, 144, 0.22);
+}
+
+.steamgrid-picker-sort-option--active {
+  border-color: rgba(34, 211, 238, 0.75);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.35);
+}
+
 .steamgrid-picker-check {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 0.78rem;
   color: #cbd5e1;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 4px 6px;
 }
 
 .steamgrid-picker-refresh {
@@ -364,6 +420,15 @@ button.collections-settings-action:focus-visible {
 .steamgrid-picker-refresh:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.steamgrid-picker-input.steamgrid-picker-control--active,
+.steamgrid-picker-sort-trigger.steamgrid-picker-control--active,
+.steamgrid-picker-check.steamgrid-picker-control--active,
+.steamgrid-picker-refresh.steamgrid-picker-control--active {
+  border-color: rgba(34, 211, 238, 0.75);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.35);
+  background: rgba(15, 23, 42, 0.92);
 }
 
 .steamgrid-picker-gallery-wrap {

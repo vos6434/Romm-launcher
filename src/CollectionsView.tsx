@@ -25,7 +25,7 @@ import {
 } from "./KeyboardCollectionsHintGlyphs";
 import { KeyboardEnterPromptGlyph } from "./KeyboardNavPromptGlyphs";
 import { getActiveGamepad } from "./gamepadAccess";
-import { GP_FACE_EAST, GP_FACE_SOUTH } from "./gamepadFlavor";
+import { GP_FACE_EAST, GP_FACE_NORTH, GP_FACE_SOUTH } from "./gamepadFlavor";
 import { useCollectionsGamepadNavigation } from "./useCollectionsGamepadNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
 import { fetchCollectionBackgroundUrl } from "./collectionBackground";
@@ -224,7 +224,6 @@ const COLLECTION_SETTINGS_NAV_SLOTS = 5;
 /** Pick background + clear background + pick cover + clear cover. */
 const GAME_SETTINGS_NAV_SLOTS = 4;
 
-const STEAMGRID_PICKER_GRID_COLS = 6;
 const PICKER_DPAD_LEFT = 14;
 const PICKER_DPAD_RIGHT = 15;
 const PICKER_DPAD_UP = 12;
@@ -233,9 +232,36 @@ const PICKER_LB = 4;
 const PICKER_RB = 5;
 const PICKER_STICK_DEAD = 0.42;
 const PICKER_STICK_REPEAT_MS = 140;
+const PICKER_DPAD_DEBOUNCE_MS = 140;
 const PICKER_ACTION_DEBOUNCE_MS = 220;
 
 type SteamGridPickerSort = "score" | "recent";
+type SteamGridPickerFocusPane = "gallery" | "filters";
+const PICKER_FILTER_NAV_SLOTS = 6;
+const STEAMGRID_PICKER_SORT_OPTIONS: ReadonlyArray<{
+  value: SteamGridPickerSort;
+  label: string;
+}> = [
+  { value: "score", label: "Most upvoted" },
+  { value: "recent", label: "Most recent" },
+];
+
+function compareSteamGridItems(
+  a: SteamGridPickerItem,
+  b: SteamGridPickerItem,
+  sort: SteamGridPickerSort,
+): number {
+  if (sort === "recent") {
+    const ta = a.createdAt ? Date.parse(a.createdAt) : 0;
+    const tb = b.createdAt ? Date.parse(b.createdAt) : 0;
+    if (ta !== tb) return tb - ta;
+    return b.sourceIndex - a.sourceIndex;
+  }
+  const sa = a.score ?? Number.NEGATIVE_INFINITY;
+  const sb = b.score ?? Number.NEGATIVE_INFINITY;
+  if (sa !== sb) return sb - sa;
+  return a.sourceIndex - b.sourceIndex;
+}
 
 /**
  * Signed minimal index delta on the ring → slide direction.
@@ -490,6 +516,10 @@ export function CollectionsView({ session, onLogout }: Props) {
     useState("");
   const [steamGridPickerSort, setSteamGridPickerSort] =
     useState<SteamGridPickerSort>("score");
+  const [steamGridPickerSortMenuOpen, setSteamGridPickerSortMenuOpen] =
+    useState(false);
+  const [steamGridPickerSortMenuIndex, setSteamGridPickerSortMenuIndex] =
+    useState(0);
   const [steamGridPickerStaticOnly, setSteamGridPickerStaticOnly] =
     useState(true);
   const [steamGridPickerNsfwOff, setSteamGridPickerNsfwOff] =
@@ -499,6 +529,10 @@ export function CollectionsView({ session, onLogout }: Props) {
   const [steamGridPickerItems, setSteamGridPickerItems] = useState<
     SteamGridPickerItem[]
   >([]);
+  const [steamGridPickerFocusPane, setSteamGridPickerFocusPane] =
+    useState<SteamGridPickerFocusPane>("gallery");
+  const [steamGridPickerFilterNavIndex, setSteamGridPickerFilterNavIndex] =
+    useState(0);
   const [steamGridPickerPage, setSteamGridPickerPage] = useState(0);
   const [steamGridPickerSelectedIndex, setSteamGridPickerSelectedIndex] =
     useState(0);
@@ -510,6 +544,13 @@ export function CollectionsView({ session, onLogout }: Props) {
     width: typeof window === "undefined" ? 1366 : window.innerWidth,
     height: typeof window === "undefined" ? 768 : window.innerHeight,
   }));
+  const steamGridPickerSearchInputRef = useRef<HTMLInputElement>(null);
+  const steamGridPickerSortButtonRef = useRef<HTMLButtonElement>(null);
+  const steamGridPickerSortOptionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const steamGridPickerStaticRef = useRef<HTMLInputElement>(null);
+  const steamGridPickerNsfwRef = useRef<HTMLInputElement>(null);
+  const steamGridPickerHumorRef = useRef<HTMLInputElement>(null);
+  const steamGridPickerRefreshRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -921,11 +962,123 @@ export function CollectionsView({ session, onLogout }: Props) {
   const steamGridPickerSelectedUrl =
     steamGridPickerSelectedItem?.url;
 
+  const focusSteamGridPickerFilterControl = useCallback((index: number) => {
+    const refs = [
+      steamGridPickerSearchInputRef,
+      steamGridPickerSortButtonRef,
+      steamGridPickerStaticRef,
+      steamGridPickerNsfwRef,
+      steamGridPickerHumorRef,
+      steamGridPickerRefreshRef,
+    ] as const;
+    refs[index]?.current?.focus();
+  }, []);
+
+  const toggleSteamGridPickerFocusPane = useCallback(() => {
+    setSteamGridPickerFocusPane((pane) =>
+      pane === "gallery" ? "filters" : "gallery",
+    );
+  }, []);
+
+  const openSteamGridPickerSortMenu = useCallback((seedIndex?: number) => {
+    setSteamGridPickerSortMenuOpen(true);
+    if (typeof seedIndex === "number") {
+      setSteamGridPickerSortMenuIndex(
+        Math.min(
+          STEAMGRID_PICKER_SORT_OPTIONS.length - 1,
+          Math.max(0, seedIndex),
+        ),
+      );
+      return;
+    }
+    setSteamGridPickerSortMenuIndex(steamGridPickerSort === "score" ? 0 : 1);
+  }, [steamGridPickerSort]);
+
+  const closeSteamGridPickerSortMenu = useCallback(() => {
+    setSteamGridPickerSortMenuOpen(false);
+  }, []);
+
+  const chooseSteamGridPickerSort = useCallback(
+    (nextSort: SteamGridPickerSort) => {
+      const selectedSourceIndex = steamGridPickerSelectedItem?.sourceIndex ?? -1;
+      const sorted = [...steamGridPickerItems].sort((a, b) =>
+        compareSteamGridItems(a, b, nextSort),
+      );
+      setSteamGridPickerSort(nextSort);
+      setSteamGridPickerItems(sorted);
+      if (sorted.length === 0) {
+        setSteamGridPickerPage(0);
+        setSteamGridPickerSelectedIndex(0);
+      } else {
+        const nextSelectedIndex =
+          selectedSourceIndex >= 0
+            ? Math.max(
+                0,
+                sorted.findIndex((it) => it.sourceIndex === selectedSourceIndex),
+              )
+            : 0;
+        setSteamGridPickerSelectedIndex(nextSelectedIndex);
+        setSteamGridPickerPage(
+          Math.floor(nextSelectedIndex / Math.max(1, steamGridPickerPageSize)),
+        );
+      }
+      setSteamGridPickerSortMenuOpen(false);
+    },
+    [
+      steamGridPickerItems,
+      steamGridPickerPageSize,
+      steamGridPickerSelectedItem?.sourceIndex,
+    ],
+  );
+
+  const activateSteamGridPickerFilterNav = useCallback(() => {
+    switch (steamGridPickerFilterNavIndex) {
+      case 0:
+        steamGridPickerSearchInputRef.current?.focus();
+        break;
+      case 1:
+        if (steamGridPickerSortMenuOpen) {
+          const opt =
+            STEAMGRID_PICKER_SORT_OPTIONS[steamGridPickerSortMenuIndex]?.value ??
+            steamGridPickerSort;
+          chooseSteamGridPickerSort(opt);
+        } else {
+          openSteamGridPickerSortMenu();
+        }
+        break;
+      case 2:
+        setSteamGridPickerStaticOnly((v) => !v);
+        break;
+      case 3:
+        setSteamGridPickerNsfwOff((v) => !v);
+        break;
+      case 4:
+        setSteamGridPickerHumorOff((v) => !v);
+        break;
+      case 5:
+        steamGridPickerRefreshRef.current?.click();
+        break;
+      default:
+        break;
+    }
+  }, [
+    chooseSteamGridPickerSort,
+    openSteamGridPickerSortMenu,
+    steamGridPickerFilterNavIndex,
+    steamGridPickerSort,
+    steamGridPickerSortMenuIndex,
+    steamGridPickerSortMenuOpen,
+  ]);
+
   const closeSteamGridPicker = useCallback(() => {
     setSteamGridPickerTarget(null);
     setSteamGridPickerSearchQuery("");
     setSteamGridPickerSearchInput("");
     setSteamGridPickerItems([]);
+    setSteamGridPickerSortMenuOpen(false);
+    setSteamGridPickerSortMenuIndex(0);
+    setSteamGridPickerFocusPane("gallery");
+    setSteamGridPickerFilterNavIndex(0);
     setSteamGridPickerPage(0);
     setSteamGridPickerSelectedIndex(0);
     setSteamGridPickerLoading(false);
@@ -965,6 +1118,22 @@ export function CollectionsView({ session, onLogout }: Props) {
     window.addEventListener("resize", sync);
     return () => window.removeEventListener("resize", sync);
   }, [steamGridPickerOpen]);
+
+  useLayoutEffect(() => {
+    if (!steamGridPickerOpen || steamGridPickerFocusPane !== "filters") return;
+    if (steamGridPickerSortMenuOpen && steamGridPickerFilterNavIndex === 1) {
+      steamGridPickerSortOptionRefs.current[steamGridPickerSortMenuIndex]?.focus();
+      return;
+    }
+    focusSteamGridPickerFilterControl(steamGridPickerFilterNavIndex);
+  }, [
+    focusSteamGridPickerFilterControl,
+    steamGridPickerFilterNavIndex,
+    steamGridPickerFocusPane,
+    steamGridPickerOpen,
+    steamGridPickerSortMenuIndex,
+    steamGridPickerSortMenuOpen,
+  ]);
 
   const loadSteamGridPickerResults = useCallback(
     async (
@@ -1015,18 +1184,9 @@ export function CollectionsView({ session, onLogout }: Props) {
               )
             : list;
 
-        filteredList.sort((a, b) => {
-          if (steamGridPickerSort === "recent") {
-            const ta = a.createdAt ? Date.parse(a.createdAt) : 0;
-            const tb = b.createdAt ? Date.parse(b.createdAt) : 0;
-            if (ta !== tb) return tb - ta;
-            return b.sourceIndex - a.sourceIndex;
-          }
-          const sa = a.score ?? Number.NEGATIVE_INFINITY;
-          const sb = b.score ?? Number.NEGATIVE_INFINITY;
-          if (sa !== sb) return sb - sa;
-          return a.sourceIndex - b.sourceIndex;
-        });
+        filteredList.sort((a, b) =>
+          compareSteamGridItems(a, b, steamGridPickerSort),
+        );
 
         setSteamGridPickerItems(filteredList);
         if (filteredList.length === 0) {
@@ -1075,13 +1235,23 @@ export function CollectionsView({ session, onLogout }: Props) {
       setSteamGridPickerSearchQuery(searchQuery);
       setSteamGridPickerSearchInput(searchQuery);
       setSteamGridPickerItems([]);
+      setSteamGridPickerSortMenuOpen(false);
+      setSteamGridPickerSortMenuIndex(steamGridPickerSort === "score" ? 0 : 1);
+      setSteamGridPickerFocusPane("gallery");
+      setSteamGridPickerFilterNavIndex(0);
       setSteamGridPickerPage(0);
       setSteamGridPickerSelectedIndex(0);
       setSteamGridPickerError(null);
       await loadSteamGridPickerResults(target, searchQuery, initialIndex);
     },
-    [loadSteamGridPickerResults],
+    [loadSteamGridPickerResults, steamGridPickerSort],
   );
+
+  useEffect(() => {
+    if (steamGridPickerFocusPane !== "filters" || steamGridPickerFilterNavIndex !== 1) {
+      setSteamGridPickerSortMenuOpen(false);
+    }
+  }, [steamGridPickerFilterNavIndex, steamGridPickerFocusPane]);
 
   const refreshSteamGridPicker = useCallback(() => {
     if (!steamGridPickerTarget || steamGridPickerLoading) return;
@@ -1704,6 +1874,20 @@ export function CollectionsView({ session, onLogout }: Props) {
     onRefresh: () => void onRefreshLibrary(),
   });
 
+  const pickerPrevButtonsRef = useRef<boolean[] | null>(null);
+  const pickerLastNavAtRef = useRef(0);
+  const pickerLastActionAtRef = useRef(0);
+  const pickerHoldRef = useRef<{
+    xSign: -1 | 0 | 1;
+    ySign: -1 | 0 | 1;
+    lastStep: number;
+  }>({
+    xSign: 0,
+    ySign: 0,
+    lastStep: 0,
+  });
+  const pickerLastGamepadIndexRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (
       !steamGridPickerOpen ||
@@ -1715,13 +1899,6 @@ export function CollectionsView({ session, onLogout }: Props) {
     }
 
     let raf = 0;
-    let prevButtons: boolean[] | null = null;
-    let lastActionAt = 0;
-    let hold: { xSign: -1 | 0 | 1; ySign: -1 | 0 | 1; lastStep: number } = {
-      xSign: 0,
-      ySign: 0,
-      lastStep: 0,
-    };
 
     const tick = () => {
       if (document.visibilityState !== "visible") {
@@ -1731,36 +1908,202 @@ export function CollectionsView({ session, onLogout }: Props) {
 
       const pad = getActiveGamepad();
       if (!pad) {
-        prevButtons = null;
-        hold = { xSign: 0, ySign: 0, lastStep: 0 };
+        pickerLastGamepadIndexRef.current = null;
+        pickerPrevButtonsRef.current = null;
+        pickerHoldRef.current = { xSign: 0, ySign: 0, lastStep: 0 };
         raf = requestAnimationFrame(tick);
         return;
+      }
+
+      if (pickerLastGamepadIndexRef.current !== pad.index) {
+        pickerLastGamepadIndexRef.current = pad.index;
+        pickerPrevButtonsRef.current = null;
+        pickerHoldRef.current = { xSign: 0, ySign: 0, lastStep: 0 };
       }
 
       const now = performance.now();
       const pressed = pad.buttons.map(
         (b) => b.pressed || (typeof b.value === "number" && b.value > 0.5),
       );
-      const prev = prevButtons ?? pressed.map(() => false);
+      const prev = pickerPrevButtonsRef.current ?? pressed.map(() => false);
+
+      if (now - pickerLastActionAtRef.current >= PICKER_ACTION_DEBOUNCE_MS) {
+        const north = pressed[GP_FACE_NORTH] ?? false;
+        const prevNorth = prev[GP_FACE_NORTH] ?? false;
+        if (north && !prevNorth) {
+          pickerLastActionAtRef.current = now;
+          toggleSteamGridPickerFocusPane();
+          pickerPrevButtonsRef.current = pressed;
+          raf = requestAnimationFrame(tick);
+          return;
+        }
+      }
+
+      if (steamGridPickerFocusPane === "filters") {
+        if (steamGridPickerSortMenuOpen && steamGridPickerFilterNavIndex === 1) {
+          const canDpadNav =
+            now - pickerLastNavAtRef.current >= PICKER_DPAD_DEBOUNCE_MS;
+          if (
+            canDpadNav &&
+            ((pressed[PICKER_DPAD_UP] && !prev[PICKER_DPAD_UP]) ||
+              (pressed[PICKER_DPAD_LEFT] && !prev[PICKER_DPAD_LEFT]))
+          ) {
+            setSteamGridPickerSortMenuIndex((i) => Math.max(0, i - 1));
+            pickerLastNavAtRef.current = now;
+          } else if (
+            canDpadNav &&
+            ((pressed[PICKER_DPAD_DOWN] && !prev[PICKER_DPAD_DOWN]) ||
+              (pressed[PICKER_DPAD_RIGHT] && !prev[PICKER_DPAD_RIGHT]))
+          ) {
+            setSteamGridPickerSortMenuIndex((i) =>
+              Math.min(STEAMGRID_PICKER_SORT_OPTIONS.length - 1, i + 1),
+            );
+            pickerLastNavAtRef.current = now;
+          }
+
+          if (now - pickerLastActionAtRef.current >= PICKER_ACTION_DEBOUNCE_MS) {
+            const south = pressed[GP_FACE_SOUTH] ?? false;
+            const prevSouth = prev[GP_FACE_SOUTH] ?? false;
+            if (south && !prevSouth) {
+              pickerLastActionAtRef.current = now;
+              const nextSort =
+                STEAMGRID_PICKER_SORT_OPTIONS[steamGridPickerSortMenuIndex]?.value ??
+                steamGridPickerSort;
+              chooseSteamGridPickerSort(nextSort);
+            }
+
+            const east = pressed[GP_FACE_EAST] ?? false;
+            const prevEast = prev[GP_FACE_EAST] ?? false;
+            if (east && !prevEast) {
+              pickerLastActionAtRef.current = now;
+              closeSteamGridPickerSortMenu();
+            }
+          }
+
+          pickerPrevButtonsRef.current = pressed;
+          raf = requestAnimationFrame(tick);
+          return;
+        }
+
+        let filterNavigated = false;
+        const canDpadNav =
+          now - pickerLastNavAtRef.current >= PICKER_DPAD_DEBOUNCE_MS;
+        if (canDpadNav && pressed[PICKER_DPAD_UP] && !prev[PICKER_DPAD_UP]) {
+          setSteamGridPickerFilterNavIndex((i) => Math.max(0, i - 1));
+          filterNavigated = true;
+          pickerLastNavAtRef.current = now;
+          pickerHoldRef.current = { xSign: 0, ySign: 0, lastStep: 0 };
+        } else if (
+          canDpadNav &&
+          pressed[PICKER_DPAD_DOWN] &&
+          !prev[PICKER_DPAD_DOWN]
+        ) {
+          setSteamGridPickerFilterNavIndex((i) =>
+            Math.min(PICKER_FILTER_NAV_SLOTS - 1, i + 1),
+          );
+          filterNavigated = true;
+          pickerLastNavAtRef.current = now;
+          pickerHoldRef.current = { xSign: 0, ySign: 0, lastStep: 0 };
+        } else if (
+          canDpadNav &&
+          ((pressed[PICKER_DPAD_LEFT] && !prev[PICKER_DPAD_LEFT]) ||
+            (pressed[PICKER_DPAD_RIGHT] && !prev[PICKER_DPAD_RIGHT]))
+        ) {
+          if (steamGridPickerFilterNavIndex === 1) {
+            const baseIndex = steamGridPickerSortMenuOpen
+              ? steamGridPickerSortMenuIndex
+              : steamGridPickerSort === "score"
+                ? 0
+                : 1;
+            const nextIndex = Math.min(
+              STEAMGRID_PICKER_SORT_OPTIONS.length - 1,
+              Math.max(0, baseIndex + (pressed[PICKER_DPAD_RIGHT] ? 1 : -1)),
+            );
+            openSteamGridPickerSortMenu(nextIndex);
+          }
+          filterNavigated = true;
+          pickerLastNavAtRef.current = now;
+          pickerHoldRef.current = { xSign: 0, ySign: 0, lastStep: 0 };
+        }
+
+        if (!filterNavigated) {
+          const ax = pad.axes[0] ?? 0;
+          const ay = pad.axes[1] ?? 0;
+          const dead = 0.45;
+          const hold = pickerHoldRef.current;
+
+          if (Math.abs(ay) > dead && Math.abs(ay) >= Math.abs(ax)) {
+            const ySign: -1 | 1 = ay > 0 ? 1 : -1;
+            if (
+              hold.ySign !== ySign ||
+              now - hold.lastStep >= PICKER_STICK_REPEAT_MS
+            ) {
+              setSteamGridPickerFilterNavIndex((i) =>
+                Math.min(
+                  PICKER_FILTER_NAV_SLOTS - 1,
+                  Math.max(0, i + (ySign > 0 ? 1 : -1)),
+                ),
+              );
+              pickerHoldRef.current = { xSign: 0, ySign, lastStep: now };
+            }
+          } else if (hold.ySign !== 0 || hold.xSign !== 0) {
+            pickerHoldRef.current = { xSign: 0, ySign: 0, lastStep: 0 };
+          }
+        }
+
+        if (now - pickerLastActionAtRef.current >= PICKER_ACTION_DEBOUNCE_MS) {
+          const south = pressed[GP_FACE_SOUTH] ?? false;
+          const prevSouth = prev[GP_FACE_SOUTH] ?? false;
+          if (south && !prevSouth) {
+            pickerLastActionAtRef.current = now;
+            activateSteamGridPickerFilterNav();
+          }
+
+          const east = pressed[GP_FACE_EAST] ?? false;
+          const prevEast = prev[GP_FACE_EAST] ?? false;
+          if (east && !prevEast) {
+            pickerLastActionAtRef.current = now;
+            closeSteamGridPicker();
+          }
+        }
+
+        pickerPrevButtonsRef.current = pressed;
+        raf = requestAnimationFrame(tick);
+        return;
+      }
 
       let navigated = false;
-      if (pressed[PICKER_DPAD_LEFT] && !prev[PICKER_DPAD_LEFT]) {
+      const canDpadNav = now - pickerLastNavAtRef.current >= PICKER_DPAD_DEBOUNCE_MS;
+      if (canDpadNav && pressed[PICKER_DPAD_LEFT] && !prev[PICKER_DPAD_LEFT]) {
         moveSteamGridPickerSelection(-1);
         navigated = true;
-      } else if (pressed[PICKER_DPAD_RIGHT] && !prev[PICKER_DPAD_RIGHT]) {
+        pickerLastNavAtRef.current = now;
+      } else if (
+        canDpadNav &&
+        pressed[PICKER_DPAD_RIGHT] &&
+        !prev[PICKER_DPAD_RIGHT]
+      ) {
         moveSteamGridPickerSelection(1);
         navigated = true;
-      } else if (pressed[PICKER_DPAD_UP] && !prev[PICKER_DPAD_UP]) {
+        pickerLastNavAtRef.current = now;
+      } else if (canDpadNav && pressed[PICKER_DPAD_UP] && !prev[PICKER_DPAD_UP]) {
         moveSteamGridPickerSelection(-steamGridPickerCols);
         navigated = true;
-      } else if (pressed[PICKER_DPAD_DOWN] && !prev[PICKER_DPAD_DOWN]) {
+        pickerLastNavAtRef.current = now;
+      } else if (
+        canDpadNav &&
+        pressed[PICKER_DPAD_DOWN] &&
+        !prev[PICKER_DPAD_DOWN]
+      ) {
         moveSteamGridPickerSelection(steamGridPickerCols);
         navigated = true;
+        pickerLastNavAtRef.current = now;
       }
 
       if (!navigated) {
         const ax = pad.axes[0] ?? 0;
         const ay = pad.axes[1] ?? 0;
+        const hold = pickerHoldRef.current;
         let xSign: -1 | 0 | 1 = 0;
         let ySign: -1 | 0 | 1 = 0;
         if (Math.abs(ax) >= Math.abs(ay) && Math.abs(ax) > PICKER_STICK_DEAD) {
@@ -1770,7 +2113,7 @@ export function CollectionsView({ session, onLogout }: Props) {
         }
 
         if (xSign === 0 && ySign === 0) {
-          hold = { xSign: 0, ySign: 0, lastStep: 0 };
+          pickerHoldRef.current = { xSign: 0, ySign: 0, lastStep: 0 };
         } else {
           const changed = xSign !== hold.xSign || ySign !== hold.ySign;
           if (changed || now - hold.lastStep >= PICKER_STICK_REPEAT_MS) {
@@ -1778,57 +2121,67 @@ export function CollectionsView({ session, onLogout }: Props) {
             if (ySign !== 0) {
               moveSteamGridPickerSelection(ySign * steamGridPickerCols);
             }
-            hold = { xSign, ySign, lastStep: now };
+            pickerHoldRef.current = { xSign, ySign, lastStep: now };
           }
         }
       }
 
-      if (now - lastActionAt >= PICKER_ACTION_DEBOUNCE_MS) {
+      if (now - pickerLastActionAtRef.current >= PICKER_ACTION_DEBOUNCE_MS) {
         const lb = pressed[PICKER_LB] ?? false;
         const prevLb = prev[PICKER_LB] ?? false;
         if (lb && !prevLb) {
-          lastActionAt = now;
+          pickerLastActionAtRef.current = now;
           moveSteamGridPickerPage(-1);
         }
 
         const rb = pressed[PICKER_RB] ?? false;
         const prevRb = prev[PICKER_RB] ?? false;
         if (rb && !prevRb) {
-          lastActionAt = now;
+          pickerLastActionAtRef.current = now;
           moveSteamGridPickerPage(1);
         }
       }
 
-      if (now - lastActionAt >= PICKER_ACTION_DEBOUNCE_MS) {
+      if (now - pickerLastActionAtRef.current >= PICKER_ACTION_DEBOUNCE_MS) {
         const south = pressed[GP_FACE_SOUTH] ?? false;
         const prevSouth = prev[GP_FACE_SOUTH] ?? false;
         if (south && !prevSouth) {
-          lastActionAt = now;
+          pickerLastActionAtRef.current = now;
           applySteamGridPickerSelection();
         }
 
         const east = pressed[GP_FACE_EAST] ?? false;
         const prevEast = prev[GP_FACE_EAST] ?? false;
         if (east && !prevEast) {
-          lastActionAt = now;
+          pickerLastActionAtRef.current = now;
           closeSteamGridPicker();
         }
       }
 
-      prevButtons = pressed;
+      pickerPrevButtonsRef.current = pressed;
       raf = requestAnimationFrame(tick);
     };
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [
+    activateSteamGridPickerFilterNav,
     applySteamGridPickerSelection,
+    chooseSteamGridPickerSort,
     closeSteamGridPicker,
+    closeSteamGridPickerSortMenu,
     moveSteamGridPickerPage,
     moveSteamGridPickerSelection,
+    openSteamGridPickerSortMenu,
+    steamGridPickerFilterNavIndex,
+    steamGridPickerFocusPane,
     steamGridPickerCols,
     steamGridPickerOpen,
+    steamGridPickerSort,
+    steamGridPickerSortMenuIndex,
+    steamGridPickerSortMenuOpen,
     tauriShell,
+    toggleSteamGridPickerFocusPane,
   ]);
 
   useEffect(() => {
@@ -1845,9 +2198,101 @@ export function CollectionsView({ session, onLogout }: Props) {
       if (steamGridPickerOpen) {
         const shortcutTarget = isShortcutTarget(e.target);
 
+        if (e.key === "Tab" || e.key === "f" || e.key === "F") {
+          e.preventDefault();
+          setSteamGridPickerSortMenuOpen(false);
+          toggleSteamGridPickerFocusPane();
+          return;
+        }
+
         if (e.key === "Escape") {
           e.preventDefault();
-          closeSteamGridPicker();
+          if (steamGridPickerSortMenuOpen) {
+            closeSteamGridPickerSortMenu();
+          } else {
+            closeSteamGridPicker();
+          }
+          return;
+        }
+
+        if (steamGridPickerFocusPane === "filters") {
+          if (steamGridPickerSortMenuOpen && steamGridPickerFilterNavIndex === 1) {
+            if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+              e.preventDefault();
+              setSteamGridPickerSortMenuIndex((i) => Math.max(0, i - 1));
+              return;
+            }
+            if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+              e.preventDefault();
+              setSteamGridPickerSortMenuIndex((i) =>
+                Math.min(STEAMGRID_PICKER_SORT_OPTIONS.length - 1, i + 1),
+              );
+              return;
+            }
+            if (e.key === "Enter" && !e.repeat) {
+              e.preventDefault();
+              const nextSort =
+                STEAMGRID_PICKER_SORT_OPTIONS[steamGridPickerSortMenuIndex]?.value ??
+                steamGridPickerSort;
+              chooseSteamGridPickerSort(nextSort);
+              return;
+            }
+            if (e.key === "Backspace") {
+              e.preventDefault();
+              closeSteamGridPickerSortMenu();
+              return;
+            }
+            return;
+          }
+
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setSteamGridPickerFilterNavIndex((i) => Math.max(0, i - 1));
+            return;
+          }
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setSteamGridPickerFilterNavIndex((i) =>
+              Math.min(PICKER_FILTER_NAV_SLOTS - 1, i + 1),
+            );
+            return;
+          }
+          if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+            if (steamGridPickerFilterNavIndex === 1) {
+              e.preventDefault();
+              const baseIndex = steamGridPickerSortMenuOpen
+                ? steamGridPickerSortMenuIndex
+                : steamGridPickerSort === "score"
+                  ? 0
+                  : 1;
+              const nextIndex = Math.min(
+                STEAMGRID_PICKER_SORT_OPTIONS.length - 1,
+                Math.max(0, baseIndex + (e.key === "ArrowRight" ? 1 : -1)),
+              );
+              openSteamGridPickerSortMenu(nextIndex);
+            }
+            return;
+          }
+          if (e.key === "Enter" && !e.repeat) {
+            e.preventDefault();
+            if (shortcutTarget && steamGridPickerFilterNavIndex === 0) {
+              refreshSteamGridPicker();
+            } else if (steamGridPickerFilterNavIndex === 1) {
+              openSteamGridPickerSortMenu();
+            } else {
+              activateSteamGridPickerFilterNav();
+            }
+            return;
+          }
+          if (e.key === "Backspace" && !shortcutTarget) {
+            e.preventDefault();
+            closeSteamGridPicker();
+            return;
+          }
+
+          if (shortcutTarget) {
+            return;
+          }
           return;
         }
 
@@ -2061,9 +2506,19 @@ export function CollectionsView({ session, onLogout }: Props) {
     activateSettingsNav,
     activateCollectionSettingsNav,
     activateGameSettingsNav,
+    activateSteamGridPickerFilterNav,
+    chooseSteamGridPickerSort,
+    closeSteamGridPickerSortMenu,
+    openSteamGridPickerSortMenu,
     refreshing,
     steamGridPickerCols,
+    steamGridPickerFilterNavIndex,
+    steamGridPickerFocusPane,
     steamGridPickerOpen,
+    steamGridPickerSort,
+    steamGridPickerSortMenuIndex,
+    steamGridPickerSortMenuOpen,
+    toggleSteamGridPickerFocusPane,
   ]);
 
   const slots = useMemo(() => {
@@ -2410,65 +2865,186 @@ export function CollectionsView({ session, onLogout }: Props) {
               </header>
 
               <div className="steamgrid-picker-body">
-                <aside className="steamgrid-picker-filters">
+                <aside
+                  className={`steamgrid-picker-filters${
+                    steamGridPickerFocusPane === "filters"
+                      ? " steamgrid-picker-pane--active"
+                      : ""
+                  }`}
+                >
                   <p className="steamgrid-picker-filters-title">Search</p>
                   <input
+                    ref={steamGridPickerSearchInputRef}
                     type="text"
-                    className="steamgrid-picker-input"
+                    className={`steamgrid-picker-input${
+                      steamGridPickerFocusPane === "filters" &&
+                      steamGridPickerFilterNavIndex === 0
+                        ? " steamgrid-picker-control--active"
+                        : ""
+                    }`}
                     value={steamGridPickerSearchInput}
                     onChange={(e) => setSteamGridPickerSearchInput(e.target.value)}
+                    onFocus={() => {
+                      setSteamGridPickerFocusPane("filters");
+                      setSteamGridPickerFilterNavIndex(0);
+                    }}
                     placeholder="Search title"
                   />
 
                   <p className="steamgrid-picker-filters-title">Sort</p>
-                  <select
-                    className="steamgrid-picker-select"
-                    value={steamGridPickerSort}
-                    onChange={(e) =>
-                      setSteamGridPickerSort(e.target.value as SteamGridPickerSort)
-                    }
-                  >
-                    <option value="score">Most upvoted</option>
-                    <option value="recent">Most recent</option>
-                  </select>
+                  <div className="steamgrid-picker-sort-wrap">
+                    <button
+                      ref={steamGridPickerSortButtonRef}
+                      type="button"
+                      className={`steamgrid-picker-sort-trigger${
+                        steamGridPickerFocusPane === "filters" &&
+                        steamGridPickerFilterNavIndex === 1
+                          ? " steamgrid-picker-control--active"
+                          : ""
+                      }`}
+                      aria-expanded={steamGridPickerSortMenuOpen}
+                      onClick={() => {
+                        if (steamGridPickerSortMenuOpen) {
+                          closeSteamGridPickerSortMenu();
+                        } else {
+                          openSteamGridPickerSortMenu();
+                        }
+                      }}
+                      onFocus={() => {
+                        setSteamGridPickerFocusPane("filters");
+                        setSteamGridPickerFilterNavIndex(1);
+                      }}
+                    >
+                      <span>
+                        {
+                          STEAMGRID_PICKER_SORT_OPTIONS.find(
+                            (opt) => opt.value === steamGridPickerSort,
+                          )?.label
+                        }
+                      </span>
+                      <span className="steamgrid-picker-sort-caret" aria-hidden="true">
+                        {steamGridPickerSortMenuOpen ? "^" : "v"}
+                      </span>
+                    </button>
+                    {steamGridPickerSortMenuOpen && (
+                      <div className="steamgrid-picker-sort-menu" role="listbox">
+                        {STEAMGRID_PICKER_SORT_OPTIONS.map((opt, idx) => (
+                          <button
+                            key={opt.value}
+                            ref={(el) => {
+                              steamGridPickerSortOptionRefs.current[idx] = el;
+                            }}
+                            type="button"
+                            className={`steamgrid-picker-sort-option${
+                              steamGridPickerSort === opt.value
+                                ? " steamgrid-picker-sort-option--selected"
+                                : ""
+                            }${
+                              steamGridPickerSortMenuIndex === idx
+                                ? " steamgrid-picker-sort-option--active"
+                                : ""
+                            }`}
+                            role="option"
+                            aria-selected={steamGridPickerSort === opt.value}
+                            onClick={() => chooseSteamGridPickerSort(opt.value)}
+                            onFocus={() => setSteamGridPickerSortMenuIndex(idx)}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
                   <p className="steamgrid-picker-filters-title">Filters</p>
-                  <label className="steamgrid-picker-check">
+                  <label
+                    className={`steamgrid-picker-check${
+                      steamGridPickerFocusPane === "filters" &&
+                      steamGridPickerFilterNavIndex === 2
+                        ? " steamgrid-picker-control--active"
+                        : ""
+                    }`}
+                  >
                     <input
+                      ref={steamGridPickerStaticRef}
                       type="checkbox"
                       checked={steamGridPickerStaticOnly}
                       onChange={(e) => setSteamGridPickerStaticOnly(e.target.checked)}
+                      onFocus={() => {
+                        setSteamGridPickerFocusPane("filters");
+                        setSteamGridPickerFilterNavIndex(2);
+                      }}
                     />
                     <span>Static only</span>
                   </label>
-                  <label className="steamgrid-picker-check">
+                  <label
+                    className={`steamgrid-picker-check${
+                      steamGridPickerFocusPane === "filters" &&
+                      steamGridPickerFilterNavIndex === 3
+                        ? " steamgrid-picker-control--active"
+                        : ""
+                    }`}
+                  >
                     <input
+                      ref={steamGridPickerNsfwRef}
                       type="checkbox"
                       checked={steamGridPickerNsfwOff}
                       onChange={(e) => setSteamGridPickerNsfwOff(e.target.checked)}
+                      onFocus={() => {
+                        setSteamGridPickerFocusPane("filters");
+                        setSteamGridPickerFilterNavIndex(3);
+                      }}
                     />
                     <span>NSFW off</span>
                   </label>
-                  <label className="steamgrid-picker-check">
+                  <label
+                    className={`steamgrid-picker-check${
+                      steamGridPickerFocusPane === "filters" &&
+                      steamGridPickerFilterNavIndex === 4
+                        ? " steamgrid-picker-control--active"
+                        : ""
+                    }`}
+                  >
                     <input
+                      ref={steamGridPickerHumorRef}
                       type="checkbox"
                       checked={steamGridPickerHumorOff}
                       onChange={(e) => setSteamGridPickerHumorOff(e.target.checked)}
+                      onFocus={() => {
+                        setSteamGridPickerFocusPane("filters");
+                        setSteamGridPickerFilterNavIndex(4);
+                      }}
                     />
                     <span>Humor off</span>
                   </label>
 
                   <button
+                    ref={steamGridPickerRefreshRef}
                     type="button"
-                    className="steamgrid-picker-refresh"
+                    className={`steamgrid-picker-refresh${
+                      steamGridPickerFocusPane === "filters" &&
+                      steamGridPickerFilterNavIndex === 5
+                        ? " steamgrid-picker-control--active"
+                        : ""
+                    }`}
                     onClick={refreshSteamGridPicker}
+                    onFocus={() => {
+                      setSteamGridPickerFocusPane("filters");
+                      setSteamGridPickerFilterNavIndex(5);
+                    }}
                     disabled={steamGridPickerLoading}
                   >
                     Refresh results
                   </button>
                 </aside>
 
-                <div className="steamgrid-picker-gallery-wrap">
+                <div
+                  className={`steamgrid-picker-gallery-wrap${
+                    steamGridPickerFocusPane === "gallery"
+                      ? " steamgrid-picker-pane--active"
+                      : ""
+                  }`}
+                >
                   <div className="steamgrid-picker-gallery-toolbar">
                     <p className="steamgrid-picker-page-label">
                       Page {steamGridPickerPage + 1} / {steamGridPickerPageCount}
@@ -2517,7 +3093,11 @@ export function CollectionsView({ session, onLogout }: Props) {
                               ? " steamgrid-picker-tile--active"
                               : ""
                           }`}
-                          onClick={() => setSteamGridPickerSelectedIndex(idx)}
+                          onClick={() => {
+                            setSteamGridPickerFocusPane("gallery");
+                            setSteamGridPickerSelectedIndex(idx);
+                          }}
+                          onFocus={() => setSteamGridPickerFocusPane("gallery")}
                         >
                           <img src={item.url} alt="SteamGrid artwork" loading="lazy" />
                           <span className="steamgrid-picker-tile-index">
@@ -2595,6 +3175,7 @@ export function CollectionsView({ session, onLogout }: Props) {
                 <span>B / Esc Close</span>
                 <span>D-pad / Arrows Move</span>
                 <span>LB/RB or PageUp/PageDown Page</span>
+                <span>Y / Tab Switch focus</span>
                 <span>A / Enter Apply</span>
               </footer>
             </section>
