@@ -1,4 +1,4 @@
-Steam Deck diagnostics generated: 2026-04-05T10:10:13+01:00
+Steam Deck diagnostics generated: 2026-04-05T10:20:25+01:00
 
 ===== Host Basics =====
 --- uname
@@ -46,16 +46,16 @@ Extended renderer info (GLX_MESA_query_renderer):
     Max GLES1 profile version: 1.1
     Max GLES[23] profile version: 3.2
 Memory info (GL_ATI_meminfo):
-    VBO free memory - total: 79 MB, largest block: 79 MB
-    VBO free aux. memory - total: 7429 MB, largest block: 7429 MB
-    Texture free memory - total: 79 MB, largest block: 79 MB
-    Texture free aux. memory - total: 7429 MB, largest block: 7429 MB
-    Renderbuffer free memory - total: 79 MB, largest block: 79 MB
-    Renderbuffer free aux. memory - total: 7429 MB, largest block: 7429 MB
+    VBO free memory - total: 84 MB, largest block: 84 MB
+    VBO free aux. memory - total: 7413 MB, largest block: 7413 MB
+    Texture free memory - total: 84 MB, largest block: 84 MB
+    Texture free aux. memory - total: 7413 MB, largest block: 7413 MB
+    Renderbuffer free memory - total: 84 MB, largest block: 84 MB
+    Renderbuffer free aux. memory - total: 7413 MB, largest block: 7413 MB
 Memory info (GL_NVX_gpu_memory_info):
     Dedicated video memory: 1024 MB
     Total available memory: 9216 MB
-    Currently available dedicated video memory: 79 MB
+    Currently available dedicated video memory: 84 MB
 OpenGL vendor string: AMD
 OpenGL renderer string: AMD Custom GPU 0405 (radeonsi, vangogh, LLVM 18.1.8, DRM 3.59, 6.11.11-valve27-1-neptune-611-g60ef8556a811)
 OpenGL core profile version string: 4.6 (Core Profile) Mesa 24.3.4 (git-8d0948917e)
@@ -168,13 +168,19 @@ Installation: system
         Date: 2026-02-07 23:34:53 +0000
 
 ===== WebKit / GTK libs on host =====
---- webkit pkg-config
-sh: line 1: pkg-config: command not found
-sh: line 1: pkg-config: command not found
---- gtk3 pkg-config
-sh: line 1: pkg-config: command not found
---- soup3 pkg-config
-sh: line 1: pkg-config: command not found
+pkg-config not available; falling back to package/query-based inspection
+--- pacman webkit packages
+gtk3 1:3.24.43-4
+gtk4 1:4.16.12-1
+libdbusmenu-gtk3 16.04.0.r498-2
+libsoup3 3.6.1-1
+zenity-gtk3 3.44.2-3
+--- ldconfig webkit libs
+	libsoup-3.0.so.0 (libc6,x86-64) => /usr/lib/libsoup-3.0.so.0
+	libsoup-3.0.so (libc6,x86-64) => /usr/lib/libsoup-3.0.so
+	libgtk-3.so.0 (libc6,x86-64) => /usr/lib/libgtk-3.so.0
+	libgtk-3.so (libc6,x86-64) => /usr/lib/libgtk-3.so
+--- webkit process binary info
 
 ===== AppImage Inspection =====
 No AppImage path provided. Pass it as the second argument to inspect and run it.
