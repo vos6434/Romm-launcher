@@ -20,6 +20,13 @@ run_cmd() {
   fi
 }
 
+run_shell() {
+  local label="$1"
+  local script="$2"
+  echo "--- ${label}"
+  sh -lc "$script" 2>&1 || true
+}
+
 {
   echo "Steam Deck diagnostics generated: $(date -Iseconds)"
 
@@ -41,16 +48,23 @@ run_cmd() {
   run_cmd "flatpak info retroarch" flatpak info org.libretro.RetroArch
 
   log_section "WebKit / GTK libs on host"
-  run_cmd "webkit pkg-config" sh -lc 'pkg-config --modversion webkit2gtk-4.1 || pkg-config --modversion webkit2gtk-4.0 || true'
-  run_cmd "gtk3 pkg-config" sh -lc 'pkg-config --modversion gtk+-3.0 || true'
-  run_cmd "soup3 pkg-config" sh -lc 'pkg-config --modversion libsoup-3.0 || true'
+  if command -v pkg-config >/dev/null 2>&1; then
+    run_shell "webkit pkg-config" 'pkg-config --modversion webkit2gtk-4.1 || pkg-config --modversion webkit2gtk-4.0 || true'
+    run_shell "gtk3 pkg-config" 'pkg-config --modversion gtk+-3.0 || true'
+    run_shell "soup3 pkg-config" 'pkg-config --modversion libsoup-3.0 || true'
+  else
+    echo "pkg-config not available; falling back to package/query-based inspection"
+    run_shell "pacman webkit packages" 'pacman -Q | grep -Ei "webkit|javascriptcore|libsoup|gtk3|gtk4" || true'
+    run_shell "ldconfig webkit libs" 'ldconfig -p | grep -Ei "webkit2gtk|javascriptcoregtk|libsoup-3.0|libgtk-3" || true'
+    run_shell "webkit process binary info" 'for p in /usr/lib/webkit2gtk-4.1/WebKitWebProcess /usr/libexec/webkit2gtk-4.1/WebKitWebProcess; do if [[ -f "$p" ]]; then echo "== $p =="; file "$p"; ldd "$p"; fi; done'
+  fi
 
   if [[ -n "${APPIMAGE_PATH}" ]]; then
     log_section "AppImage Inspection"
     echo "AppImage path: ${APPIMAGE_PATH}"
     run_cmd "file appimage" file "${APPIMAGE_PATH}"
     run_cmd "chmod appimage" chmod +x "${APPIMAGE_PATH}"
-    run_cmd "extract appimage" sh -lc 'APPIMAGE_EXTRACT_AND_RUN=1 "${APPIMAGE_PATH}" --appimage-extract >/dev/null 2>&1 || true'
+    run_shell "extract appimage" 'rm -rf squashfs-root; APPIMAGE_EXTRACT_AND_RUN=1 "${APPIMAGE_PATH}" --appimage-extract >/dev/null 2>&1 || true'
 
     if [[ -d squashfs-root ]]; then
       run_cmd "appdir webkit processes" sh -lc 'find squashfs-root -type f | grep -E "WebKit(Network|Web)Process$" || true'
@@ -58,12 +72,14 @@ run_cmd() {
       run_cmd "appdir desktop entry" sh -lc 'find squashfs-root -maxdepth 3 -type f | grep -E "\.desktop$" | head -n 5 | xargs -r sed -n "1,120p"'
 
       run_cmd "ldd tauri binary" sh -lc 'BIN=$(find squashfs-root -type f -name tauri-app | head -n 1); if [[ -n "$BIN" ]]; then ldd "$BIN"; else echo "tauri-app not found in squashfs-root"; fi'
+      run_cmd "readelf tauri binary" sh -lc 'BIN=$(find squashfs-root -type f -name tauri-app | head -n 1); if [[ -n "$BIN" ]]; then readelf -d "$BIN" | sed -n "1,220p"; else echo "tauri-app not found in squashfs-root"; fi'
     else
       echo "squashfs-root not present after extraction attempt"
     fi
 
     log_section "AppImage Runtime Test"
-    run_cmd "run appimage with webkit debug" sh -lc 'WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 GSK_RENDERER=cairo G_MESSAGES_DEBUG=all APPIMAGE_EXTRACT_AND_RUN=1 "${APPIMAGE_PATH}" 2>&1 | sed -n "1,220p"'
+    run_shell "run appimage with webkit debug" 'timeout 25s env WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 GSK_RENDERER=cairo G_MESSAGES_DEBUG=all WEBKIT_FORCE_SANDBOX=0 APPIMAGE_EXTRACT_AND_RUN=1 "${APPIMAGE_PATH}" 2>&1 | sed -n "1,320p"'
+    run_shell "run appimage with software GL" 'timeout 25s env LIBGL_ALWAYS_SOFTWARE=1 GSK_RENDERER=cairo WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 APPIMAGE_EXTRACT_AND_RUN=1 "${APPIMAGE_PATH}" 2>&1 | sed -n "1,220p"'
   else
     log_section "AppImage Inspection"
     echo "No AppImage path provided. Pass it as the second argument to inspect and run it."
