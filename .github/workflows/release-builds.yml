@@ -116,6 +116,29 @@ jobs:
           NO_STRIP: "1"
         run: npm run tauri build -- --bundles appimage,deb
 
+      - name: Generate Linux build metadata
+        run: |
+          mkdir -p src-tauri/target/release/bundle/metadata
+          APPIMAGE_PATH=$(ls -1 src-tauri/target/release/bundle/appimage/*.AppImage | head -n 1)
+          DEB_PATH=$(ls -1 src-tauri/target/release/bundle/deb/*.deb | head -n 1)
+          {
+            echo "commit_sha=${{ github.sha }}"
+            echo "ref_name=${{ github.ref_name }}"
+            echo "run_id=${{ github.run_id }}"
+            echo "run_attempt=${{ github.run_attempt }}"
+            echo "built_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "appimage_file=$(basename "$APPIMAGE_PATH")"
+            echo "deb_file=$(basename "$DEB_PATH")"
+          } > src-tauri/target/release/bundle/metadata/build-info.txt
+          sha256sum "$APPIMAGE_PATH" "$DEB_PATH" > src-tauri/target/release/bundle/metadata/checksums.sha256
+
+      - name: Package raw Linux binary
+        run: |
+          mkdir -p src-tauri/target/release/raw
+          cp src-tauri/target/release/tauri-app src-tauri/target/release/raw/
+          cp src-tauri/target/release/bundle/metadata/build-info.txt src-tauri/target/release/raw/
+          tar -C src-tauri/target/release/raw -czf src-tauri/target/release/raw/tauri-app-${{ github.sha }}.tar.gz tauri-app build-info.txt
+
       - name: Upload Steam Deck artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -123,3 +146,12 @@ jobs:
           path: |
             src-tauri/target/release/bundle/appimage/*.AppImage
             src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/metadata/build-info.txt
+            src-tauri/target/release/bundle/metadata/checksums.sha256
+
+      - name: Upload Steam Deck raw binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: steamdeck-raw-binary-${{ github.ref_name }}-${{ github.sha }}
+          path: |
+            src-tauri/target/release/raw/tauri-app-${{ github.sha }}.tar.gz

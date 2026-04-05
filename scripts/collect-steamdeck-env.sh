@@ -4,6 +4,54 @@ set -u
 OUT_FILE="${1:-steamdeck-diagnostics.txt}"
 APPIMAGE_PATH="${2:-}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+popup_info() {
+  local title="$1"
+  local body="$2"
+  if command -v zenity >/dev/null 2>&1; then
+    zenity --info --title "$title" --text "$body" --width 520 >/dev/null 2>&1 || true
+  elif command -v kdialog >/dev/null 2>&1; then
+    kdialog --title "$title" --msgbox "$body" >/dev/null 2>&1 || true
+  elif command -v qarma >/dev/null 2>&1; then
+    qarma --info --title "$title" --text "$body" >/dev/null 2>&1 || true
+  fi
+}
+
+popup_warning() {
+  local title="$1"
+  local body="$2"
+  if command -v zenity >/dev/null 2>&1; then
+    zenity --warning --title "$title" --text "$body" --width 560 >/dev/null 2>&1 || true
+  elif command -v kdialog >/dev/null 2>&1; then
+    kdialog --title "$title" --sorry "$body" >/dev/null 2>&1 || true
+  elif command -v qarma >/dev/null 2>&1; then
+    qarma --warning --title "$title" --text "$body" >/dev/null 2>&1 || true
+  fi
+}
+
+artifact_sha_from_path() {
+  local p="$1"
+  echo "$p" | grep -Eo '[0-9a-f]{40}' | head -n 1 || true
+}
+
+resolve_latest_repo_sha() {
+  local latest=""
+  if git -C "$SCRIPT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    latest=$(git -C "$SCRIPT_DIR" ls-remote origin -h refs/heads/main 2>/dev/null | awk 'NR==1{print $1}')
+    if [[ -n "$latest" ]]; then
+      echo "$latest"
+      return 0
+    fi
+    latest=$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || true)
+    if [[ -n "$latest" ]]; then
+      echo "$latest"
+      return 0
+    fi
+  fi
+  return 1
+}
+
 pick_appimage_path() {
   local picked=""
 
@@ -66,6 +114,34 @@ fi
 
 export APPIMAGE_PATH
 
+SELECTED_ARTIFACT_SHA=""
+LATEST_REPO_SHA=""
+ARTIFACT_SHA_STATUS="unknown"
+
+if [[ -n "${APPIMAGE_PATH}" ]]; then
+  SELECTED_ARTIFACT_SHA="$(artifact_sha_from_path "$APPIMAGE_PATH")"
+  LATEST_REPO_SHA="$(resolve_latest_repo_sha || true)"
+
+  if [[ -n "$SELECTED_ARTIFACT_SHA" && -n "$LATEST_REPO_SHA" ]]; then
+    if [[ "$SELECTED_ARTIFACT_SHA" == "$LATEST_REPO_SHA" ]]; then
+      ARTIFACT_SHA_STATUS="match"
+      popup_info \
+        "Artifact Commit Check" \
+        "Selected AppImage appears to match latest main commit.\n\nArtifact SHA: ${SELECTED_ARTIFACT_SHA}\nLatest SHA: ${LATEST_REPO_SHA}"
+    else
+      ARTIFACT_SHA_STATUS="mismatch"
+      popup_warning \
+        "Artifact Commit Check" \
+        "Selected AppImage does NOT match latest main commit.\n\nArtifact SHA: ${SELECTED_ARTIFACT_SHA}\nLatest SHA: ${LATEST_REPO_SHA}\n\nYou may be testing an older artifact."
+    fi
+  elif [[ -n "$LATEST_REPO_SHA" && -z "$SELECTED_ARTIFACT_SHA" ]]; then
+    ARTIFACT_SHA_STATUS="no-sha-in-path"
+    popup_warning \
+      "Artifact Commit Check" \
+      "Could not find a commit SHA in selected AppImage path/name.\n\nLatest SHA: ${LATEST_REPO_SHA}\n\nUse an artifact folder/name that includes the commit SHA."
+  fi
+fi
+
 log_section() {
   echo
   echo "===== $1 ====="
@@ -124,6 +200,9 @@ run_shell() {
   if [[ -n "${APPIMAGE_PATH}" ]]; then
     log_section "AppImage Inspection"
     echo "AppImage path: ${APPIMAGE_PATH}"
+    echo "Artifact SHA status: ${ARTIFACT_SHA_STATUS}"
+    echo "Artifact SHA from path: ${SELECTED_ARTIFACT_SHA:-<none>}"
+    echo "Latest repo SHA: ${LATEST_REPO_SHA:-<unknown>}"
     run_cmd "file appimage" file "${APPIMAGE_PATH}"
     run_cmd "chmod appimage" chmod +x "${APPIMAGE_PATH}"
     run_shell "extract appimage" 'rm -rf squashfs-root; APPIMAGE_EXTRACT_AND_RUN=1 "${APPIMAGE_PATH}" --appimage-extract >/dev/null 2>&1 || true'
