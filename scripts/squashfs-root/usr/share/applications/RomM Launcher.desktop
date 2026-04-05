@@ -1,9 +1,0 @@
-[Desktop Entry]
-Categories=
-Comment=A Tauri App
-Exec=tauri-app
-StartupWMClass=tauri-app
-Icon=tauri-app
-Name=RomM Launcher
-Terminal=false
-Type=Application
