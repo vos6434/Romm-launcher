@@ -27,6 +27,35 @@ A **separate window** titled **RomM Launcher** should open (often after Rust com
 
 Enter your RomM base URL including the **API port** (RomM’s default is **3000**), e.g. `http://10.0.0.109:3000`. A URL like `http://10.0.0.109/` with no port only works if something is actually serving RomM’s `/api` on port 80.
 
+## Release Builds (Windows + Steam Deck)
+
+### Local Windows build
+
+```bash
+npm install
+npm run tauri build
+```
+
+Artifacts are created in:
+
+- `src-tauri/target/release/bundle/msi/`
+- `src-tauri/target/release/bundle/nsis/`
+
+### Steam Deck build (Linux x64)
+
+Steam Deck targets Linux x86_64, so build Linux artifacts on Linux/CI.
+
+This repo includes GitHub Actions workflow:
+
+- `.github/workflows/release-builds.yml`
+
+It runs on tag push (for example `v0.1.0`) or manual dispatch and uploads:
+
+- `AppImage` (`src-tauri/target/release/bundle/appimage/*.AppImage`)
+- `DEB` (`src-tauri/target/release/bundle/deb/*.deb`)
+
+For Steam Deck, prefer the `AppImage` first (simple portable install). Mark it executable before running.
+
 ### Rust build fails with `link.exe` not found (Windows)
 
 Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) and select **Desktop development with C++**, then run `npm run tauri dev` again.
