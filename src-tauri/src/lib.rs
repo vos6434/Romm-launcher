@@ -227,6 +227,54 @@ fn auto_core_path_from_platform(
     None
 }
 
+#[cfg(all(unix, not(target_os = "macos")))]
+fn detect_local_retroarch_executable() -> Option<String> {
+    let home = std::env::var("HOME").ok()?;
+    let home_dir = PathBuf::from(home);
+    let mut search_roots = vec![home_dir.join("Downloads"), home_dir.clone()];
+
+    // Toolbox/Bazzite can expose either /home/<user> or /var/home/<user>.
+    if let Some(stripped) = home_dir.to_string_lossy().strip_prefix("/home/") {
+        search_roots.push(PathBuf::from(format!("/var/home/{stripped}")).join("Downloads"));
+    }
+    if let Some(stripped) = home_dir.to_string_lossy().strip_prefix("/var/home/") {
+        search_roots.push(PathBuf::from(format!("/home/{stripped}")).join("Downloads"));
+    }
+
+    let mut queue: Vec<(PathBuf, usize)> = Vec::new();
+    for root in search_roots {
+        queue.push((root, 0));
+    }
+
+    while let Some((dir, depth)) = queue.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if depth < 4 {
+                    queue.push((path, depth + 1));
+                }
+                continue;
+            }
+            if !path.is_file() {
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let lower = name.to_ascii_lowercase();
+            if lower.contains("retroarch") && lower.ends_with(".appimage") {
+                return Some(path.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    None
+}
+
 #[cfg(target_os = "windows")]
 fn focus_and_maximize_window_for_pid(pid: u32) {
     use std::time::{Duration, Instant};
@@ -578,12 +626,38 @@ async fn launch_retroarch(
         return Err("ROM file does not exist.".to_string());
     }
 
-    let configured_retroarch = retro_arch_path
+    let mut configured_retroarch = retro_arch_path
         .as_deref()
         .map(str::trim)
         .map(|v| v.trim_matches('"').trim_matches('\''))
         .filter(|v| !v.is_empty())
-        .map(str::to_string);
+        .map(str::to_string)
+        .map(|p| {
+            if Path::new(&p).exists() {
+                return p;
+            }
+
+            if let Some(stripped) = p.strip_prefix("/home/") {
+                let alt = format!("/var/home/{stripped}");
+                if Path::new(&alt).exists() {
+                    return alt;
+                }
+            }
+
+            if let Some(stripped) = p.strip_prefix("/var/home/") {
+                let alt = format!("/home/{stripped}");
+                if Path::new(&alt).exists() {
+                    return alt;
+                }
+            }
+
+            p
+        });
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if configured_retroarch.is_none() {
+        configured_retroarch = detect_local_retroarch_executable();
+    }
 
     if let Some(executable) = configured_retroarch.as_deref() {
         let looks_like_path = executable.contains(['\\', '/', ':']);
@@ -634,18 +708,6 @@ async fn launch_retroarch(
         c
     };
 
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let mut cmd = {
-        let c = if let Some(executable) = configured_retroarch.as_deref() {
-            Command::new(executable)
-        } else {
-            let mut fallback = Command::new("flatpak");
-            fallback.arg("run").arg("org.libretro.RetroArch");
-            fallback
-        };
-        c
-    };
-
     #[cfg(target_os = "macos")]
     let mut cmd = {
         let executable = configured_retroarch.as_deref().unwrap_or("retroarch");
@@ -654,15 +716,76 @@ async fn launch_retroarch(
     };
 
     #[cfg(all(unix, not(target_os = "macos")))]
-    if is_appimage {
-        // AppImage can fail on some systems/containers without FUSE. This fallback
-        // tells AppImage to extract and run directly from a temp location.
-        cmd.env("APPIMAGE_EXTRACT_AND_RUN", "1");
+    let mut child = {
+        let mut launch_attempts: Vec<(String, Command)> = Vec::new();
+
+        if let Some(executable) = configured_retroarch.as_deref() {
+            launch_attempts.push((executable.to_string(), Command::new(executable)));
+        }
+
+        if let Some(auto_executable) = detect_local_retroarch_executable() {
+            let already_added = launch_attempts
+                .iter()
+                .any(|(label, _)| label == &auto_executable);
+            if !already_added {
+                launch_attempts.push((auto_executable.clone(), Command::new(auto_executable)));
+            }
+        }
+
+        let mut c1 = Command::new("flatpak");
+        c1.arg("run").arg("org.libretro.RetroArch");
+        launch_attempts.push(("flatpak run org.libretro.RetroArch".to_string(), c1));
+
+        let mut c2 = Command::new("/usr/bin/flatpak");
+        c2.arg("run").arg("org.libretro.RetroArch");
+        launch_attempts.push(("/usr/bin/flatpak run org.libretro.RetroArch".to_string(), c2));
+
+        let mut c3 = Command::new("host-spawn");
+        c3.arg("flatpak").arg("run").arg("org.libretro.RetroArch");
+        launch_attempts.push(("host-spawn flatpak run org.libretro.RetroArch".to_string(), c3));
+
+        launch_attempts.push(("retroarch".to_string(), Command::new("retroarch")));
+
+        let mut failures = Vec::<String>::new();
+        let mut spawned: Option<std::process::Child> = None;
+
+        for (label, mut candidate_cmd) in launch_attempts {
+            if is_appimage {
+                // AppImage can fail on some systems/containers without FUSE. This fallback
+                // tells AppImage to extract and run directly from a temp location.
+                candidate_cmd.env("APPIMAGE_EXTRACT_AND_RUN", "1");
+            }
+            candidate_cmd.stderr(Stdio::piped());
+            candidate_cmd.args(&launch_args);
+
+            match candidate_cmd.spawn() {
+                Ok(child) => {
+                    spawned = Some(child);
+                    break;
+                }
+                Err(e) => failures.push(format!("{label}: {e}")),
+            }
+        }
+
+        if let Some(child) = spawned {
+            child
+        } else if configured_retroarch.is_none() {
+            return Err(format!(
+                "Failed to launch RetroArch. Attempted: {}. Install Flatpak RetroArch (org.libretro.RetroArch) on the host or set a custom RetroArch command/path in Emulator Settings.",
+                failures.join(" | ")
+            ));
+        } else {
+            return Err(format!("Failed to launch RetroArch: {}", failures.join(" | ")));
+        }
+    };
+
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        cmd.stderr(Stdio::piped());
+        cmd.args(&launch_args);
     }
 
-    cmd.stderr(Stdio::piped());
-    cmd.args(&launch_args);
-
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     let mut child = cmd.spawn().map_err(|e| {
         #[cfg(target_os = "windows")]
         {
