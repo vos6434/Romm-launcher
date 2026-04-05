@@ -3157,11 +3157,44 @@ export function CollectionsView({ session, onLogout }: Props) {
               </div>
 
               <footer className="steamgrid-picker-footer">
-                <span>B / Esc Close</span>
-                <span>D-pad / Arrows Move</span>
-                <span>LB/RB or PageUp/PageDown Page</span>
-                <span>Y / Tab Switch focus</span>
-                <span>A / Enter Apply</span>
+                <div className="collections-footer-hint">
+                  {showGamepadHints ? (
+                    <GamepadHorizontalNavPromptGlyphs flavor={gamepadFlavor} />
+                  ) : (
+                    <KeyboardMoveHorizontalGlyph />
+                  )}
+                  <span>Move</span>
+                </div>
+                <div className="collections-footer-hint">
+                  <span className="steamgrid-picker-footer-key">
+                    {showGamepadHints ? "LB/RB" : "PgUp/PgDn"}
+                  </span>
+                  <span>Page</span>
+                </div>
+                <div className="collections-footer-hint">
+                  {showGamepadHints ? (
+                    <GamepadCollectionSettingsPromptGlyph flavor={gamepadFlavor} />
+                  ) : (
+                    <span className="steamgrid-picker-footer-key">Tab</span>
+                  )}
+                  <span>Switch focus</span>
+                </div>
+                <div className="collections-footer-hint">
+                  {showGamepadHints ? (
+                    <GamepadPromptGlyph flavor={gamepadFlavor} role="primary" />
+                  ) : (
+                    <KeyboardEnterPromptGlyph />
+                  )}
+                  <span>Apply</span>
+                </div>
+                <div className="collections-footer-hint">
+                  {showGamepadHints ? (
+                    <GamepadPromptGlyph flavor={gamepadFlavor} role="back" />
+                  ) : (
+                    <KeyboardBackGlyph />
+                  )}
+                  <span>Close</span>
+                </div>
               </footer>
             </section>
           </>,
