@@ -2855,13 +2855,6 @@ export function CollectionsView({ session, onLogout }: Props) {
                     query: {steamGridPickerSearchQuery}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="steamgrid-picker-close"
-                  onClick={closeSteamGridPicker}
-                >
-                  Close
-                </button>
               </header>
 
               <div className="steamgrid-picker-body">
@@ -3086,16 +3079,6 @@ export function CollectionsView({ session, onLogout }: Props) {
                           {steamGridPickerSelectedItem?.mime ?? "Unknown"}
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        className="steamgrid-picker-apply"
-                        onClick={applySteamGridPickerSelection}
-                        disabled={!steamGridPickerSelectedUrl}
-                      >
-                        {steamGridPickerTarget.artKind === "background"
-                          ? "Set as background"
-                          : "Set as cover art"}
-                      </button>
                     </aside>
                   </div>
                 </aside>
