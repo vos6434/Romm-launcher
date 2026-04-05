@@ -32,9 +32,25 @@ if [[ ! -x "squashfs-root/usr/bin/tauri-app" ]]; then
   exit 1
 fi
 
+WEBKIT_EXEC_PATH=""
+if [[ -x "squashfs-root/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess" ]]; then
+  WEBKIT_EXEC_PATH="squashfs-root/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
+elif [[ -x "squashfs-root/usr/libexec/webkit2gtk-4.1/WebKitNetworkProcess" ]]; then
+  WEBKIT_EXEC_PATH="squashfs-root/usr/libexec/webkit2gtk-4.1"
+fi
+
+if [[ -z "$WEBKIT_EXEC_PATH" ]]; then
+  echo "Could not find WebKitNetworkProcess in extracted AppDir."
+  echo "Checked:"
+  echo "  - squashfs-root/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
+  echo "  - squashfs-root/usr/libexec/webkit2gtk-4.1"
+  exit 1
+fi
+
 echo "Running extracted AppDir binary with bundled libs..."
 exec env \
   LD_LIBRARY_PATH="squashfs-root/usr/lib:squashfs-root/usr/lib/x86_64-linux-gnu" \
+  WEBKIT_EXEC_PATH="$WEBKIT_EXEC_PATH" \
   GDK_BACKEND=x11 \
   WAYLAND_DISPLAY= \
   WEBKIT_DISABLE_DMABUF_RENDERER=1 \
