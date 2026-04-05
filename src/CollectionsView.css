@@ -307,12 +307,14 @@ button.collections-settings-action:focus-visible {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 250px 1fr 330px;
+  grid-template-columns: 300px minmax(0, 1fr);
   gap: 16px;
   padding: 14px 18px 12px;
 }
 
 .steamgrid-picker-filters {
+  height: 100%;
+  min-height: 0;
   border-radius: 12px;
   border: 1px solid rgba(51, 65, 85, 0.8);
   background: rgba(2, 6, 23, 0.56);
@@ -407,7 +409,7 @@ button.collections-settings-action:focus-visible {
 }
 
 .steamgrid-picker-refresh {
-  margin-top: auto;
+  margin-top: 0;
   border: 1px solid #334155;
   background: rgba(15, 23, 42, 0.86);
   color: #e2e8f0;
@@ -415,6 +417,18 @@ button.collections-settings-action:focus-visible {
   padding: 9px 10px;
   cursor: pointer;
   font: 600 0.8rem/1 system-ui, sans-serif;
+}
+
+.steamgrid-picker-filters-preview {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.steamgrid-picker-filters-preview .steamgrid-picker-preview {
+  border: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .steamgrid-picker-refresh:disabled {
@@ -632,21 +646,13 @@ button.collections-settings-action:focus-visible {
 
 @media (max-width: 1180px) {
   .steamgrid-picker-body {
-    grid-template-columns: 1fr 300px;
-    grid-template-rows: auto minmax(210px, 1fr);
+    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-rows: 1fr;
     align-content: stretch;
   }
 
   .steamgrid-picker-filters {
-    grid-column: 1 / span 2;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-    align-items: end;
-  }
-
-  .steamgrid-picker-refresh {
-    margin-top: 0;
+    display: flex;
   }
 
   .steamgrid-picker-gallery-wrap {
@@ -673,7 +679,7 @@ button.collections-settings-action:focus-visible {
 
   .steamgrid-picker-body {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(180px, 1fr) auto;
+    grid-template-rows: auto minmax(180px, 1fr);
   }
 
   .steamgrid-picker-filters {
@@ -705,7 +711,7 @@ button.collections-settings-action:focus-visible {
 
   .steamgrid-picker-body {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(180px, 1fr) auto;
+    grid-template-rows: auto minmax(180px, 1fr);
     padding: 10px 12px 8px;
   }
 

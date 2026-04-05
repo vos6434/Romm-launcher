@@ -3036,6 +3036,68 @@ export function CollectionsView({ session, onLogout }: Props) {
                   >
                     Refresh results
                   </button>
+
+                  <div className="steamgrid-picker-filters-preview">
+                    <aside className="steamgrid-picker-preview">
+                      <p className="steamgrid-picker-preview-title">Preview</p>
+                      <div
+                        className="steamgrid-picker-preview-frame"
+                        style={
+                          steamGridPickerTarget.artKind === "background"
+                            ? backgroundImageStyle(steamGridPickerSelectedUrl)
+                            : undefined
+                        }
+                      >
+                        {steamGridPickerTarget.artKind === "background" ? (
+                          <div className="steamgrid-picker-preview-card" />
+                        ) : steamGridPickerSelectedUrl ? (
+                          <img
+                            className="steamgrid-picker-preview-cover"
+                            src={steamGridPickerSelectedUrl}
+                            alt="Selected cover preview"
+                          />
+                        ) : null}
+                      </div>
+                      <p className="steamgrid-picker-preview-meta">
+                        {steamGridPickerItems.length > 0
+                          ? `Selection ${steamGridPickerSelectedIndex + 1} of ${steamGridPickerItems.length}`
+                          : "No art available"}
+                      </p>
+                      <div className="steamgrid-picker-preview-details">
+                        <p>
+                          Resolution:{" "}
+                          {steamGridPickerSelectedItem?.width &&
+                          steamGridPickerSelectedItem?.height
+                            ? `${steamGridPickerSelectedItem.width} x ${steamGridPickerSelectedItem.height}`
+                            : "Unknown"}
+                        </p>
+                        <p>
+                          Score:{" "}
+                          {typeof steamGridPickerSelectedItem?.score === "number"
+                            ? steamGridPickerSelectedItem.score
+                            : "Unknown"}
+                        </p>
+                        <p>
+                          Author: {" "}
+                          {steamGridPickerSelectedItem?.author ?? "Unknown"}
+                        </p>
+                        <p>
+                          Format:{" "}
+                          {steamGridPickerSelectedItem?.mime ?? "Unknown"}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="steamgrid-picker-apply"
+                        onClick={applySteamGridPickerSelection}
+                        disabled={!steamGridPickerSelectedUrl}
+                      >
+                        {steamGridPickerTarget.artKind === "background"
+                          ? "Set as background"
+                          : "Set as cover art"}
+                      </button>
+                    </aside>
+                  </div>
                 </aside>
 
                 <div
@@ -3109,66 +3171,6 @@ export function CollectionsView({ session, onLogout }: Props) {
                     </div>
                   ) : null}
                 </div>
-
-                <aside className="steamgrid-picker-preview">
-                  <p className="steamgrid-picker-preview-title">Preview</p>
-                  <div
-                    className="steamgrid-picker-preview-frame"
-                    style={
-                      steamGridPickerTarget.artKind === "background"
-                        ? backgroundImageStyle(steamGridPickerSelectedUrl)
-                        : undefined
-                    }
-                  >
-                    {steamGridPickerTarget.artKind === "background" ? (
-                      <div className="steamgrid-picker-preview-card" />
-                    ) : steamGridPickerSelectedUrl ? (
-                      <img
-                        className="steamgrid-picker-preview-cover"
-                        src={steamGridPickerSelectedUrl}
-                        alt="Selected cover preview"
-                      />
-                    ) : null}
-                  </div>
-                  <p className="steamgrid-picker-preview-meta">
-                    {steamGridPickerItems.length > 0
-                      ? `Selection ${steamGridPickerSelectedIndex + 1} of ${steamGridPickerItems.length}`
-                      : "No art available"}
-                  </p>
-                  <div className="steamgrid-picker-preview-details">
-                    <p>
-                      Resolution:{" "}
-                      {steamGridPickerSelectedItem?.width &&
-                      steamGridPickerSelectedItem?.height
-                        ? `${steamGridPickerSelectedItem.width} x ${steamGridPickerSelectedItem.height}`
-                        : "Unknown"}
-                    </p>
-                    <p>
-                      Score:{" "}
-                      {typeof steamGridPickerSelectedItem?.score === "number"
-                        ? steamGridPickerSelectedItem.score
-                        : "Unknown"}
-                    </p>
-                    <p>
-                      Author:{" "}
-                      {steamGridPickerSelectedItem?.author ?? "Unknown"}
-                    </p>
-                    <p>
-                      Format:{" "}
-                      {steamGridPickerSelectedItem?.mime ?? "Unknown"}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="steamgrid-picker-apply"
-                    onClick={applySteamGridPickerSelection}
-                    disabled={!steamGridPickerSelectedUrl}
-                  >
-                    {steamGridPickerTarget.artKind === "background"
-                      ? "Set as background"
-                      : "Set as cover art"}
-                  </button>
-                </aside>
               </div>
 
               <footer className="steamgrid-picker-footer">
