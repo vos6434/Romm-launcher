@@ -4,6 +4,24 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+#[cfg(all(unix, not(target_os = "macos")))]
+fn configure_linux_webview_env() {
+    fn set_default_env(key: &str, value: &str) {
+        if std::env::var_os(key).is_none() {
+            std::env::set_var(key, value);
+        }
+    }
+
+    // SteamOS/gamescope can show a black WebKitGTK view with GPU-backed paths.
+    // Keep these overridable by honoring existing user-provided environment.
+    set_default_env("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    set_default_env("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+    set_default_env("GSK_RENDERER", "cairo");
+}
+
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+fn configure_linux_webview_env() {}
+
 #[derive(Debug, Deserialize)]
 struct TokenResponse {
     access_token: String,
@@ -1291,6 +1309,8 @@ async fn steamgriddb_grid_url_at(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    configure_linux_webview_env();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
