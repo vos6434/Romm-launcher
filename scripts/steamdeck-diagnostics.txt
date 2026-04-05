@@ -1,4 +1,4 @@
-Steam Deck diagnostics generated: 2026-04-05T10:20:25+01:00
+Steam Deck diagnostics generated: 2026-04-05T10:23:12+01:00
 
 ===== Host Basics =====
 --- uname
@@ -46,16 +46,16 @@ Extended renderer info (GLX_MESA_query_renderer):
     Max GLES1 profile version: 1.1
     Max GLES[23] profile version: 3.2
 Memory info (GL_ATI_meminfo):
-    VBO free memory - total: 84 MB, largest block: 84 MB
-    VBO free aux. memory - total: 7413 MB, largest block: 7413 MB
-    Texture free memory - total: 84 MB, largest block: 84 MB
-    Texture free aux. memory - total: 7413 MB, largest block: 7413 MB
-    Renderbuffer free memory - total: 84 MB, largest block: 84 MB
-    Renderbuffer free aux. memory - total: 7413 MB, largest block: 7413 MB
+    VBO free memory - total: 83 MB, largest block: 83 MB
+    VBO free aux. memory - total: 7420 MB, largest block: 7420 MB
+    Texture free memory - total: 83 MB, largest block: 83 MB
+    Texture free aux. memory - total: 7420 MB, largest block: 7420 MB
+    Renderbuffer free memory - total: 83 MB, largest block: 83 MB
+    Renderbuffer free aux. memory - total: 7420 MB, largest block: 7420 MB
 Memory info (GL_NVX_gpu_memory_info):
     Dedicated video memory: 1024 MB
     Total available memory: 9216 MB
-    Currently available dedicated video memory: 84 MB
+    Currently available dedicated video memory: 83 MB
 OpenGL vendor string: AMD
 OpenGL renderer string: AMD Custom GPU 0405 (radeonsi, vangogh, LLVM 18.1.8, DRM 3.59, 6.11.11-valve27-1-neptune-611-g60ef8556a811)
 OpenGL core profile version string: 4.6 (Core Profile) Mesa 24.3.4 (git-8d0948917e)
@@ -183,7 +183,18 @@ zenity-gtk3 3.44.2-3
 --- webkit process binary info
 
 ===== AppImage Inspection =====
-No AppImage path provided. Pass it as the second argument to inspect and run it.
+AppImage path: /home/deck/Desktop/hydralauncher-3.7.6.AppImage
+--- file appimage
+/home/deck/Desktop/hydralauncher-3.7.6.AppImage: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 2.6.18, stripped
+--- chmod appimage
+--- extract appimage
+squashfs-root not present after extraction attempt
+
+===== AppImage Runtime Test =====
+--- run appimage with webkit debug
+env: ‘’: No such file or directory
+--- run appimage with software GL
+env: ‘’: No such file or directory
 
 ===== Container / SteamOS specifics =====
 --- gamescope env hints
