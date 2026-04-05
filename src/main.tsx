@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import App from "./App";
 
 function renderFatalStartupError(message: string): void {
   const root = document.getElementById("root");
@@ -47,15 +48,13 @@ window.addEventListener("unhandledrejection", (event) => {
   renderFatalStartupError(msg);
 });
 
-void import("./App")
-  .then(({ default: App }) => {
-    ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-      <React.StrictMode>
-        <App />
-      </React.StrictMode>,
-    );
-  })
-  .catch((err: unknown) => {
-    const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-    renderFatalStartupError(msg);
-  });
+try {
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+} catch (err: unknown) {
+  const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  renderFatalStartupError(msg);
+}
