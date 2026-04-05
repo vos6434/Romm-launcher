@@ -77,6 +77,36 @@ Share raw-run-log.txt if troubleshooting is needed.
 - If raw binary is also white:
   Issue is likely WebKit/EGL runtime compatibility beyond AppImage packaging.
 
+- If raw binary fails with:
+  "error while loading shared libraries: libwebkit2gtk-4.1.so.0: cannot open shared object file"
+  this means SteamOS host does not provide WebKitGTK 4.1 runtime libs for standalone execution.
+  In this case, run the extracted AppDir binary with bundled libs (next section).
+
+6b) Run extracted AppDir binary with bundled libs
+-------------------------------------------------
+This bypasses AppImage runtime wrapper while still using bundled GTK/WebKit libs.
+
+From the folder containing the AppImage:
+
+  chmod +x "RomM Launcher_0.1.0_amd64.AppImage"
+  APPIMAGE_EXTRACT_AND_RUN=1 "RomM Launcher_0.1.0_amd64.AppImage" --appimage-extract
+
+Run the inner binary with explicit library path:
+
+  LD_LIBRARY_PATH="squashfs-root/usr/lib:squashfs-root/usr/lib/x86_64-linux-gnu" \
+  GDK_BACKEND=x11 \
+  WAYLAND_DISPLAY= \
+  WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+  WEBKIT_DISABLE_COMPOSITING_MODE=1 \
+  GSK_RENDERER=cairo \
+  ./squashfs-root/usr/bin/tauri-app
+
+Interpretation:
+- If this works but running AppImage directly is white:
+  AppImage runtime wrapper/integration is the failing layer.
+- If this still fails with EGL errors:
+  bundled WebKit/EGL path itself is incompatible on SteamOS.
+
 7) Optional convenience launcher script
 ---------------------------------------
 Create a helper script run-raw.sh:
