@@ -626,7 +626,7 @@ async fn launch_retroarch(
         return Err("ROM file does not exist.".to_string());
     }
 
-    let mut configured_retroarch = retro_arch_path
+    let configured_retroarch = retro_arch_path
         .as_deref()
         .map(str::trim)
         .map(|v| v.trim_matches('"').trim_matches('\''))
@@ -653,11 +653,6 @@ async fn launch_retroarch(
 
             p
         });
-
-    #[cfg(all(unix, not(target_os = "macos")))]
-    if configured_retroarch.is_none() {
-        configured_retroarch = detect_local_retroarch_executable();
-    }
 
     if let Some(executable) = configured_retroarch.as_deref() {
         let looks_like_path = executable.contains(['\\', '/', ':']);
@@ -689,11 +684,6 @@ async fn launch_retroarch(
         )
     });
 
-    let is_appimage = configured_retroarch
-        .as_deref()
-        .map(|path| path.to_ascii_lowercase().ends_with(".appimage"))
-        .unwrap_or(false);
-
     let mut launch_args = Vec::<String>::new();
     if let Some(core) = resolved_core_path {
         launch_args.push("-L".to_string());
@@ -717,40 +707,45 @@ async fn launch_retroarch(
 
     #[cfg(all(unix, not(target_os = "macos")))]
     let mut child = {
-        let mut launch_attempts: Vec<(String, Command)> = Vec::new();
+        let mut launch_attempts: Vec<(String, Command, bool)> = Vec::new();
 
         if let Some(executable) = configured_retroarch.as_deref() {
-            launch_attempts.push((executable.to_string(), Command::new(executable)));
-        }
-
-        if let Some(auto_executable) = detect_local_retroarch_executable() {
-            let already_added = launch_attempts
-                .iter()
-                .any(|(label, _)| label == &auto_executable);
-            if !already_added {
-                launch_attempts.push((auto_executable.clone(), Command::new(auto_executable)));
-            }
+            let is_appimage = executable.to_ascii_lowercase().ends_with(".appimage");
+            launch_attempts.push((executable.to_string(), Command::new(executable), is_appimage));
         }
 
         let mut c1 = Command::new("flatpak");
         c1.arg("run").arg("org.libretro.RetroArch");
-        launch_attempts.push(("flatpak run org.libretro.RetroArch".to_string(), c1));
+        launch_attempts.push(("flatpak run org.libretro.RetroArch".to_string(), c1, false));
 
         let mut c2 = Command::new("/usr/bin/flatpak");
         c2.arg("run").arg("org.libretro.RetroArch");
-        launch_attempts.push(("/usr/bin/flatpak run org.libretro.RetroArch".to_string(), c2));
+        launch_attempts.push(("/usr/bin/flatpak run org.libretro.RetroArch".to_string(), c2, false));
 
         let mut c3 = Command::new("host-spawn");
         c3.arg("flatpak").arg("run").arg("org.libretro.RetroArch");
-        launch_attempts.push(("host-spawn flatpak run org.libretro.RetroArch".to_string(), c3));
+        launch_attempts.push(("host-spawn flatpak run org.libretro.RetroArch".to_string(), c3, false));
 
-        launch_attempts.push(("retroarch".to_string(), Command::new("retroarch")));
+        if let Some(auto_executable) = detect_local_retroarch_executable() {
+            let already_added = launch_attempts
+                .iter()
+                .any(|(label, _, _)| label == &auto_executable);
+            if !already_added {
+                launch_attempts.push((
+                    auto_executable.clone(),
+                    Command::new(auto_executable),
+                    true,
+                ));
+            }
+        }
+
+        launch_attempts.push(("retroarch".to_string(), Command::new("retroarch"), false));
 
         let mut failures = Vec::<String>::new();
         let mut spawned: Option<std::process::Child> = None;
 
-        for (label, mut candidate_cmd) in launch_attempts {
-            if is_appimage {
+        for (label, mut candidate_cmd, candidate_is_appimage) in launch_attempts {
+            if candidate_is_appimage {
                 // AppImage can fail on some systems/containers without FUSE. This fallback
                 // tells AppImage to extract and run directly from a temp location.
                 candidate_cmd.env("APPIMAGE_EXTRACT_AND_RUN", "1");
