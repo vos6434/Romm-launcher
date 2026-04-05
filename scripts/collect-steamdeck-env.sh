@@ -4,6 +4,21 @@ set -u
 OUT_FILE="${1:-steamdeck-diagnostics.txt}"
 APPIMAGE_PATH="${2:-}"
 
+if [[ -z "${APPIMAGE_PATH}" ]]; then
+  for probe in \
+    "$HOME/Downloads" \
+    "$HOME/Desktop" \
+    "$HOME" \
+    "/run/media/mmcblk0p1"; do
+    [[ -d "$probe" ]] || continue
+    found=$(find "$probe" -maxdepth 4 -type f -name "*.AppImage" | grep -Ei "romm|launcher|tauri" | head -n 1 || true)
+    if [[ -n "$found" ]]; then
+      APPIMAGE_PATH="$found"
+      break
+    fi
+  done
+fi
+
 log_section() {
   echo
   echo "===== $1 ====="
@@ -82,7 +97,7 @@ run_shell() {
     run_shell "run appimage with software GL" 'timeout 25s env LIBGL_ALWAYS_SOFTWARE=1 GSK_RENDERER=cairo WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 APPIMAGE_EXTRACT_AND_RUN=1 "${APPIMAGE_PATH}" 2>&1 | sed -n "1,220p"'
   else
     log_section "AppImage Inspection"
-    echo "No AppImage path provided. Pass it as the second argument to inspect and run it."
+    echo "No AppImage path provided and no AppImage auto-detected. Pass it as the second argument to inspect and run it."
   fi
 
   log_section "Container / SteamOS specifics"
