@@ -17,6 +17,10 @@ export type RommGame = {
   yearLabel: string;
   coverUrl?: string;
   backgroundUrl?: string;
+  fileName?: string;
+  romRelativePath?: string;
+  downloadUrl?: string;
+  platformSlug?: string;
 };
 
 type RomListPage = {
@@ -26,6 +30,28 @@ type RomListPage = {
 function stripExtension(filename: string): string {
   const i = filename.lastIndexOf(".");
   return i > 0 ? filename.slice(0, i) : filename;
+}
+
+function firstStringField(
+  row: Record<string, unknown>,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return undefined;
+}
+
+function fileNameFromPath(path: string | undefined): string | undefined {
+  if (!path) return undefined;
+  const normalized = path.replace(/\\/g, "/");
+  const part = normalized.split("/").filter(Boolean).pop();
+  if (!part) return undefined;
+  const clean = part.trim();
+  return clean || undefined;
 }
 
 export function romTitleFromRow(row: unknown): string | undefined {
@@ -210,6 +236,111 @@ export function romBackgroundUrlFromRow(
   return coverUrl;
 }
 
+function romRelativePathFromRow(row: unknown): string | undefined {
+  if (!row || typeof row !== "object") return undefined;
+  const r = row as Record<string, unknown>;
+  const fromPath = firstStringField(r, [
+    "rom_path",
+    "romPath",
+    "path",
+    "file_path",
+    "filePath",
+    "storage_path",
+    "storagePath",
+  ] as const);
+  if (!fromPath) return undefined;
+  if (/^https?:\/\//i.test(fromPath)) return undefined;
+  return fromPath;
+}
+
+function romDownloadUrlFromRow(apiBase: string, row: unknown): string | undefined {
+  if (!row || typeof row !== "object") return undefined;
+  const r = row as Record<string, unknown>;
+  const direct = firstStringField(r, [
+    "download_url",
+    "downloadUrl",
+    "url_download",
+    "urlDownload",
+    "file_url",
+    "fileUrl",
+    "rom_url",
+    "romUrl",
+  ] as const);
+  if (direct) {
+    if (/^https?:\/\//i.test(direct)) return direct;
+    const u = rommAssetUrl(apiBase, direct);
+    if (u) return u;
+  }
+
+  const pathLike = firstStringField(r, ["url", "rom_link", "romLink"] as const);
+  if (!pathLike) return undefined;
+  if (/^https?:\/\//i.test(pathLike)) return pathLike;
+  return rommAssetUrl(apiBase, pathLike);
+}
+
+function romFileNameFromRow(row: unknown): string | undefined {
+  if (!row || typeof row !== "object") return undefined;
+  const r = row as Record<string, unknown>;
+  const fromFields = firstStringField(r, [
+    "fs_name",
+    "fsName",
+    "filename",
+    "file_name",
+    "fileName",
+    "name_fs",
+    "nameFs",
+  ] as const);
+  if (fromFields) return fromFields;
+  return fileNameFromPath(romRelativePathFromRow(row));
+}
+
+function normalizePlatformSlug(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  return trimmed
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "") || undefined;
+}
+
+function platformSlugFromRow(row: unknown): string | undefined {
+  if (!row || typeof row !== "object") return undefined;
+  const r = row as Record<string, unknown>;
+
+  const direct = firstStringField(r, [
+    "platform_slug",
+    "platformSlug",
+    "platform_name",
+    "platformName",
+    "system_slug",
+    "systemSlug",
+    "system_name",
+    "systemName",
+  ] as const);
+  const normalizedDirect = normalizePlatformSlug(direct);
+  if (normalizedDirect) return normalizedDirect;
+
+  const nestedPlatform = r.platform;
+  if (nestedPlatform && typeof nestedPlatform === "object") {
+    const nested = nestedPlatform as Record<string, unknown>;
+    const nestedName = firstStringField(nested, [
+      "slug",
+      "name",
+      "fs_name",
+      "fsName",
+      "platform_slug",
+      "platformSlug",
+    ] as const);
+    const normalizedNested = normalizePlatformSlug(nestedName);
+    if (normalizedNested) return normalizedNested;
+  }
+
+  return undefined;
+}
+
 function yearLabelFromRow(row: unknown): string {
   const year = yearFromRomPayload(row);
   return year == null ? "—" : String(year);
@@ -233,6 +364,10 @@ function normalizeRommGame(
     yearLabel: yearLabelFromRow(row),
     coverUrl,
     backgroundUrl: romBackgroundUrlFromRow(apiBase, row, coverUrl),
+    fileName: romFileNameFromRow(row),
+    romRelativePath: romRelativePathFromRow(row),
+    downloadUrl: romDownloadUrlFromRow(apiBase, row),
+    platformSlug: platformSlugFromRow(row),
   };
 }
 

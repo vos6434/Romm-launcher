@@ -248,6 +248,16 @@ button.collections-settings-action:focus-visible {
   border-color: #5a5a5a;
 }
 
+.collections-settings-steamgrid-save:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.collections-settings-steamgrid-save:disabled:hover {
+  background: rgba(55, 55, 55, 0.95);
+  border-color: #4a4a4a;
+}
+
 .collections-settings-steamgrid
   .collections-settings-steamgrid-save
   + .collections-settings-steamgrid-save {

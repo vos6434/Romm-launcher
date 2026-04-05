@@ -63,6 +63,7 @@ import {
   saveVirtualCollectionType,
   type VirtualCollectionType,
 } from "./virtualCollectionType";
+import { loadRomsDownloadDir, saveRomsDownloadDir } from "./emulatorSettings";
 import "./CollectionsView.css";
 
 export type Session = {
@@ -218,8 +219,8 @@ function estimateCollectionGapPx(): number {
 const MAX_CAROUSEL_SLOT_RADIUS = 30;
 const BACKGROUND_CROSSFADE_MS = 320;
 
-/** Settings panel: IGDB, franchise, SteamGrid key, save, unhide. */
-const SETTINGS_NAV_SLOTS = 5;
+/** Settings panel: IGDB, franchise, SteamGrid key, save, unhide, download dir pick/open. */
+const SETTINGS_NAV_SLOTS = 7;
 
 /** Hide + pick background + clear background + pick cover + clear cover. */
 const COLLECTION_SETTINGS_NAV_SLOTS = 5;
@@ -318,6 +319,112 @@ function backgroundImageStyle(url: string | undefined): CSSProperties | undefine
   return {
     backgroundImage: `url("${url.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`,
   };
+}
+
+function sanitizePathPart(input: string): string {
+  return input
+    .replace(/[<>:"|?*\u0000-\u001F]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeRelativeDownloadPath(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const normalized = raw.trim().replace(/\\/g, "/");
+  if (!normalized) return undefined;
+  const withoutDrive = normalized.replace(/^[A-Za-z]:\//, "").replace(/^\/+/, "");
+  const parts = withoutDrive
+    .split("/")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0 && part !== "." && part !== "..")
+    .map(sanitizePathPart)
+    .filter((part) => part.length > 0);
+  if (parts.length === 0) return undefined;
+  return parts.join("/");
+}
+
+function normalizePlatformPart(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const cleaned = sanitizePathPart(raw)
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "");
+  return cleaned || undefined;
+}
+
+function inferPlatformFromFileName(fileName: string | undefined): string | undefined {
+  if (!fileName) return undefined;
+  const i = fileName.lastIndexOf(".");
+  if (i <= 0 || i >= fileName.length - 1) return undefined;
+  const ext = fileName.slice(i + 1).trim().toLowerCase();
+  if (!ext) return undefined;
+  const generic = new Set([
+    "zip",
+    "7z",
+    "rar",
+    "tar",
+    "gz",
+    "bz2",
+    "xz",
+    "iso",
+    "bin",
+    "cue",
+    "chd",
+  ]);
+  if (generic.has(ext)) return undefined;
+  return normalizePlatformPart(ext);
+}
+
+function structuredRommRelativePath(
+  rawRelative: string | undefined,
+  platformHint: string | undefined,
+  fileNameHint: string,
+): string {
+  const normalized = normalizeRelativeDownloadPath(rawRelative);
+  const parts = normalized ? normalized.split("/") : [];
+  const lower = parts.map((p) => p.toLowerCase());
+
+  const fileName =
+    sanitizePathPart(parts[parts.length - 1] ?? "") ||
+    sanitizePathPart(fileNameHint) ||
+    "game.rom";
+
+  const romsIdx = lower.lastIndexOf("roms");
+  let platformFromPath: string | undefined;
+  if (romsIdx > 0) {
+    platformFromPath = normalizePlatformPart(parts[romsIdx - 1]);
+  }
+  if (!platformFromPath && parts.length >= 2 && lower[0] === "romm") {
+    platformFromPath = normalizePlatformPart(parts[1]);
+  }
+  if (!platformFromPath && parts.length >= 2) {
+    platformFromPath = normalizePlatformPart(parts[0]);
+  }
+
+  const platform =
+    normalizePlatformPart(platformHint) ||
+    platformFromPath ||
+    inferPlatformFromFileName(fileNameHint) ||
+    "unknown";
+
+  return `Romm/${platform}/roms/${fileName}`;
+}
+
+function gameDownloadRelativePath(game: RommGame): string {
+  const fallbackName = sanitizePathPart(game.fileName ?? game.name) || `${game.key}.rom`;
+  return structuredRommRelativePath(
+    game.romRelativePath,
+    game.platformSlug,
+    fallbackName,
+  );
+}
+
+function joinLocalPath(baseDir: string, relativePath: string): string {
+  const base = baseDir.trim().replace(/[\\/]+$/, "");
+  if (!base) return relativePath;
+  return `${base}\\${relativePath.replace(/\//g, "\\")}`;
 }
 
 /** Track width: one centered slot is scaled (~1.05); matches `.collection-slot--focus`. */
@@ -495,6 +602,8 @@ export function CollectionsView({ session, onLogout }: Props) {
   const settingsSteamKeyRef = useRef<HTMLInputElement>(null);
   const settingsSaveRef = useRef<HTMLButtonElement>(null);
   const settingsUnhideAllRef = useRef<HTMLButtonElement>(null);
+  const settingsPickDownloadsDirRef = useRef<HTMLButtonElement>(null);
+  const settingsOpenDownloadsDirRef = useRef<HTMLButtonElement>(null);
   const collectionHideRef = useRef<HTMLButtonElement>(null);
   const collectionPickHeroRef = useRef<HTMLButtonElement>(null);
   const collectionClearHeroRef = useRef<HTMLButtonElement>(null);
@@ -509,6 +618,13 @@ export function CollectionsView({ session, onLogout }: Props) {
   const [steamGridKeyDraft, setSteamGridKeyDraft] = useState(() =>
     loadSteamGridDbApiKey(),
   );
+  const [romsDownloadDir, setRomsDownloadDir] = useState(() =>
+    loadRomsDownloadDir(),
+  );
+  const [gameDownloadState, setGameDownloadState] = useState<
+    Record<string, "missing" | "downloading" | "downloaded" | "error">
+  >({});
+  const gameDownloadStateRef = useRef(gameDownloadState);
   const [steamSettingsRev, setSteamSettingsRev] = useState(0);
   const [steamGridPickerTarget, setSteamGridPickerTarget] =
     useState<SteamGridPickerTarget | null>(null);
@@ -556,6 +672,10 @@ export function CollectionsView({ session, onLogout }: Props) {
   const steamGridPickerNsfwRef = useRef<HTMLInputElement>(null);
   const steamGridPickerHumorRef = useRef<HTMLInputElement>(null);
   const steamGridPickerRefreshRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    gameDownloadStateRef.current = gameDownloadState;
+  }, [gameDownloadState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -675,6 +795,19 @@ export function CollectionsView({ session, onLogout }: Props) {
   const currentFocusIndex = inGamesView ? gamesFocusIndex : focusIndex;
   const currentLoading = inGamesView ? gamesLoading : loading;
   const currentError = inGamesView ? gamesError : error;
+  const focusedGame =
+    activeCollection && games.length > 0
+      ? games[Math.max(0, Math.min(games.length - 1, currentFocusIndex))]
+      : null;
+  const focusedGameDownloadState = focusedGame
+    ? (gameDownloadState[focusedGame.key] ?? "missing")
+    : "missing";
+  const gamePrimaryActionLabel =
+    focusedGameDownloadState === "downloaded"
+      ? "Play"
+      : focusedGameDownloadState === "downloading"
+        ? "Downloading..."
+        : "Download";
 
   useEffect(() => {
     focusIndexRef.current = currentFocusIndex;
@@ -771,6 +904,45 @@ export function CollectionsView({ session, onLogout }: Props) {
       cancelled = true;
     };
   }, [activeCollection, games, prefsRev, steamSettingsRev]);
+
+  useEffect(() => {
+    if (!activeCollection || games.length === 0) {
+      setGameDownloadState({});
+      return;
+    }
+
+    const initial: Record<string, "missing" | "downloading" | "downloaded" | "error"> = {};
+    for (const game of games) {
+      initial[game.key] =
+        gameDownloadStateRef.current[game.key] === "downloading"
+          ? "downloading"
+          : "missing";
+    }
+    setGameDownloadState(initial);
+
+    if (!tauriShell || !romsDownloadDir.trim()) return;
+
+    let cancelled = false;
+    void (async () => {
+      const next = { ...initial };
+      await mapPool(games, 8, async (game) => {
+        if (next[game.key] === "downloading") return;
+        const relativePath = gameDownloadRelativePath(game);
+        const fullPath = joinLocalPath(romsDownloadDir, relativePath);
+        try {
+          const exists = await invoke<boolean>("local_path_exists", { path: fullPath });
+          next[game.key] = exists ? "downloaded" : "missing";
+        } catch {
+          next[game.key] = "missing";
+        }
+      });
+      if (!cancelled) setGameDownloadState(next);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCollection, games, romsDownloadDir, tauriShell]);
 
   useEffect(() => {
     if (loading || items.length === 0) {
@@ -922,6 +1094,75 @@ export function CollectionsView({ session, onLogout }: Props) {
     unhideAllCollections();
     setPrefsRev((n) => n + 1);
   }, []);
+
+  const pickRomsDownloadDir = useCallback(async () => {
+    if (!tauriShell) return;
+    try {
+      const picked = await invoke<string | null>("pick_folder");
+      if (!picked) return;
+      saveRomsDownloadDir(picked);
+      setRomsDownloadDir(picked);
+    } catch {
+      /* ignore picker failure */
+    }
+  }, [tauriShell]);
+
+  const openRomsDownloadDir = useCallback(async () => {
+    const dir = romsDownloadDir.trim();
+    if (!dir) return;
+    try {
+      await invoke("open_local_folder", { path: dir });
+    } catch {
+      /* ignore open failure */
+    }
+  }, [romsDownloadDir]);
+
+  const downloadFocusedGame = useCallback(async () => {
+    if (!tauriShell || !focusedGame) return;
+    if (gameDownloadState[focusedGame.key] === "downloading") return;
+
+    const dir = romsDownloadDir.trim();
+    if (!dir) {
+      await pickRomsDownloadDir();
+      return;
+    }
+
+    const relativePath = gameDownloadRelativePath(focusedGame);
+    const destinationPath = joinLocalPath(dir, relativePath);
+    setGameDownloadState((prev) => ({ ...prev, [focusedGame.key]: "downloading" }));
+
+    try {
+      await invoke("romm_download_rom", {
+        apiBase: session.apiBase,
+        accessToken: session.accessToken,
+        romId: String(focusedGame.id),
+        fileName: focusedGame.fileName ?? null,
+        downloadUrl: focusedGame.downloadUrl ?? null,
+        destinationPath,
+      });
+      setGameDownloadState((prev) => ({ ...prev, [focusedGame.key]: "downloaded" }));
+    } catch {
+      setGameDownloadState((prev) => ({ ...prev, [focusedGame.key]: "error" }));
+    }
+  }, [
+    focusedGame,
+    gameDownloadState,
+    pickRomsDownloadDir,
+    romsDownloadDir,
+    session.accessToken,
+    session.apiBase,
+    tauriShell,
+  ]);
+
+  const handleGamePrimaryAction = useCallback(() => {
+    if (!focusedGame) return;
+    if (focusedGameDownloadState === "downloaded") {
+      // Play hook will be wired in a follow-up step.
+      return;
+    }
+    if (focusedGameDownloadState === "downloading") return;
+    void downloadFocusedGame();
+  }, [downloadFocusedGame, focusedGame, focusedGameDownloadState]);
 
   const steamGridPickerOpen = steamGridPickerTarget !== null;
   const steamGridPickerCols = useMemo(() => {
@@ -1474,10 +1715,22 @@ export function CollectionsView({ session, onLogout }: Props) {
       case 4:
         onUnhideAllCollections();
         break;
+      case 5:
+        void pickRomsDownloadDir();
+        break;
+      case 6:
+        void openRomsDownloadDir();
+        break;
       default:
         break;
     }
-  }, [settingsNavIndex, saveSteamGridKey, onUnhideAllCollections]);
+  }, [
+    onUnhideAllCollections,
+    openRomsDownloadDir,
+    pickRomsDownloadDir,
+    saveSteamGridKey,
+    settingsNavIndex,
+  ]);
 
   const pickHeroSteam = useCallback(() => {
     void openCollectionPicker("background");
@@ -1603,6 +1856,8 @@ export function CollectionsView({ session, onLogout }: Props) {
       settingsSteamKeyRef,
       settingsSaveRef,
       settingsUnhideAllRef,
+      settingsPickDownloadsDirRef,
+      settingsOpenDownloadsDirRef,
     ] as const;
     const el = refs[settingsNavIndex]?.current;
     el?.focus();
@@ -1694,20 +1949,20 @@ export function CollectionsView({ session, onLogout }: Props) {
 
   const focusedCollection =
     !inGamesView && visibleItems.length > 0 ? visibleItems[focusIndex] : undefined;
-  const focusedGame =
+  const focusedGameBgTarget =
     inGamesView && games.length > 0 ? games[gamesFocusIndex] : undefined;
   const defaultFocusedGameBgUrl =
-    focusedGame?.backgroundUrl ?? focusedGame?.coverUrl;
+    focusedGameBgTarget?.backgroundUrl ?? focusedGameBgTarget?.coverUrl;
   const cardCoverUrl = useMemo(() => {
     if (focusedCollection) {
       return coverForCarouselSlot(session.apiBase, focusedCollection, gridCovers);
     }
-    return focusedGame
-      ? coverForGameCarouselSlot(focusedGame, gameGridCovers)
+    return focusedGameBgTarget
+      ? coverForGameCarouselSlot(focusedGameBgTarget, gameGridCovers)
       : undefined;
   }, [
     focusedCollection,
-    focusedGame,
+    focusedGameBgTarget,
     session.apiBase,
     gridCovers,
     gameGridCovers,
@@ -1763,13 +2018,13 @@ export function CollectionsView({ session, onLogout }: Props) {
   ]);
 
   useEffect(() => {
-    if (!focusedGame) {
+    if (!focusedGameBgTarget) {
       setGameHeroBg(null);
       return;
     }
 
-    const key = focusedGame.key;
-    const gamePrefs = getGamePrefs(focusedGame.key, focusedGame.name);
+    const key = focusedGameBgTarget.key;
+    const gamePrefs = getGamePrefs(focusedGameBgTarget.key, focusedGameBgTarget.name);
     const heroIdx = gamePrefs.backgroundSteamIndex ?? -1;
     if (heroIdx < 0) {
       setGameHeroBg({ key, url: undefined });
@@ -1781,14 +2036,14 @@ export function CollectionsView({ session, onLogout }: Props) {
       return;
     }
 
-    const cached = getCachedGameSteamGridBackgroundUrl(focusedGame, heroIdx);
+    const cached = getCachedGameSteamGridBackgroundUrl(focusedGameBgTarget, heroIdx);
     setGameHeroBg({ key, url: cached });
 
     if (cached) return;
 
     let cancelled = false;
     void (async () => {
-      const url = await fetchGameSteamGridBackgroundUrl(focusedGame, heroIdx);
+      const url = await fetchGameSteamGridBackgroundUrl(focusedGameBgTarget, heroIdx);
       if (cancelled) return;
       setGameHeroBg({ key, url: url ?? undefined });
     })();
@@ -1796,12 +2051,12 @@ export function CollectionsView({ session, onLogout }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [focusedGame, steamSettingsRev, prefsRev]);
+  }, [focusedGameBgTarget, steamSettingsRev, prefsRev]);
 
   const bgUrl = inGamesView
-    ? focusedGame
+    ? focusedGameBgTarget
       ? gameHeroBg &&
-          gameHeroBg.key === focusedGame.key &&
+          gameHeroBg.key === focusedGameBgTarget.key &&
           gameHeroBg.url
         ? gameHeroBg.url
         : defaultFocusedGameBgUrl
@@ -1947,7 +2202,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     refreshDisabled: currentLoading || refreshing,
     onMove: moveFocus,
     onBack: goBack,
-    onPrimaryAction: activeCollection ? null : openGamesView,
+    onPrimaryAction: activeCollection ? handleGamePrimaryAction : openGamesView,
     onToggleSettings: toggleSettings,
     onToggleCollectionSettings: toggleCollectionSettings,
     onRefresh: () => void onRefreshLibrary(),
@@ -2466,13 +2721,18 @@ export function CollectionsView({ session, onLogout }: Props) {
         if (
           e.key === "Enter" &&
           !e.repeat &&
-          !itemSettingsOpen &&
-          !activeCollection &&
-          visibleItems.length > 0
+          !itemSettingsOpen
         ) {
-          e.preventDefault();
-          openGamesView();
-          return;
+          if (!activeCollection && visibleItems.length > 0) {
+            e.preventDefault();
+            openGamesView();
+            return;
+          }
+          if (activeCollection && currentCards.length > 0) {
+            e.preventDefault();
+            handleGamePrimaryAction();
+            return;
+          }
         }
       }
 
@@ -2580,6 +2840,8 @@ export function CollectionsView({ session, onLogout }: Props) {
     toggleSettings,
     toggleCollectionSettings,
     closeCollectionSettings,
+    currentCards.length,
+    handleGamePrimaryAction,
     openGamesView,
     visibleItems.length,
     activateSettingsNav,
@@ -2749,6 +3011,35 @@ export function CollectionsView({ session, onLogout }: Props) {
                 <p className="collections-settings-menu-hint">
                   Configure emulator launch behavior and defaults.
                 </p>
+                <input
+                  type="text"
+                  className="collections-settings-steamgrid-input"
+                  value={romsDownloadDir || "No download location selected"}
+                  readOnly
+                />
+                <button
+                  ref={settingsPickDownloadsDirRef}
+                  type="button"
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 5 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  onClick={() => {
+                    void pickRomsDownloadDir();
+                  }}
+                  onFocus={() => setSettingsNavIndex(5)}
+                >
+                  Pick ROMs download location
+                </button>
+                <button
+                  ref={settingsOpenDownloadsDirRef}
+                  type="button"
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 6 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  onClick={() => {
+                    void openRomsDownloadDir();
+                  }}
+                  onFocus={() => setSettingsNavIndex(6)}
+                  disabled={!romsDownloadDir.trim()}
+                >
+                  Open downloads location
+                </button>
               </div>
             </div>
           </>,
@@ -3518,7 +3809,22 @@ export function CollectionsView({ session, onLogout }: Props) {
               )}
               <span>Select</span>
             </div>
-          ) : null}
+          ) : (
+            <div
+              className={`collections-footer-hint${
+                currentCards.length === 0 || focusedGameDownloadState === "downloading"
+                  ? " collections-footer-hint--disabled"
+                  : ""
+              }`}
+            >
+              {showGamepadHints ? (
+                <GamepadPromptGlyph flavor={gamepadFlavor} role="primary" />
+              ) : (
+                <KeyboardEnterPromptGlyph />
+              )}
+              <span>{gamePrimaryActionLabel}</span>
+            </div>
+          )}
           <div
             className={`collections-footer-hint${
               currentCards.length === 0 ? " collections-footer-hint--disabled" : ""

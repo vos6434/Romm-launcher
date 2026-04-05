@@ -1,5 +1,7 @@
 use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 #[derive(Debug, Deserialize)]
 struct TokenResponse {
@@ -60,6 +62,57 @@ fn format_error_body(status: reqwest::StatusCode, body: &str) -> String {
         }
         _ => format!("Request failed ({status})"),
     }
+}
+
+fn to_absolute_url(base: &str, candidate: &str) -> String {
+    let trimmed = candidate.trim();
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return trimmed.to_string();
+    }
+    if trimmed.starts_with('/') {
+        return format!("{base}{trimmed}");
+    }
+    format!("{base}/{}", trimmed.trim_start_matches('/'))
+}
+
+fn download_url_candidates(
+    base: &str,
+    rom_id: &str,
+    file_name: Option<&str>,
+    download_url: Option<&str>,
+) -> Vec<String> {
+    let mut candidates = Vec::<String>::new();
+
+    if let Some(raw) = download_url {
+        let t = raw.trim();
+        if !t.is_empty() {
+            candidates.push(to_absolute_url(base, t));
+        }
+    }
+
+    let rid = rom_id.trim();
+    if rid.is_empty() {
+        return candidates;
+    }
+
+    let encoded_name = file_name
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(urlencoding::encode)
+        .map(|v| v.to_string());
+
+    candidates.push(format!("{base}/api/roms/{rid}/download"));
+    candidates.push(format!("{base}/api/roms/{rid}/content"));
+    if let Some(name) = encoded_name {
+        candidates.push(format!("{base}/api/roms/{rid}/content/{name}"));
+        candidates.push(format!("{base}/api/roms/{rid}/download/{name}"));
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    candidates
+        .into_iter()
+        .filter(|u| seen.insert(u.clone()))
+        .collect()
 }
 
 /// OAuth2 password grant against RomM `/api/token`.
@@ -156,6 +209,145 @@ async fn romm_api_get(
     }
 
     Ok(body)
+}
+
+#[tauri::command]
+async fn pick_folder() -> Result<Option<String>, String> {
+    let picked = tauri::async_runtime::spawn_blocking(|| rfd::FileDialog::new().pick_folder())
+        .await
+        .map_err(|e| format!("Folder picker failed: {e}"))?;
+    Ok(picked.map(|p| p.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
+async fn local_path_exists(path: String) -> Result<bool, String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Ok(false);
+    }
+    Ok(Path::new(path).exists())
+}
+
+#[tauri::command]
+async fn open_local_folder(path: String) -> Result<(), String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Folder path is required.".to_string());
+    }
+
+    let requested = PathBuf::from(trimmed);
+    let resolved = if requested.is_absolute() {
+        requested
+    } else {
+        std::env::current_dir()
+            .map_err(|e| format!("Failed to resolve current directory: {e}"))?
+            .join(requested)
+    };
+
+    std::fs::create_dir_all(&resolved)
+        .map_err(|e| format!("Failed to create folder: {e}"))?;
+
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = Command::new("explorer");
+        c.arg(&resolved);
+        c
+    };
+
+    #[cfg(target_os = "macos")]
+    let mut cmd = {
+        let mut c = Command::new("open");
+        c.arg(&resolved);
+        c
+    };
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut cmd = {
+        let mut c = Command::new("xdg-open");
+        c.arg(&resolved);
+        c
+    };
+
+    cmd.spawn()
+        .map_err(|e| format!("Failed to open folder in file manager: {e}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn romm_download_rom(
+    api_base: String,
+    access_token: String,
+    rom_id: String,
+    file_name: Option<String>,
+    download_url: Option<String>,
+    destination_path: String,
+) -> Result<(), String> {
+    let base = normalize_base_url(&api_base)?;
+    let destination = destination_path.trim();
+    if destination.is_empty() {
+        return Err("Destination path is required.".to_string());
+    }
+
+    let candidate_urls = download_url_candidates(
+        &base,
+        &rom_id,
+        file_name.as_deref(),
+        download_url.as_deref(),
+    );
+    if candidate_urls.is_empty() {
+        return Err("No download URL candidates available for this ROM.".to_string());
+    }
+
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let mut last_err: Option<String> = None;
+    for url in &candidate_urls {
+        let res = match client
+            .get(url)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                format!("Bearer {}", access_token.trim()),
+            )
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                last_err = Some(format!("Download request failed for {url}: {e}"));
+                continue;
+            }
+        };
+
+        let status = res.status();
+        if !status.is_success() {
+            let body = res.text().await.unwrap_or_default();
+            last_err = Some(format_error_body(status, &body));
+            continue;
+        }
+
+        let bytes = res
+            .bytes()
+            .await
+            .map_err(|e| format!("Failed to read download body: {e}"))?;
+        if bytes.is_empty() {
+            last_err = Some("Download returned an empty file.".to_string());
+            continue;
+        }
+
+        let target = PathBuf::from(destination);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create destination folder: {e}"))?;
+        }
+        std::fs::write(&target, &bytes)
+            .map_err(|e| format!("Failed to save ROM to disk: {e}"))?;
+        return Ok(());
+    }
+
+    Err(last_err.unwrap_or_else(|| "ROM download failed.".to_string()))
 }
 
 const SGDB_BASE: &str = "https://www.steamgriddb.com/api/v2";
@@ -508,6 +700,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             romm_login,
             romm_api_get,
+            pick_folder,
+            local_path_exists,
+            open_local_folder,
+            romm_download_rom,
             steamgriddb_hero_url,
             steamgriddb_hero_urls,
             steamgriddb_hero_images,
