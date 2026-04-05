@@ -1,0 +1,102 @@
+Steam Deck Raw Artifact Test Guide
+=================================
+
+Purpose
+-------
+Use this guide to run the raw Linux artifact (tauri-app) on Steam Deck.
+This helps isolate whether AppImage packaging is causing the white-screen issue.
+
+Prerequisites
+-------------
+- Steam Deck in Desktop Mode.
+- You downloaded artifact: steamdeck-raw-binary-main-<COMMIT_SHA>.zip
+- Artifact contains: tauri-app-<COMMIT_SHA>.tar.gz
+
+1) Download and extract artifacts
+---------------------------------
+In Desktop Mode, place files in a dedicated folder, for example:
+  ~/Downloads/romm-raw-test/
+
+Inside that folder, you should have:
+  - tauri-app-<COMMIT_SHA>.tar.gz
+
+Extract it:
+  tar -xzf tauri-app-<COMMIT_SHA>.tar.gz
+
+After extraction, confirm files exist:
+  ls -la
+Expected:
+  - tauri-app
+  - build-info.txt
+
+2) Verify you are testing the expected commit
+---------------------------------------------
+Open build-info.txt:
+  cat build-info.txt
+
+Check these fields:
+  - commit_sha=<COMMIT_SHA>
+  - run_id=<...>
+  - built_at_utc=<...>
+
+If commit_sha is not the one you intended to test, stop and download the correct artifact.
+
+3) Make binary executable
+-------------------------
+  chmod +x ./tauri-app
+
+4) Run raw binary with SteamOS-safe env flags
+----------------------------------------------
+Run from the same folder:
+
+  GDK_BACKEND=x11 \
+  WAYLAND_DISPLAY= \
+  WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+  WEBKIT_DISABLE_COMPOSITING_MODE=1 \
+  GSK_RENDERER=cairo \
+  ./tauri-app
+
+5) Capture terminal output for diagnosis
+----------------------------------------
+If needed, collect startup output to a log file:
+
+  GDK_BACKEND=x11 \
+  WAYLAND_DISPLAY= \
+  WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+  WEBKIT_DISABLE_COMPOSITING_MODE=1 \
+  GSK_RENDERER=cairo \
+  ./tauri-app 2>&1 | tee raw-run-log.txt
+
+Share raw-run-log.txt if troubleshooting is needed.
+
+6) Interpret results
+--------------------
+- If raw binary renders correctly but AppImage is white:
+  AppImage packaging/runtime is the likely root cause.
+
+- If raw binary is also white:
+  Issue is likely WebKit/EGL runtime compatibility beyond AppImage packaging.
+
+7) Optional convenience launcher script
+---------------------------------------
+Create a helper script run-raw.sh:
+
+  cat > run-raw.sh << 'EOF'
+  #!/usr/bin/env bash
+  set -e
+  GDK_BACKEND=x11 \
+  WAYLAND_DISPLAY= \
+  WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+  WEBKIT_DISABLE_COMPOSITING_MODE=1 \
+  GSK_RENDERER=cairo \
+  ./tauri-app
+  EOF
+  chmod +x run-raw.sh
+  ./run-raw.sh
+
+8) Common mistakes
+------------------
+- Running an old artifact folder by accident.
+- Forgetting chmod +x on tauri-app.
+- Running from the wrong directory (where tauri-app is not present).
+- Skipping commit_sha check in build-info.txt.
