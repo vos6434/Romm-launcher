@@ -392,3 +392,9 @@ Dynamic section at offset 0x11c92d8 contains 42 entries:
 (WebKitWebProcess:31252): GLib-GIO-DEBUG: 11:18:40.466: _g_io_module_get_default: Found default implementation dbus (GPowerProfileMonitorDBus) for ‘gio-power-profile-monitor’
 Could not create default EGL display: EGL_BAD_PARAMETER. Aborting...
 --- run appimage with software GL
+Could not create default EGL display: EGL_BAD_PARAMETER. Aborting...
+
+===== Container / SteamOS specifics =====
+--- gamescope env hints
+XDG_RUNTIME_DIR=/run/user/1000
+--- is immutable fs
