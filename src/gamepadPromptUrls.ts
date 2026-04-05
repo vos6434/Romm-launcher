@@ -22,9 +22,9 @@ import xboxViewOutline from "./assets/kenney prompts/Xbox Series/Vector/xbox_but
 
 import ps5Options from "./assets/kenney prompts/PlayStation Series/Vector/playstation5_button_options.svg?url";
 import ps5Create from "./assets/kenney prompts/PlayStation Series/Vector/playstation5_button_create.svg?url";
-import psTriangleOutline from "./assets/kenney prompts/PlayStation Series/Vector/playstation_button_triangle_outline.svg?url";
-import xboxYOutline from "./assets/kenney prompts/Xbox Series/Vector/xbox_button_y_outline.svg?url";
-import switchXOutline from "./assets/kenney prompts/Nintendo Switch/Vector/switch_button_x_outline.svg?url";
+import psTriangle from "./assets/kenney prompts/PlayStation Series/Vector/playstation_button_triangle.svg?url";
+import xboxY from "./assets/kenney prompts/Xbox Series/Vector/xbox_button_y.svg?url";
+import switchX from "./assets/kenney prompts/Nintendo Switch/Vector/switch_button_x.svg?url";
 
 /** South / confirm (A, Cross, B on Switch). */
 export function primaryPromptUrl(flavor: GamepadFlavor): string {
@@ -85,13 +85,13 @@ export function startPromptUrl(flavor: GamepadFlavor): string {
 export function collectionSettingsPromptUrl(flavor: GamepadFlavor): string {
   switch (flavor) {
     case "playstation":
-      return psTriangleOutline;
+      return psTriangle;
     case "nintendo":
-      return switchXOutline;
+      return switchX;
     case "xbox":
     case "generic":
     default:
-      return xboxYOutline;
+      return xboxY;
   }
 }
 
