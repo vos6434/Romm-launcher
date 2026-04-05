@@ -516,6 +516,35 @@ async fn pick_retroarch_path() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+async fn retroarch_flatpak_exists() -> Result<bool, String> {
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let app_id = "org.libretro.RetroArch";
+        let attempts: [(&str, &[&str]); 3] = [
+            ("flatpak", &["info", app_id]),
+            ("/usr/bin/flatpak", &["info", app_id]),
+            ("host-spawn", &["flatpak", "info", app_id]),
+        ];
+
+        for (program, args) in attempts {
+            match Command::new(program).args(args).status() {
+                Ok(status) if status.success() => return Ok(true),
+                Ok(_) => continue,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(_) => continue,
+            }
+        }
+
+        Ok(false)
+    }
+
+    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    {
+        Ok(false)
+    }
+}
+
+#[tauri::command]
 async fn local_path_exists(path: String) -> Result<bool, String> {
     let path = path.trim();
     if path.is_empty() {
@@ -1267,6 +1296,7 @@ pub fn run() {
             romm_api_get,
             pick_folder,
             pick_retroarch_path,
+            retroarch_flatpak_exists,
             local_path_exists,
             move_local_file,
             open_local_folder,

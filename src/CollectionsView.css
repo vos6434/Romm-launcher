@@ -264,6 +264,42 @@ button.collections-settings-action:focus-visible {
   margin-top: 10px;
 }
 
+.collections-settings-flatpak-status {
+  margin: -2px 0 8px;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.collections-settings-flatpak-status--found {
+  color: #86efac;
+}
+
+.collections-settings-flatpak-status--missing {
+  color: #fca5a5;
+}
+
+.collections-settings-flatpak-scanning {
+  margin: -2px 0 8px;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  font-weight: 600;
+  color: #fde68a;
+  animation: collections-flatpak-scan-pulse 0.95s ease-in-out infinite;
+}
+
+@keyframes collections-flatpak-scan-pulse {
+  0% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.55;
+  }
+}
+
 .steamgrid-picker-backdrop {
   position: fixed;
   inset: 0;

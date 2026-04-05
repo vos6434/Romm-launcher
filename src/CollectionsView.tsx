@@ -229,8 +229,8 @@ function estimateCollectionGapPx(): number {
 const MAX_CAROUSEL_SLOT_RADIUS = 30;
 const BACKGROUND_CROSSFADE_MS = 320;
 
-/** Settings panel: IGDB, franchise, SteamGrid key/save/unhide, emulator launch toggle, RetroArch path pick/core, download dir pick/open. */
-const SETTINGS_NAV_SLOTS = 11;
+/** Settings panel: IGDB, franchise, SteamGrid key/save/unhide, emulator launch toggle, RetroArch path pick/core/flatpak scan, download dir pick/open. */
+const SETTINGS_NAV_SLOTS = 12;
 
 /** Hide + pick background + clear background + pick cover + clear cover. */
 const COLLECTION_SETTINGS_NAV_SLOTS = 5;
@@ -633,6 +633,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   const settingsUnhideAllRef = useRef<HTMLButtonElement>(null);
   const settingsRetroArchPathRef = useRef<HTMLInputElement>(null);
   const settingsPickRetroArchPathRef = useRef<HTMLButtonElement>(null);
+  const settingsScanFlatpakRef = useRef<HTMLButtonElement>(null);
   const settingsRetroArchCoreRef = useRef<HTMLInputElement>(null);
   const settingsMinimizeOnLaunchRef = useRef<HTMLInputElement>(null);
   const settingsPickDownloadsDirRef = useRef<HTMLButtonElement>(null);
@@ -661,6 +662,8 @@ export function CollectionsView({ session, onLogout }: Props) {
   const [retroArchCorePathDraft, setRetroArchCorePathDraft] = useState(() =>
     loadRetroArchCorePath(),
   );
+  const [flatpakRetroArchFound, setFlatpakRetroArchFound] = useState(false);
+  const [flatpakCheckInProgress, setFlatpakCheckInProgress] = useState(false);
   const [minimizeLauncherOnLaunch, setMinimizeLauncherOnLaunch] = useState(() =>
     loadMinimizeLauncherOnGameLaunch(),
   );
@@ -1269,6 +1272,34 @@ export function CollectionsView({ session, onLogout }: Props) {
     setMinimizeLauncherOnLaunch(next);
     saveMinimizeLauncherOnGameLaunch(next);
   }, []);
+
+  const scanFlatpakRetroArch = useCallback(async () => {
+    if (!tauriShell) {
+      setFlatpakRetroArchFound(false);
+      return;
+    }
+    const startedAt = Date.now();
+    const minimumIndicatorMs = 600;
+    setFlatpakCheckInProgress(true);
+    try {
+      const found = await invoke<boolean>("retroarch_flatpak_exists");
+      setFlatpakRetroArchFound(Boolean(found));
+    } catch {
+      setFlatpakRetroArchFound(false);
+    } finally {
+      const elapsed = Date.now() - startedAt;
+      const remaining = Math.max(0, minimumIndicatorMs - elapsed);
+      if (remaining > 0) {
+        await new Promise((resolve) => setTimeout(resolve, remaining));
+      }
+      setFlatpakCheckInProgress(false);
+    }
+  }, [tauriShell]);
+
+  useEffect(() => {
+    if (!settingsOpen || !tauriShell) return;
+    void scanFlatpakRetroArch();
+  }, [scanFlatpakRetroArch, settingsOpen, tauriShell]);
 
   const downloadFocusedGame = useCallback(async () => {
     if (!tauriShell || !focusedGame) return;
@@ -1946,9 +1977,12 @@ export function CollectionsView({ session, onLogout }: Props) {
         settingsRetroArchCoreRef.current?.focus();
         break;
       case 9:
-        void pickRomsDownloadDir();
+        void scanFlatpakRetroArch();
         break;
       case 10:
+        void pickRomsDownloadDir();
+        break;
+      case 11:
         void openRomsDownloadDir();
         break;
       default:
@@ -1959,6 +1993,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     openRomsDownloadDir,
     pickRetroArchPath,
     pickRomsDownloadDir,
+    scanFlatpakRetroArch,
     saveSteamGridKey,
     settingsNavIndex,
   ]);
@@ -2091,6 +2126,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       settingsRetroArchPathRef,
       settingsPickRetroArchPathRef,
       settingsRetroArchCoreRef,
+      settingsScanFlatpakRef,
       settingsPickDownloadsDirRef,
       settingsOpenDownloadsDirRef,
     ] as const;
@@ -3305,6 +3341,32 @@ export function CollectionsView({ session, onLogout }: Props) {
                   onChange={(e) => onRetroArchCorePathChange(e.target.value)}
                   onFocus={() => setSettingsNavIndex(8)}
                 />
+                <p
+                  className={`collections-settings-flatpak-status ${flatpakRetroArchFound ? "collections-settings-flatpak-status--found" : "collections-settings-flatpak-status--missing"}`}
+                >
+                  {flatpakRetroArchFound
+                    ? "Flatpak found"
+                    : "Flatpak not found"}
+                </p>
+                {flatpakCheckInProgress ? (
+                  <p className="collections-settings-flatpak-scanning" aria-live="polite">
+                    Scanning Flatpak installation...
+                  </p>
+                ) : null}
+                <button
+                  ref={settingsScanFlatpakRef}
+                  type="button"
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 9 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  onClick={() => {
+                    void scanFlatpakRetroArch();
+                  }}
+                  onFocus={() => setSettingsNavIndex(9)}
+                  disabled={flatpakCheckInProgress}
+                >
+                  {flatpakCheckInProgress
+                    ? "Scanning Flatpak RetroArch..."
+                    : "Scan Flatpak RetroArch"}
+                </button>
                 <input
                   type="text"
                   className="collections-settings-steamgrid-input"
@@ -3314,22 +3376,22 @@ export function CollectionsView({ session, onLogout }: Props) {
                 <button
                   ref={settingsPickDownloadsDirRef}
                   type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 9 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 10 ? " collections-settings-steamgrid-save--active" : ""}`}
                   onClick={() => {
                     void pickRomsDownloadDir();
                   }}
-                  onFocus={() => setSettingsNavIndex(9)}
+                  onFocus={() => setSettingsNavIndex(10)}
                 >
                   Pick ROMs download location
                 </button>
                 <button
                   ref={settingsOpenDownloadsDirRef}
                   type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 10 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 11 ? " collections-settings-steamgrid-save--active" : ""}`}
                   onClick={() => {
                     void openRomsDownloadDir();
                   }}
-                  onFocus={() => setSettingsNavIndex(10)}
+                  onFocus={() => setSettingsNavIndex(11)}
                   disabled={!romsDownloadDir.trim()}
                 >
                   Open downloads location
