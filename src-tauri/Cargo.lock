@@ -4001,6 +4001,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-opener",
  "urlencoding",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

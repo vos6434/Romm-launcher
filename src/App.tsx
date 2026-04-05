@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { CollectionsView, type Session } from "./CollectionsView";
 import { GamepadNavPromptGlyphs } from "./GamepadNavPromptGlyphs";
 import { GamepadPromptGlyph } from "./GamepadPromptGlyph";
@@ -69,6 +70,7 @@ function App() {
     hasSavedCredentialsForAutoLogin,
   );
   const [gpFocusIndex, setGpFocusIndex] = useState(0);
+  const [inputActive, setInputActive] = useState(true);
 
   const formRef = useRef<HTMLFormElement>(null);
   const hostRef = useRef<HTMLInputElement>(null);
@@ -87,6 +89,80 @@ function App() {
   const showKeyboardFooterHints = slotNavChrome && !showGamepadFooterHints;
 
   const slotOrder = useMemo(() => loginSlotOrder(!!error), [error]);
+
+  useEffect(() => {
+    if (!tauriShell) {
+      setInputActive(true);
+      return;
+    }
+
+    let cancelled = false;
+    const appWindow = getCurrentWindow();
+    let focusUnlisten: (() => void) | null = null;
+    let resizeUnlisten: (() => void) | null = null;
+
+    const syncInputActive = async () => {
+      try {
+        const minimized = await appWindow.isMinimized();
+        const windowFocused = await appWindow.isFocused();
+        const docFocused =
+          document.visibilityState === "visible" && document.hasFocus();
+        if (!cancelled) {
+          // Prefer document focus because it reflects actual webview input state.
+          setInputActive(!minimized && (docFocused || windowFocused));
+        }
+      } catch {
+        if (!cancelled) {
+          setInputActive(
+            document.visibilityState === "visible" && document.hasFocus(),
+          );
+        }
+      }
+    };
+
+    const onVisibilityChange = () => {
+      void syncInputActive();
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    void syncInputActive();
+
+    void appWindow
+      .onFocusChanged(() => {
+        void syncInputActive();
+      })
+      .then((unlisten) => {
+        if (cancelled) {
+          unlisten();
+          return;
+        }
+        focusUnlisten = unlisten;
+      });
+
+    void appWindow
+      .onResized(() => {
+        void syncInputActive();
+      })
+      .then((unlisten) => {
+        if (cancelled) {
+          unlisten();
+          return;
+        }
+        resizeUnlisten = unlisten;
+      });
+
+    const interval = window.setInterval(() => {
+      void syncInputActive();
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      focusUnlisten?.();
+      resizeUnlisten?.();
+    };
+  }, [tauriShell]);
 
   useEffect(() => {
     const saved = loadSavedCredentials();
@@ -196,7 +272,7 @@ function App() {
   }, [slotOrder, gpFocusIndex, onRetry]);
 
   useLoginKeyboardNavigation({
-    enabled: slotNavChrome,
+    enabled: slotNavChrome && inputActive,
     loading,
     slotCount: slotOrder.length,
     setFocusIndex: setGpFocusIndex,
@@ -204,7 +280,7 @@ function App() {
   });
 
   useLoginGamepadNavigation({
-    enabled: session === null && tauriShell,
+    enabled: session === null && tauriShell && inputActive,
     loading,
     slotCount: slotOrder.length,
     setFocusIndex: setGpFocusIndex,

@@ -4,6 +4,7 @@ type EmulatorSettings = {
   romsDownloadDir?: string;
   retroArchPath?: string;
   retroArchCorePath?: string;
+  minimizeLauncherOnGameLaunch?: boolean;
 };
 
 function loadSettings(): EmulatorSettings {
@@ -56,5 +57,16 @@ export function loadRetroArchCorePath(): string {
 export function saveRetroArchCorePath(path: string): void {
   const settings = loadSettings();
   settings.retroArchCorePath = path;
+  saveSettings(settings);
+}
+
+export function loadMinimizeLauncherOnGameLaunch(): boolean {
+  const value = loadSettings().minimizeLauncherOnGameLaunch;
+  return typeof value === "boolean" ? value : true;
+}
+
+export function saveMinimizeLauncherOnGameLaunch(enabled: boolean): void {
+  const settings = loadSettings();
+  settings.minimizeLauncherOnGameLaunch = enabled;
   saveSettings(settings);
 }

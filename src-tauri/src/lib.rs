@@ -195,6 +195,122 @@ fn auto_core_path_from_platform(
     None
 }
 
+#[cfg(target_os = "windows")]
+fn focus_and_maximize_window_for_pid(pid: u32) {
+    use std::time::{Duration, Instant};
+    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        BringWindowToTop, EnumWindows, GW_OWNER, GetWindow, GetWindowThreadProcessId,
+        IsWindowVisible, SW_MAXIMIZE, SetForegroundWindow, ShowWindow,
+    };
+
+    #[repr(C)]
+    struct FindWindowCtx {
+        target_pid: u32,
+        hwnd: HWND,
+    }
+
+    unsafe extern "system" fn enum_windows_cb(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let ctx = unsafe { &mut *(lparam as *mut FindWindowCtx) };
+        let mut window_pid = 0u32;
+        unsafe {
+            GetWindowThreadProcessId(hwnd, &mut window_pid);
+        }
+
+        if window_pid != ctx.target_pid {
+            return 1;
+        }
+        if unsafe { IsWindowVisible(hwnd) } == 0 {
+            return 1;
+        }
+        if unsafe { GetWindow(hwnd, GW_OWNER) } != std::ptr::null_mut() {
+            return 1;
+        }
+
+        ctx.hwnd = hwnd;
+        0
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline {
+        let mut ctx = FindWindowCtx {
+            target_pid: pid,
+            hwnd: std::ptr::null_mut(),
+        };
+        unsafe {
+            EnumWindows(
+                Some(enum_windows_cb),
+                (&mut ctx as *mut FindWindowCtx) as LPARAM,
+            );
+        }
+
+        if ctx.hwnd != std::ptr::null_mut() {
+            unsafe {
+                ShowWindow(ctx.hwnd, SW_MAXIMIZE);
+                BringWindowToTop(ctx.hwnd);
+                SetForegroundWindow(ctx.hwnd);
+            }
+            return;
+        }
+
+        std::thread::sleep(Duration::from_millis(120));
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn focus_and_maximize_window_for_pid(pid: u32) {
+    use std::time::{Duration, Instant};
+
+    // Best effort on X11/Wayland compositors that expose wmctrl.
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline {
+        let output = match Command::new("wmctrl").arg("-lp").output() {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+        if !output.status.success() {
+            return;
+        }
+
+        let list = String::from_utf8_lossy(&output.stdout);
+        let mut window_id: Option<String> = None;
+        for line in list.lines() {
+            let mut parts = line.split_whitespace();
+            let Some(id) = parts.next() else {
+                continue;
+            };
+            let _desktop = parts.next();
+            let Some(pid_col) = parts.next() else {
+                continue;
+            };
+            if pid_col.parse::<u32>().ok() == Some(pid) {
+                window_id = Some(id.to_string());
+                break;
+            }
+        }
+
+        if let Some(id) = window_id {
+            let _ = Command::new("wmctrl")
+                .args([
+                    "-ir",
+                    id.as_str(),
+                    "-b",
+                    "add,maximized_vert,maximized_horz",
+                ])
+                .spawn();
+            let _ = Command::new("wmctrl").args(["-ia", id.as_str()]).spawn();
+            return;
+        }
+
+        std::thread::sleep(Duration::from_millis(120));
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn focus_and_maximize_window_for_pid(_pid: u32) {
+    // no-op for now
+}
+
 /// OAuth2 password grant against RomM `/api/token`.
 /// Scopes are a subset typical for browsing and downloading (viewer-capable).
 #[tauri::command]
@@ -376,10 +492,12 @@ async fn open_local_folder(path: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn launch_retroarch(
+    window: tauri::Window,
     rom_path: String,
     core_path: Option<String>,
     retro_arch_path: Option<String>,
     platform_slug: Option<String>,
+    minimize_launcher: Option<bool>,
 ) -> Result<(), String> {
     let rom = rom_path.trim();
     if rom.is_empty() {
@@ -484,6 +602,12 @@ async fn launch_retroarch(
 
         format!("Failed to launch RetroArch: {e}")
     })?;
+
+    focus_and_maximize_window_for_pid(child.id());
+
+    if minimize_launcher.unwrap_or(true) {
+        let _ = window.minimize();
+    }
 
     std::thread::sleep(Duration::from_millis(350));
     if let Ok(Some(status)) = child.try_wait() {

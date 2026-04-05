@@ -9,6 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { GamepadCollectionSettingsPromptGlyph } from "./GamepadCollectionSettingsPromptGlyph";
 import { GamepadHorizontalNavPromptGlyphs } from "./GamepadHorizontalNavPromptGlyphs";
 import { GamepadPromptGlyph } from "./GamepadPromptGlyph";
@@ -64,9 +65,11 @@ import {
   type VirtualCollectionType,
 } from "./virtualCollectionType";
 import {
+  loadMinimizeLauncherOnGameLaunch,
   loadRetroArchCorePath,
   loadRetroArchPath,
   loadRomsDownloadDir,
+  saveMinimizeLauncherOnGameLaunch,
   saveRetroArchCorePath,
   saveRetroArchPath,
   saveRomsDownloadDir,
@@ -226,8 +229,8 @@ function estimateCollectionGapPx(): number {
 const MAX_CAROUSEL_SLOT_RADIUS = 30;
 const BACKGROUND_CROSSFADE_MS = 320;
 
-/** Settings panel: IGDB, franchise, SteamGrid key, save, unhide, RetroArch path pick/core, download dir pick/open. */
-const SETTINGS_NAV_SLOTS = 10;
+/** Settings panel: IGDB, franchise, SteamGrid key/save/unhide, emulator launch toggle, RetroArch path pick/core, download dir pick/open. */
+const SETTINGS_NAV_SLOTS = 11;
 
 /** Hide + pick background + clear background + pick cover + clear cover. */
 const COLLECTION_SETTINGS_NAV_SLOTS = 5;
@@ -612,6 +615,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   const settingsRetroArchPathRef = useRef<HTMLInputElement>(null);
   const settingsPickRetroArchPathRef = useRef<HTMLButtonElement>(null);
   const settingsRetroArchCoreRef = useRef<HTMLInputElement>(null);
+  const settingsMinimizeOnLaunchRef = useRef<HTMLInputElement>(null);
   const settingsPickDownloadsDirRef = useRef<HTMLButtonElement>(null);
   const settingsOpenDownloadsDirRef = useRef<HTMLButtonElement>(null);
   const collectionHideRef = useRef<HTMLButtonElement>(null);
@@ -625,6 +629,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   const gameClearCoverRef = useRef<HTMLButtonElement>(null);
   const [settingsNavIndex, setSettingsNavIndex] = useState(0);
   const [slotRadius, setSlotRadius] = useState(2);
+  const [inputActive, setInputActive] = useState(true);
   const [steamGridKeyDraft, setSteamGridKeyDraft] = useState(() =>
     loadSteamGridDbApiKey(),
   );
@@ -636,6 +641,9 @@ export function CollectionsView({ session, onLogout }: Props) {
   );
   const [retroArchCorePathDraft, setRetroArchCorePathDraft] = useState(() =>
     loadRetroArchCorePath(),
+  );
+  const [minimizeLauncherOnLaunch, setMinimizeLauncherOnLaunch] = useState(() =>
+    loadMinimizeLauncherOnGameLaunch(),
   );
   const [gameDownloadState, setGameDownloadState] = useState<
     Record<string, "missing" | "downloading" | "downloaded" | "error">
@@ -714,6 +722,76 @@ export function CollectionsView({ session, onLogout }: Props) {
       cancelled = true;
     };
   }, [session, virtualType]);
+
+  useEffect(() => {
+    if (!tauriShell) {
+      setInputActive(true);
+      return;
+    }
+
+    let cancelled = false;
+    const appWindow = getCurrentWindow();
+    let focusUnlisten: (() => void) | null = null;
+    let resizeUnlisten: (() => void) | null = null;
+
+    const syncInputActive = async () => {
+      try {
+        const minimized = await appWindow.isMinimized();
+        const windowFocused = await appWindow.isFocused();
+        const docFocused =
+          document.visibilityState === "visible" && document.hasFocus();
+        if (!cancelled) {
+          // Prefer document focus because it reflects actual webview input state.
+          setInputActive(!minimized && (docFocused || windowFocused));
+        }
+      } catch {
+        if (!cancelled) {
+          setInputActive(
+            document.visibilityState === "visible" && document.hasFocus(),
+          );
+        }
+      }
+    };
+
+    const onVisibilityChange = () => {
+      void syncInputActive();
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    void syncInputActive();
+
+    void appWindow.onFocusChanged(() => {
+      void syncInputActive();
+    }).then((unlisten) => {
+      if (cancelled) {
+        unlisten();
+        return;
+      }
+      focusUnlisten = unlisten;
+    });
+
+    void appWindow.onResized(() => {
+      void syncInputActive();
+    }).then((unlisten) => {
+      if (cancelled) {
+        unlisten();
+        return;
+      }
+      resizeUnlisten = unlisten;
+    });
+
+    const interval = window.setInterval(() => {
+      void syncInputActive();
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      focusUnlisten?.();
+      resizeUnlisten?.();
+    };
+  }, [tauriShell]);
 
   const inGamesView = activeCollection !== null;
 
@@ -1155,6 +1233,11 @@ export function CollectionsView({ session, onLogout }: Props) {
     saveRetroArchPath(next);
   }, []);
 
+  const onMinimizeLauncherOnLaunchChange = useCallback((next: boolean) => {
+    setMinimizeLauncherOnLaunch(next);
+    saveMinimizeLauncherOnGameLaunch(next);
+  }, []);
+
   const downloadFocusedGame = useCallback(async () => {
     if (!tauriShell || !focusedGame) return;
     if (gameDownloadState[focusedGame.key] === "downloading") return;
@@ -1219,12 +1302,14 @@ export function CollectionsView({ session, onLogout }: Props) {
         retroArchPath: retroArchPathDraft.trim() || null,
         corePath: retroArchCorePathDraft.trim() || null,
         platformSlug: focusedGame.platformSlug ?? null,
+        minimizeLauncher: minimizeLauncherOnLaunch,
       });
     } catch (e) {
       setGamesError(formatInvokeError(e));
     }
   }, [
     focusedGame,
+    minimizeLauncherOnLaunch,
     retroArchCorePathDraft,
     retroArchPathDraft,
     romsDownloadDir,
@@ -1798,18 +1883,21 @@ export function CollectionsView({ session, onLogout }: Props) {
         onUnhideAllCollections();
         break;
       case 5:
-        settingsRetroArchPathRef.current?.focus();
+        settingsMinimizeOnLaunchRef.current?.click();
         break;
       case 6:
-        void pickRetroArchPath();
+        settingsRetroArchPathRef.current?.focus();
         break;
       case 7:
-        settingsRetroArchCoreRef.current?.focus();
+        void pickRetroArchPath();
         break;
       case 8:
-        void pickRomsDownloadDir();
+        settingsRetroArchCoreRef.current?.focus();
         break;
       case 9:
+        void pickRomsDownloadDir();
+        break;
+      case 10:
         void openRomsDownloadDir();
         break;
       default:
@@ -1948,6 +2036,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       settingsSteamKeyRef,
       settingsSaveRef,
       settingsUnhideAllRef,
+      settingsMinimizeOnLaunchRef,
       settingsRetroArchPathRef,
       settingsPickRetroArchPathRef,
       settingsRetroArchCoreRef,
@@ -2281,7 +2370,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       : null;
 
   useCollectionsGamepadNavigation({
-    enabled: tauriShell && hintsReady && !steamGridPickerOpen,
+    enabled: tauriShell && inputActive && hintsReady && !steamGridPickerOpen,
     itemsLength: currentCards.length,
     collectionSettingsOpen: itemSettingsOpen,
     collectionSettingsNav: itemSettingsNav,
@@ -2319,6 +2408,7 @@ export function CollectionsView({ session, onLogout }: Props) {
 
   useEffect(() => {
     if (
+      !inputActive ||
       !steamGridPickerOpen ||
       !tauriShell ||
       typeof navigator === "undefined" ||
@@ -2611,9 +2701,12 @@ export function CollectionsView({ session, onLogout }: Props) {
     steamGridPickerSortMenuOpen,
     tauriShell,
     toggleSteamGridPickerFocusPane,
+    inputActive,
   ]);
 
   useEffect(() => {
+    if (!inputActive) return;
+
     function isShortcutTarget(el: EventTarget | null): boolean {
       if (!el || !(el instanceof HTMLElement)) return false;
       const tag = el.tagName;
@@ -2955,6 +3048,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     steamGridPickerSortMenuIndex,
     steamGridPickerSortMenuOpen,
     toggleSteamGridPickerFocusPane,
+    inputActive,
   ]);
 
   const slots = useMemo(() => {
@@ -3106,6 +3200,25 @@ export function CollectionsView({ session, onLogout }: Props) {
                 <p className="collections-settings-menu-hint">
                   Configure emulator launch behavior and defaults.
                 </p>
+                <label
+                  className={`collections-settings-option${settingsNavIndex === 5 ? " collections-settings-option--active" : ""}`}
+                >
+                  <input
+                    ref={settingsMinimizeOnLaunchRef}
+                    type="checkbox"
+                    checked={minimizeLauncherOnLaunch}
+                    onChange={(e) =>
+                      onMinimizeLauncherOnLaunchChange(e.target.checked)
+                    }
+                    onFocus={() => setSettingsNavIndex(5)}
+                  />
+                  <span>
+                    <strong>Minimize launcher on game launch</strong>
+                    <span className="collections-settings-option-desc">
+                      Global launcher behavior for all emulators.
+                    </span>
+                  </span>
+                </label>
                 <p className="collections-settings-menu-title">RetroArch</p>
                 <p className="collections-settings-menu-hint">
                   Play launches downloaded ROMs with your local RetroArch install. On Linux, leaving RetroArch path empty uses Flatpak app id org.libretro.RetroArch.
@@ -3113,33 +3226,33 @@ export function CollectionsView({ session, onLogout }: Props) {
                 <input
                   ref={settingsRetroArchPathRef}
                   type="text"
-                  className={`collections-settings-steamgrid-input${settingsNavIndex === 5 ? " collections-settings-steamgrid-input--active" : ""}`}
+                  className={`collections-settings-steamgrid-input${settingsNavIndex === 6 ? " collections-settings-steamgrid-input--active" : ""}`}
                   autoComplete="off"
                   placeholder="RetroArch executable/command (Windows: C:\\RetroArch\\retroarch.exe)"
                   value={retroArchPathDraft}
                   onChange={(e) => onRetroArchPathChange(e.target.value)}
-                  onFocus={() => setSettingsNavIndex(5)}
+                  onFocus={() => setSettingsNavIndex(6)}
                 />
                 <button
                   ref={settingsPickRetroArchPathRef}
                   type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 6 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 7 ? " collections-settings-steamgrid-save--active" : ""}`}
                   onClick={() => {
                     void pickRetroArchPath();
                   }}
-                  onFocus={() => setSettingsNavIndex(6)}
+                  onFocus={() => setSettingsNavIndex(7)}
                 >
                   Pick RetroArch location
                 </button>
                 <input
                   ref={settingsRetroArchCoreRef}
                   type="text"
-                  className={`collections-settings-steamgrid-input${settingsNavIndex === 7 ? " collections-settings-steamgrid-input--active" : ""}`}
+                  className={`collections-settings-steamgrid-input${settingsNavIndex === 8 ? " collections-settings-steamgrid-input--active" : ""}`}
                   autoComplete="off"
                   placeholder="Core path (e.g. C:\\RetroArch\\cores\\nestopia_libretro.dll)"
                   value={retroArchCorePathDraft}
                   onChange={(e) => onRetroArchCorePathChange(e.target.value)}
-                  onFocus={() => setSettingsNavIndex(7)}
+                  onFocus={() => setSettingsNavIndex(8)}
                 />
                 <input
                   type="text"
@@ -3150,22 +3263,22 @@ export function CollectionsView({ session, onLogout }: Props) {
                 <button
                   ref={settingsPickDownloadsDirRef}
                   type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 8 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 9 ? " collections-settings-steamgrid-save--active" : ""}`}
                   onClick={() => {
                     void pickRomsDownloadDir();
                   }}
-                  onFocus={() => setSettingsNavIndex(8)}
+                  onFocus={() => setSettingsNavIndex(9)}
                 >
                   Pick ROMs download location
                 </button>
                 <button
                   ref={settingsOpenDownloadsDirRef}
                   type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 9 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 10 ? " collections-settings-steamgrid-save--active" : ""}`}
                   onClick={() => {
                     void openRomsDownloadDir();
                   }}
-                  onFocus={() => setSettingsNavIndex(9)}
+                  onFocus={() => setSettingsNavIndex(10)}
                   disabled={!romsDownloadDir.trim()}
                 >
                   Open downloads location
