@@ -251,7 +251,7 @@ button.collections-settings-action:focus-visible {
   position: fixed;
   inset: 0;
   z-index: 120;
-  background: rgba(3, 6, 10, 0.78);
+  background: rgba(0, 0, 0, 0.52);
   backdrop-filter: blur(8px);
 }
 
@@ -260,11 +260,8 @@ button.collections-settings-action:focus-visible {
   inset: 18px;
   z-index: 121;
   border-radius: 16px;
-  border: 1px solid #334155;
-  background:
-    radial-gradient(circle at 15% 12%, rgba(14, 165, 233, 0.2), transparent 38%),
-    radial-gradient(circle at 85% 88%, rgba(245, 158, 11, 0.16), transparent 34%),
-    rgba(8, 14, 24, 0.97);
+  border: 1px solid #4a4a4a;
+  background: rgba(28, 28, 28, 0.98);
   box-shadow: 0 20px 70px rgba(0, 0, 0, 0.58);
   display: flex;
   flex-direction: column;
@@ -277,7 +274,7 @@ button.collections-settings-action:focus-visible {
   justify-content: space-between;
   gap: 12px;
   padding: 18px 22px 14px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+  border-bottom: 1px solid #3a3a3a;
 }
 
 .steamgrid-picker-eyebrow {
@@ -285,19 +282,19 @@ button.collections-settings-action:focus-visible {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 0.74rem;
-  color: #94a3b8;
+  color: #888888;
 }
 
 .steamgrid-picker-title {
   margin: 6px 0 2px;
   font-size: clamp(1.2rem, 2.2vw, 1.8rem);
-  color: #f8fafc;
+  color: #e5e5e5;
 }
 
 .steamgrid-picker-subtitle {
   margin: 0;
   font-size: 0.84rem;
-  color: #cbd5e1;
+  color: #b0b0b0;
 }
 
 .steamgrid-picker-close {
@@ -323,8 +320,8 @@ button.collections-settings-action:focus-visible {
   height: 100%;
   min-height: 0;
   border-radius: 12px;
-  border: 1px solid rgba(51, 65, 85, 0.8);
-  background: rgba(2, 6, 23, 0.56);
+  border: 1px solid #4a4a4a;
+  background: rgba(0, 0, 0, 0.2);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -333,8 +330,8 @@ button.collections-settings-action:focus-visible {
 
 .steamgrid-picker-pane--active {
   box-shadow:
-    inset 0 0 0 1px rgba(34, 211, 238, 0.75),
-    0 0 0 1px rgba(34, 211, 238, 0.35);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.82),
+    0 0 0 1px rgba(255, 255, 255, 0.34);
 }
 
 .steamgrid-picker-filters-title {
@@ -342,16 +339,16 @@ button.collections-settings-action:focus-visible {
   font-size: 0.74rem;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #cbd5e1;
+  color: #e5e5e5;
 }
 
 .steamgrid-picker-input,
 .steamgrid-picker-sort-trigger {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid #334155;
-  background: rgba(2, 6, 23, 0.85);
-  color: #e2e8f0;
+  border: 1px solid #4a4a4a;
+  background: rgba(0, 0, 0, 0.35);
+  color: #f0f0f0;
   border-radius: 8px;
   padding: 8px 10px;
   font-size: 0.82rem;
@@ -368,6 +365,11 @@ button.collections-settings-action:focus-visible {
   cursor: pointer;
 }
 
+.steamgrid-picker-sort-trigger:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #5a5a5a;
+}
+
 .steamgrid-picker-sort-caret {
   opacity: 0.8;
   font-size: 0.8rem;
@@ -378,30 +380,35 @@ button.collections-settings-action:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  border: 1px solid #334155;
+  border: 1px solid #4a4a4a;
   border-radius: 8px;
-  background: rgba(2, 6, 23, 0.95);
+  background: rgba(28, 28, 28, 0.98);
   padding: 6px;
 }
 
 .steamgrid-picker-sort-option {
   border: 1px solid transparent;
   border-radius: 7px;
-  background: rgba(15, 23, 42, 0.55);
-  color: #e2e8f0;
+  background: rgba(0, 0, 0, 0.2);
+  color: #e8e8e8;
   padding: 7px 8px;
   text-align: left;
   font-size: 0.78rem;
   cursor: pointer;
 }
 
+.steamgrid-picker-sort-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #5a5a5a;
+}
+
 .steamgrid-picker-sort-option--selected {
-  background: rgba(14, 116, 144, 0.22);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .steamgrid-picker-sort-option--active {
-  border-color: rgba(34, 211, 238, 0.75);
-  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.35);
+  border-color: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
 }
 
 .steamgrid-picker-check {
@@ -409,7 +416,7 @@ button.collections-settings-action:focus-visible {
   align-items: center;
   gap: 8px;
   font-size: 0.78rem;
-  color: #cbd5e1;
+  color: #e8e8e8;
   border: 1px solid transparent;
   border-radius: 8px;
   padding: 6px 8px;
@@ -421,19 +428,24 @@ button.collections-settings-action:focus-visible {
 
 .steamgrid-picker-refresh {
   margin-top: 0;
-  border: 1px solid #334155;
-  background: rgba(15, 23, 42, 0.86);
-  color: #e2e8f0;
+  border: 1px solid #4a4a4a;
+  background: rgba(55, 55, 55, 0.95);
+  color: #ffffff;
   border-radius: 8px;
   padding: 9px 10px;
   cursor: pointer;
   font: 600 0.8rem/1 system-ui, sans-serif;
 }
 
+.steamgrid-picker-refresh:hover {
+  background: rgba(68, 68, 68, 0.98);
+  border-color: #5a5a5a;
+}
+
 .steamgrid-picker-filters-preview {
   margin-top: auto;
   padding-top: 10px;
-  border-top: 1px solid rgba(148, 163, 184, 0.22);
+  border-top: 1px solid #3a3a3a;
 }
 
 .steamgrid-picker-filters-preview .steamgrid-picker-preview {
@@ -451,17 +463,19 @@ button.collections-settings-action:focus-visible {
 .steamgrid-picker-sort-trigger.steamgrid-picker-control--active,
 .steamgrid-picker-check.steamgrid-picker-control--active,
 .steamgrid-picker-refresh.steamgrid-picker-control--active {
-  border-color: rgba(34, 211, 238, 0.75);
-  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.35);
-  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 0 0 2px rgba(28, 28, 28, 0.98),
+    0 0 0 4px rgba(255, 255, 255, 0.92);
+  background: rgba(0, 0, 0, 0.35);
 }
 
 .steamgrid-picker-gallery-wrap {
   height: 100%;
   min-height: 0;
   border-radius: 12px;
-  border: 1px solid rgba(51, 65, 85, 0.8);
-  background: rgba(2, 6, 23, 0.56);
+  border: 1px solid #4a4a4a;
+  background: rgba(0, 0, 0, 0.2);
   overflow: hidden;
   padding: 12px;
   display: flex;
@@ -479,7 +493,7 @@ button.collections-settings-action:focus-visible {
 .steamgrid-picker-page-label {
   margin: 0;
   font-size: 0.75rem;
-  color: #cbd5e1;
+  color: #c8c8c8;
 }
 
 .steamgrid-picker-page-buttons {
@@ -489,13 +503,18 @@ button.collections-settings-action:focus-visible {
 }
 
 .steamgrid-picker-page-btn {
-  border: 1px solid #334155;
-  background: rgba(15, 23, 42, 0.86);
-  color: #e2e8f0;
+  border: 1px solid #4a4a4a;
+  background: rgba(55, 55, 55, 0.95);
+  color: #ffffff;
   border-radius: 7px;
   padding: 6px 9px;
   font-size: 0.73rem;
   cursor: pointer;
+}
+
+.steamgrid-picker-page-btn:hover {
+  background: rgba(68, 68, 68, 0.98);
+  border-color: #5a5a5a;
 }
 
 .steamgrid-picker-page-btn:disabled {
@@ -511,8 +530,8 @@ button.collections-settings-action:focus-visible {
 }
 
 .steamgrid-picker-tile {
-  border: 1px solid #334155;
-  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid #4a4a4a;
+  background: rgba(0, 0, 0, 0.2);
   border-radius: 10px;
   overflow: hidden;
   padding: 0;
@@ -539,20 +558,20 @@ button.collections-settings-action:focus-visible {
   display: block;
   padding: 6px 8px;
   font-size: 0.72rem;
-  color: #cbd5e1;
+  color: #c8c8c8;
 }
 
 .steamgrid-picker-tile--active {
-  border-color: #f8fafc;
+  border-color: #ffffff;
   box-shadow:
-    0 0 0 2px rgba(248, 250, 252, 0.86),
-    0 0 24px rgba(34, 211, 238, 0.2);
+    0 0 0 2px rgba(28, 28, 28, 0.98),
+    0 0 0 4px rgba(255, 255, 255, 0.92);
 }
 
 .steamgrid-picker-preview {
   border-radius: 12px;
-  border: 1px solid rgba(51, 65, 85, 0.8);
-  background: rgba(2, 6, 23, 0.56);
+  border: 1px solid #4a4a4a;
+  background: rgba(0, 0, 0, 0.2);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -564,15 +583,15 @@ button.collections-settings-action:focus-visible {
   font-size: 0.78rem;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #cbd5e1;
+  color: #e5e5e5;
 }
 
 .steamgrid-picker-preview-frame {
   width: 100%;
   aspect-ratio: 16 / 9;
   border-radius: 10px;
-  border: 1px solid #334155;
-  background-color: #1e293b;
+  border: 1px solid #4a4a4a;
+  background-color: #0d0d0d;
   background-size: cover;
   background-position: center;
   filter: saturate(1.05);
@@ -603,14 +622,14 @@ button.collections-settings-action:focus-visible {
 .steamgrid-picker-preview-meta {
   margin: 0;
   font-size: 0.77rem;
-  color: #94a3b8;
+  color: #9ca3af;
 }
 
 .steamgrid-picker-preview-details {
   display: grid;
   gap: 6px;
   font-size: 0.76rem;
-  color: #cbd5e1;
+  color: #e8e8e8;
 }
 
 .steamgrid-picker-preview-details p {
@@ -637,7 +656,7 @@ button.collections-settings-action:focus-visible {
 .steamgrid-picker-error {
   margin: 8px;
   font-size: 0.9rem;
-  color: #e2e8f0;
+  color: #e8e8e8;
 }
 
 .steamgrid-picker-error {
@@ -645,7 +664,7 @@ button.collections-settings-action:focus-visible {
 }
 
 .steamgrid-picker-footer {
-  border-top: 1px solid rgba(148, 163, 184, 0.22);
+  border-top: 1px solid #3a3a3a;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -653,7 +672,7 @@ button.collections-settings-action:focus-visible {
   justify-content: center;
   padding: 12px 18px 14px;
   font-size: 0.78rem;
-  color: #cbd5e1;
+  color: #c8c8c8;
 }
 
 .steamgrid-picker-footer-key {
@@ -664,9 +683,9 @@ button.collections-settings-action:focus-visible {
   height: 20px;
   padding: 0 7px;
   border-radius: 6px;
-  border: 1px solid rgba(148, 163, 184, 0.38);
-  background: rgba(15, 23, 42, 0.65);
-  color: #e2e8f0;
+  border: 1px solid #4a4a4a;
+  background: rgba(0, 0, 0, 0.35);
+  color: #f0f0f0;
   font-size: 0.7rem;
   line-height: 1;
 }
