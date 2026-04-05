@@ -2742,6 +2742,13 @@ export function CollectionsView({ session, onLogout }: Props) {
                 >
                   Unhide all collections
                 </button>
+
+                <p className="collections-settings-menu-title collections-settings-menu-title--spaced">
+                  Emulator Settings
+                </p>
+                <p className="collections-settings-menu-hint">
+                  Configure emulator launch behavior and defaults.
+                </p>
               </div>
             </div>
           </>,

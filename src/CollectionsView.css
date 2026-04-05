@@ -41,7 +41,14 @@
   z-index: 101;
   max-height: min(560px, calc(100vh - 48px));
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   margin: 0;
+}
+
+.collections-settings-menu--popover::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .collections-settings-menu-title {
