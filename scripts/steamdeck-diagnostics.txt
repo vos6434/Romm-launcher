@@ -1,4 +1,4 @@
-Steam Deck diagnostics generated: 2026-04-05T10:56:15+01:00
+Steam Deck diagnostics generated: 2026-04-05T11:18:38+01:00
 
 ===== Host Basics =====
 --- uname
@@ -46,16 +46,16 @@ Extended renderer info (GLX_MESA_query_renderer):
     Max GLES1 profile version: 1.1
     Max GLES[23] profile version: 3.2
 Memory info (GL_ATI_meminfo):
-    VBO free memory - total: 112 MB, largest block: 112 MB
-    VBO free aux. memory - total: 7526 MB, largest block: 7526 MB
-    Texture free memory - total: 112 MB, largest block: 112 MB
-    Texture free aux. memory - total: 7526 MB, largest block: 7526 MB
-    Renderbuffer free memory - total: 112 MB, largest block: 112 MB
-    Renderbuffer free aux. memory - total: 7526 MB, largest block: 7526 MB
+    VBO free memory - total: 105 MB, largest block: 105 MB
+    VBO free aux. memory - total: 7630 MB, largest block: 7630 MB
+    Texture free memory - total: 105 MB, largest block: 105 MB
+    Texture free aux. memory - total: 7630 MB, largest block: 7630 MB
+    Renderbuffer free memory - total: 105 MB, largest block: 105 MB
+    Renderbuffer free aux. memory - total: 7630 MB, largest block: 7630 MB
 Memory info (GL_NVX_gpu_memory_info):
     Dedicated video memory: 1024 MB
     Total available memory: 9216 MB
-    Currently available dedicated video memory: 112 MB
+    Currently available dedicated video memory: 105 MB
 OpenGL vendor string: AMD
 OpenGL renderer string: AMD Custom GPU 0405 (radeonsi, vangogh, LLVM 18.1.8, DRM 3.59, 6.11.11-valve27-1-neptune-611-g60ef8556a811)
 OpenGL core profile version string: 4.6 (Core Profile) Mesa 24.3.4 (git-8d0948917e)
@@ -183,9 +183,9 @@ zenity-gtk3 3.44.2-3
 --- webkit process binary info
 
 ===== AppImage Inspection =====
-AppImage path: /home/deck/Downloads/steamdeck-build-main/appimage/RomM Launcher_0.1.0_amd64.AppImage
+AppImage path: /home/deck/Downloads/steamdeck-build-main-57d673ca665c7d5e92f6d2095d072993f04ec0c3/appimage/RomM Launcher_0.1.0_amd64.AppImage
 --- file appimage
-/home/deck/Downloads/steamdeck-build-main/appimage/RomM Launcher_0.1.0_amd64.AppImage: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, BuildID[sha1]=db3b55acc50bd9baa1ff659711ef9ab111d8f4bb, stripped
+/home/deck/Downloads/steamdeck-build-main-57d673ca665c7d5e92f6d2095d072993f04ec0c3/appimage/RomM Launcher_0.1.0_amd64.AppImage: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, BuildID[sha1]=db3b55acc50bd9baa1ff659711ef9ab111d8f4bb, stripped
 --- chmod appimage
 --- extract appimage
 --- appdir webkit processes
@@ -199,135 +199,135 @@ squashfs-root/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/injected-bundle/libwebkit2
 squashfs-root/usr/lib/libwebkit2gtk-4.1.so.0
 --- appdir desktop entry
 --- ldd tauri binary
-	linux-vdso.so.1 (0x00007f2aa5e5f000)
-	libwayland-client.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwayland-client.so.0 (0x00007f2aa5e47000)
-	libgdk-3.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgdk-3.so.0 (0x00007f2aa4aef000)
-	libgdk_pixbuf-2.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgdk_pixbuf-2.0.so.0 (0x00007f2aa5e14000)
-	libcairo.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libcairo.so.2 (0x00007f2aa49c2000)
-	libgobject-2.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgobject-2.0.so.0 (0x00007f2aa495e000)
-	libglib-2.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libglib-2.0.so.0 (0x00007f2aa4818000)
-	libwebkit2gtk-4.1.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwebkit2gtk-4.1.so.0 (0x00007f2a9f200000)
-	libgtk-3.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgtk-3.so.0 (0x00007f2a9e800000)
-	libsoup-3.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libsoup-3.0.so.0 (0x00007f2a9f163000)
-	libgio-2.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgio-2.0.so.0 (0x00007f2a9e611000)
-	libjavascriptcoregtk-4.1.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libjavascriptcoregtk-4.1.so.0 (0x00007f2a9c400000)
-	libgcc_s.so.1 => /usr/lib/libgcc_s.so.1 (0x00007f2a9f135000)
-	libm.so.6 => /usr/lib/libm.so.6 (0x00007f2a9e518000)
-	libc.so.6 => /usr/lib/libc.so.6 (0x00007f2a9c20e000)
-	/lib64/ld-linux-x86-64.so.2 => /usr/lib64/ld-linux-x86-64.so.2 (0x00007f2aa5e61000)
-	libffi.so.8 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libffi.so.8 (0x00007f2aa5dd7000)
-	libpangocairo-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpangocairo-1.0.so.0 (0x00007f2a9f121000)
-	libpango-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpango-1.0.so.0 (0x00007f2a9f0b5000)
-	libcairo-gobject.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libcairo-gobject.so.2 (0x00007f2aa480b000)
-	libfontconfig.so.1 => /usr/lib/libfontconfig.so.1 (0x00007f2a9f065000)
-	libXinerama.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXinerama.so.1 (0x00007f2aa5dcf000)
-	libXi.so.6 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXi.so.6 (0x00007f2a9e503000)
-	libXrandr.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXrandr.so.2 (0x00007f2a9e4f5000)
-	libXcursor.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXcursor.so.1 (0x00007f2a9f058000)
-	libXcomposite.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXcomposite.so.1 (0x00007f2a9e4ef000)
-	libXdamage.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXdamage.so.1 (0x00007f2a9e4e9000)
-	libXfixes.so.3 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXfixes.so.3 (0x00007f2a9e4e0000)
-	libxkbcommon.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libxkbcommon.so.0 (0x00007f2a9e498000)
-	libwayland-cursor.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwayland-cursor.so.0 (0x00007f2a9e48d000)
-	libwayland-egl.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwayland-egl.so.1 (0x00007f2a9e487000)
-	libX11.so.6 => /usr/lib/libX11.so.6 (0x00007f2a9c0cd000)
-	libXext.so.6 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXext.so.6 (0x00007f2a9e470000)
-	libepoxy.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libepoxy.so.0 (0x00007f2a9bf7f000)
-	libfribidi.so.0 => /usr/lib/libfribidi.so.0 (0x00007f2a9e450000)
-	libgmodule-2.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgmodule-2.0.so.0 (0x00007f2a9e448000)
-	libpng16.so.16 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpng16.so.16 (0x00007f2a9bf42000)
-	libjpeg.so.8 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libjpeg.so.8 (0x00007f2a9bec0000)
-	libpixman-1.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpixman-1.so.0 (0x00007f2a9be13000)
-	libfreetype.so.6 => /usr/lib/libfreetype.so.6 (0x00007f2a9bd49000)
-	libxcb-shm.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libxcb-shm.so.0 (0x00007f2a9bd43000)
-	libxcb.so.1 => /usr/lib/libxcb.so.1 (0x00007f2a9bd18000)
-	libxcb-render.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libxcb-render.so.0 (0x00007f2a9bd06000)
-	libXrender.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXrender.so.1 (0x00007f2a9bcf8000)
-	libz.so.1 => /usr/lib/libz.so.1 (0x00007f2a9bcdf000)
-	libpcre.so.3 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpcre.so.3 (0x00007f2a9bc68000)
-	libwebpmux.so.3 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwebpmux.so.3 (0x00007f2a9bc5a000)
-	libexpat.so.1 => /usr/lib/libexpat.so.1 (0x00007f2a9bc30000)
-	libicui18n.so.70 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libicui18n.so.70 (0x00007f2a9b800000)
-	libsystemd.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libsystemd.so.0 (0x00007f2a9b734000)
-	libharfbuzz.so.0 => /usr/lib/libharfbuzz.so.0 (0x00007f2a9b615000)
-	libicuuc.so.70 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libicuuc.so.70 (0x00007f2a9b200000)
-	libatk-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libatk-1.0.so.0 (0x00007f2a9bc01000)
-	libxml2.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libxml2.so.2 (0x00007f2a9b429000)
-	libsqlite3.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libsqlite3.so.0 (0x00007f2a9b0ab000)
-	libxslt.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libxslt.so.1 (0x00007f2a9bbbb000)
-	liblcms2.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/liblcms2.so.2 (0x00007f2a9b046000)
-	libwoff2dec.so.1.0.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwoff2dec.so.1.0.2 (0x00007f2a9bbac000)
-	libgcrypt.so.20 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgcrypt.so.20 (0x00007f2a9af06000)
-	libgstallocators-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstallocators-1.0.so.0 (0x00007f2a9bba4000)
-	libgstapp-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstapp-1.0.so.0 (0x00007f2a9aeee000)
-	libgstbase-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstbase-1.0.so.0 (0x00007f2a9ae63000)
-	libgstreamer-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstreamer-1.0.so.0 (0x00007f2a9ad03000)
-	libgstpbutils-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstpbutils-1.0.so.0 (0x00007f2a9acba000)
-	libgstaudio-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstaudio-1.0.so.0 (0x00007f2a9ac33000)
-	libgsttag-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgsttag-1.0.so.0 (0x00007f2a9abee000)
-	libgstvideo-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstvideo-1.0.so.0 (0x00007f2a9ab22000)
-	libgstgl-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstgl-1.0.so.0 (0x00007f2a9aa93000)
-	libgstfft-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstfft-1.0.so.0 (0x00007f2a9aa86000)
-	libwebpdemux.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwebpdemux.so.2 (0x00007f2a9aa7f000)
-	libwebp.so.7 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwebp.so.7 (0x00007f2a9aa11000)
-	libharfbuzz-icu.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libharfbuzz-icu.so.0 (0x00007f2a9aa0b000)
-	libenchant-2.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libenchant-2.so.2 (0x00007f2a9a9fc000)
-	libsecret-1.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libsecret-1.so.0 (0x00007f2a9a994000)
-	libtasn1.so.6 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libtasn1.so.6 (0x00007f2a9a97b000)
-	libhyphen.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libhyphen.so.0 (0x00007f2a9a973000)
-	libwayland-server.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwayland-server.so.0 (0x00007f2a9a95b000)
-	libmanette-0.2.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libmanette-0.2.so.0 (0x00007f2a9a929000)
-	libseccomp.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libseccomp.so.2 (0x00007f2a9a908000)
-	libgbm.so.1 => /usr/lib/libgbm.so.1 (0x00007f2a9a902000)
-	libdrm.so.2 => /usr/lib/libdrm.so.2 (0x00007f2a9a8eb000)
-	libstdc++.so.6 => /usr/lib/libstdc++.so.6 (0x00007f2a9a600000)
-	libatk-bridge-2.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libatk-bridge-2.0.so.0 (0x00007f2a9a8ad000)
-	libpangoft2-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpangoft2-1.0.so.0 (0x00007f2a9a88f000)
-	libpsl.so.5 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpsl.so.5 (0x00007f2a9a5eb000)
-	libbrotlidec.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libbrotlidec.so.1 (0x00007f2a9a5dc000)
-	libgssapi_krb5.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgssapi_krb5.so.2 (0x00007f2a9a585000)
-	libnghttp2.so.14 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libnghttp2.so.14 (0x00007f2a9a559000)
-	libmount.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libmount.so.1 (0x00007f2a9a512000)
-	libselinux.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libselinux.so.1 (0x00007f2a9a4e4000)
-	libatomic.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libatomic.so.1 (0x00007f2a9a4d9000)
-	libthai.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libthai.so.0 (0x00007f2a9a4cd000)
-	libbz2.so.1.0 => /usr/lib/libbz2.so.1.0 (0x00007f2a9a4ba000)
-	libXau.so.6 => /usr/lib/libXau.so.6 (0x00007f2a9a886000)
-	libXdmcp.so.6 => /usr/lib/libXdmcp.so.6 (0x00007f2a9a4b2000)
-	liblzma.so.5 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/liblzma.so.5 (0x00007f2a9a486000)
-	libzstd.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libzstd.so.1 (0x00007f2a9a3b1000)
-	liblz4.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/liblz4.so.1 (0x00007f2a9a390000)
-	libcap.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libcap.so.2 (0x00007f2a9a384000)
-	libgraphite2.so.3 => /usr/lib/libgraphite2.so.3 (0x00007f2a9a362000)
-	libicudata.so.70 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libicudata.so.70 (0x00007f2a98600000)
-	libwoff2common.so.1.0.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwoff2common.so.1.0.2 (0x00007f2a9a35a000)
-	libgpg-error.so.0 => /usr/lib/libgpg-error.so.0 (0x00007f2a9a332000)
-	libunwind.so.8 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libunwind.so.8 (0x00007f2a9a316000)
-	libdw.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libdw.so.1 (0x00007f2a9a268000)
-	liborc-0.4.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/liborc-0.4.so.0 (0x00007f2a98578000)
-	libGL.so.1 => /usr/lib/libGL.so.1 (0x00007f2a984f2000)
-	libEGL.so.1 => /usr/lib/libEGL.so.1 (0x00007f2a9a254000)
-	libX11-xcb.so.1 => /usr/lib/libX11-xcb.so.1 (0x00007f2a9a24f000)
-	libgudev-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgudev-1.0.so.0 (0x00007f2a9a23f000)
-	libevdev.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libevdev.so.2 (0x00007f2a9a21f000)
-	libdbus-1.so.3 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libdbus-1.so.3 (0x00007f2a9849f000)
-	libatspi.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libatspi.so.0 (0x00007f2a98460000)
-	libunistring.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libunistring.so.2 (0x00007f2a982b2000)
-	libidn2.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libidn2.so.0 (0x00007f2a98290000)
-	libbrotlicommon.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libbrotlicommon.so.1 (0x00007f2a9826a000)
-	libkrb5.so.3 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libkrb5.so.3 (0x00007f2a9819a000)
-	libk5crypto.so.3 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libk5crypto.so.3 (0x00007f2a9816a000)
-	libcom_err.so.2 => /usr/lib/libcom_err.so.2 (0x00007f2a98164000)
-	libkrb5support.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libkrb5support.so.0 (0x00007f2a98155000)
-	libblkid.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libblkid.so.1 (0x00007f2a9811c000)
-	libpcre2-8.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpcre2-8.so.0 (0x00007f2a98082000)
-	libdatrie.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libdatrie.so.1 (0x00007f2a98078000)
-	libelf.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libelf.so.1 (0x00007f2a98059000)
-	libGLdispatch.so.0 => /usr/lib/libGLdispatch.so.0 (0x00007f2a97fa1000)
-	libGLX.so.0 => /usr/lib/libGLX.so.0 (0x00007f2a97f6f000)
-	libudev.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libudev.so.1 (0x00007f2a97f41000)
-	libkeyutils.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libkeyutils.so.1 (0x00007f2a97f39000)
-	libresolv.so.2 => /usr/lib/libresolv.so.2 (0x00007f2a97f27000)
+	linux-vdso.so.1 (0x00007f273e261000)
+	libwayland-client.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwayland-client.so.0 (0x00007f273e249000)
+	libgdk-3.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgdk-3.so.0 (0x00007f273ceef000)
+	libgdk_pixbuf-2.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgdk_pixbuf-2.0.so.0 (0x00007f273e216000)
+	libcairo.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libcairo.so.2 (0x00007f273cdc2000)
+	libgobject-2.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgobject-2.0.so.0 (0x00007f273cd5e000)
+	libglib-2.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libglib-2.0.so.0 (0x00007f273cc18000)
+	libwebkit2gtk-4.1.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwebkit2gtk-4.1.so.0 (0x00007f2737600000)
+	libgtk-3.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgtk-3.so.0 (0x00007f2736c00000)
+	libsoup-3.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libsoup-3.0.so.0 (0x00007f2737563000)
+	libgio-2.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgio-2.0.so.0 (0x00007f2736a11000)
+	libjavascriptcoregtk-4.1.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libjavascriptcoregtk-4.1.so.0 (0x00007f2734800000)
+	libgcc_s.so.1 => /usr/lib/libgcc_s.so.1 (0x00007f2737535000)
+	libm.so.6 => /usr/lib/libm.so.6 (0x00007f2736918000)
+	libc.so.6 => /usr/lib/libc.so.6 (0x00007f273460e000)
+	/lib64/ld-linux-x86-64.so.2 => /usr/lib64/ld-linux-x86-64.so.2 (0x00007f273e263000)
+	libffi.so.8 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libffi.so.8 (0x00007f273e1d9000)
+	libpangocairo-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpangocairo-1.0.so.0 (0x00007f2737521000)
+	libpango-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpango-1.0.so.0 (0x00007f27374b5000)
+	libcairo-gobject.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libcairo-gobject.so.2 (0x00007f273cc0b000)
+	libfontconfig.so.1 => /usr/lib/libfontconfig.so.1 (0x00007f2737465000)
+	libXinerama.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXinerama.so.1 (0x00007f273e1d1000)
+	libXi.so.6 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXi.so.6 (0x00007f2736903000)
+	libXrandr.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXrandr.so.2 (0x00007f27368f5000)
+	libXcursor.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXcursor.so.1 (0x00007f2737458000)
+	libXcomposite.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXcomposite.so.1 (0x00007f27368ef000)
+	libXdamage.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXdamage.so.1 (0x00007f27368e9000)
+	libXfixes.so.3 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXfixes.so.3 (0x00007f27368e0000)
+	libxkbcommon.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libxkbcommon.so.0 (0x00007f2736898000)
+	libwayland-cursor.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwayland-cursor.so.0 (0x00007f273688d000)
+	libwayland-egl.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwayland-egl.so.1 (0x00007f2736887000)
+	libX11.so.6 => /usr/lib/libX11.so.6 (0x00007f27344cd000)
+	libXext.so.6 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXext.so.6 (0x00007f2736870000)
+	libepoxy.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libepoxy.so.0 (0x00007f273437f000)
+	libfribidi.so.0 => /usr/lib/libfribidi.so.0 (0x00007f2736850000)
+	libgmodule-2.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgmodule-2.0.so.0 (0x00007f2736848000)
+	libpng16.so.16 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpng16.so.16 (0x00007f2734342000)
+	libjpeg.so.8 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libjpeg.so.8 (0x00007f27342c0000)
+	libpixman-1.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpixman-1.so.0 (0x00007f2734213000)
+	libfreetype.so.6 => /usr/lib/libfreetype.so.6 (0x00007f2734149000)
+	libxcb-shm.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libxcb-shm.so.0 (0x00007f2736842000)
+	libxcb.so.1 => /usr/lib/libxcb.so.1 (0x00007f273411e000)
+	libxcb-render.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libxcb-render.so.0 (0x00007f273410a000)
+	libXrender.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libXrender.so.1 (0x00007f27340fc000)
+	libz.so.1 => /usr/lib/libz.so.1 (0x00007f27340e3000)
+	libpcre.so.3 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpcre.so.3 (0x00007f273406c000)
+	libwebpmux.so.3 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwebpmux.so.3 (0x00007f273405e000)
+	libexpat.so.1 => /usr/lib/libexpat.so.1 (0x00007f2734032000)
+	libicui18n.so.70 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libicui18n.so.70 (0x00007f2733c00000)
+	libsystemd.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libsystemd.so.0 (0x00007f2733b34000)
+	libharfbuzz.so.0 => /usr/lib/libharfbuzz.so.0 (0x00007f2733a15000)
+	libicuuc.so.70 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libicuuc.so.70 (0x00007f2733600000)
+	libatk-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libatk-1.0.so.0 (0x00007f2734003000)
+	libxml2.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libxml2.so.2 (0x00007f2733829000)
+	libsqlite3.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libsqlite3.so.0 (0x00007f27334ab000)
+	libxslt.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libxslt.so.1 (0x00007f2733fbd000)
+	liblcms2.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/liblcms2.so.2 (0x00007f2733446000)
+	libwoff2dec.so.1.0.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwoff2dec.so.1.0.2 (0x00007f2733fae000)
+	libgcrypt.so.20 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgcrypt.so.20 (0x00007f2733306000)
+	libgstallocators-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstallocators-1.0.so.0 (0x00007f2733fa6000)
+	libgstapp-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstapp-1.0.so.0 (0x00007f27332ee000)
+	libgstbase-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstbase-1.0.so.0 (0x00007f2733263000)
+	libgstreamer-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstreamer-1.0.so.0 (0x00007f2733103000)
+	libgstpbutils-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstpbutils-1.0.so.0 (0x00007f27330ba000)
+	libgstaudio-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstaudio-1.0.so.0 (0x00007f2733033000)
+	libgsttag-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgsttag-1.0.so.0 (0x00007f2732fee000)
+	libgstvideo-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstvideo-1.0.so.0 (0x00007f2732f22000)
+	libgstgl-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstgl-1.0.so.0 (0x00007f2732e93000)
+	libgstfft-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgstfft-1.0.so.0 (0x00007f2732e86000)
+	libwebpdemux.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwebpdemux.so.2 (0x00007f2733820000)
+	libwebp.so.7 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwebp.so.7 (0x00007f2732e18000)
+	libharfbuzz-icu.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libharfbuzz-icu.so.0 (0x00007f2732e12000)
+	libenchant-2.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libenchant-2.so.2 (0x00007f2732e01000)
+	libsecret-1.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libsecret-1.so.0 (0x00007f2732d99000)
+	libtasn1.so.6 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libtasn1.so.6 (0x00007f2732d80000)
+	libhyphen.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libhyphen.so.0 (0x00007f2732d78000)
+	libwayland-server.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwayland-server.so.0 (0x00007f2732d60000)
+	libmanette-0.2.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libmanette-0.2.so.0 (0x00007f2732d2c000)
+	libseccomp.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libseccomp.so.2 (0x00007f2732d0b000)
+	libgbm.so.1 => /usr/lib/libgbm.so.1 (0x00007f2732d05000)
+	libdrm.so.2 => /usr/lib/libdrm.so.2 (0x00007f2732cee000)
+	libstdc++.so.6 => /usr/lib/libstdc++.so.6 (0x00007f2732a00000)
+	libatk-bridge-2.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libatk-bridge-2.0.so.0 (0x00007f2732cb0000)
+	libpangoft2-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpangoft2-1.0.so.0 (0x00007f2732c92000)
+	libpsl.so.5 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpsl.so.5 (0x00007f27329eb000)
+	libbrotlidec.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libbrotlidec.so.1 (0x00007f27329dc000)
+	libgssapi_krb5.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgssapi_krb5.so.2 (0x00007f2732985000)
+	libnghttp2.so.14 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libnghttp2.so.14 (0x00007f2732959000)
+	libmount.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libmount.so.1 (0x00007f2732912000)
+	libselinux.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libselinux.so.1 (0x00007f27328e4000)
+	libatomic.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libatomic.so.1 (0x00007f27328d9000)
+	libthai.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libthai.so.0 (0x00007f27328cd000)
+	libbz2.so.1.0 => /usr/lib/libbz2.so.1.0 (0x00007f27328ba000)
+	libXau.so.6 => /usr/lib/libXau.so.6 (0x00007f2732c89000)
+	libXdmcp.so.6 => /usr/lib/libXdmcp.so.6 (0x00007f27328b2000)
+	liblzma.so.5 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/liblzma.so.5 (0x00007f2732886000)
+	libzstd.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libzstd.so.1 (0x00007f27327b3000)
+	liblz4.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/liblz4.so.1 (0x00007f2732792000)
+	libcap.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libcap.so.2 (0x00007f2732786000)
+	libgraphite2.so.3 => /usr/lib/libgraphite2.so.3 (0x00007f2732764000)
+	libicudata.so.70 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libicudata.so.70 (0x00007f2730a00000)
+	libwoff2common.so.1.0.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libwoff2common.so.1.0.2 (0x00007f273275c000)
+	libgpg-error.so.0 => /usr/lib/libgpg-error.so.0 (0x00007f2732734000)
+	libunwind.so.8 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libunwind.so.8 (0x00007f2732718000)
+	libdw.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libdw.so.1 (0x00007f273266a000)
+	liborc-0.4.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/liborc-0.4.so.0 (0x00007f2730978000)
+	libGL.so.1 => /usr/lib/libGL.so.1 (0x00007f27308f2000)
+	libEGL.so.1 => /usr/lib/libEGL.so.1 (0x00007f2732656000)
+	libX11-xcb.so.1 => /usr/lib/libX11-xcb.so.1 (0x00007f2732651000)
+	libgudev-1.0.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libgudev-1.0.so.0 (0x00007f2732641000)
+	libevdev.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libevdev.so.2 (0x00007f2732621000)
+	libdbus-1.so.3 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libdbus-1.so.3 (0x00007f273089f000)
+	libatspi.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libatspi.so.0 (0x00007f2730860000)
+	libunistring.so.2 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libunistring.so.2 (0x00007f27306b2000)
+	libidn2.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libidn2.so.0 (0x00007f2730690000)
+	libbrotlicommon.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libbrotlicommon.so.1 (0x00007f273066c000)
+	libkrb5.so.3 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libkrb5.so.3 (0x00007f273059c000)
+	libk5crypto.so.3 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libk5crypto.so.3 (0x00007f273056c000)
+	libcom_err.so.2 => /usr/lib/libcom_err.so.2 (0x00007f2730566000)
+	libkrb5support.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libkrb5support.so.0 (0x00007f2730557000)
+	libblkid.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libblkid.so.1 (0x00007f273051e000)
+	libpcre2-8.so.0 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libpcre2-8.so.0 (0x00007f2730484000)
+	libdatrie.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libdatrie.so.1 (0x00007f273047a000)
+	libelf.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libelf.so.1 (0x00007f273045b000)
+	libGLdispatch.so.0 => /usr/lib/libGLdispatch.so.0 (0x00007f27303a3000)
+	libGLX.so.0 => /usr/lib/libGLX.so.0 (0x00007f2730371000)
+	libudev.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libudev.so.1 (0x00007f2730343000)
+	libkeyutils.so.1 => /home/deck/Documents/romk/Romm-launcher/scripts/squashfs-root/usr/bin/../lib/libkeyutils.so.1 (0x00007f273033b000)
+	libresolv.so.2 => /usr/lib/libresolv.so.2 (0x00007f2730329000)
 --- readelf tauri binary
 
 Dynamic section at offset 0x11c92d8 contains 42 entries:
@@ -377,24 +377,18 @@ Dynamic section at offset 0x11c92d8 contains 42 entries:
 
 ===== AppImage Runtime Test =====
 --- run appimage with webkit debug
-(tauri-app:28872): GLib-GIO-DEBUG: 10:56:17.579: _g_io_module_get_default: Found default implementation local (GLocalVfs) for ‘gio-vfs’
-(tauri-app:28872): GLib-DEBUG: 10:56:17.604: unsetenv() is not thread-safe and should not be used after threads are created
-(tauri-app:28872): Gtk-DEBUG: 10:56:17.604: Connecting to session manager
-(tauri-app:28872): Gtk-DEBUG: 10:56:17.604: Failed to get the GNOME session proxy: The name org.gnome.SessionManager is not owned
-(tauri-app:28872): Gtk-DEBUG: 10:56:17.604: Failed to get the Xfce session proxy: The name org.xfce.SessionManager is not owned
-(process:28887): GLib-GIO-DEBUG: 10:56:17.659: Failed to initialize portal (GNetworkMonitorPortal) for gio-network-monitor: Not using portals
-(process:28887): GLib-GIO-DEBUG: 10:56:17.661: _g_io_module_get_default: Found default implementation networkmanager (GNetworkMonitorNM) for ?gio-network-monitor?
-(process:28887): GLib-GIO-DEBUG: 10:56:17.671: Failed to initialize portal (GPowerProfileMonitorPortal) for gio-power-profile-monitor: Not using portals
-(process:28887): GLib-GIO-DEBUG: 10:56:17.671: _g_io_module_get_default: Found default implementation dbus (GPowerProfileMonitorDBus) for ?gio-power-profile-monitor?
-(process:28887): GLib-GIO-DEBUG: 10:56:17.671: _g_io_module_get_default: Found default implementation local (GLocalVfs) for ?gio-vfs?
-(WebKitWebProcess:28891): GLib-GIO-DEBUG: 10:56:17.684: _g_io_module_get_default: Found default implementation local (GLocalVfs) for ‘gio-vfs’
-(WebKitWebProcess:28891): GLib-GIO-DEBUG: 10:56:18.229: Failed to initialize portal (GPowerProfileMonitorPortal) for gio-power-profile-monitor: Not using portals
-(WebKitWebProcess:28891): GLib-GIO-DEBUG: 10:56:18.229: _g_io_module_get_default: Found default implementation dbus (GPowerProfileMonitorDBus) for ‘gio-power-profile-monitor’
+(tauri-app:31233): GLib-GIO-DEBUG: 11:18:40.317: _g_io_module_get_default: Found default implementation local (GLocalVfs) for ‘gio-vfs’
+(tauri-app:31233): GLib-DEBUG: 11:18:40.343: unsetenv() is not thread-safe and should not be used after threads are created
+(tauri-app:31233): Gtk-DEBUG: 11:18:40.343: Connecting to session manager
+(tauri-app:31233): Gtk-DEBUG: 11:18:40.343: Failed to get the GNOME session proxy: The name org.gnome.SessionManager is not owned
+(tauri-app:31233): Gtk-DEBUG: 11:18:40.344: Failed to get the Xfce session proxy: The name org.xfce.SessionManager is not owned
+(process:31248): GLib-GIO-DEBUG: 11:18:40.399: Failed to initialize portal (GNetworkMonitorPortal) for gio-network-monitor: Not using portals
+(process:31248): GLib-GIO-DEBUG: 11:18:40.402: _g_io_module_get_default: Found default implementation networkmanager (GNetworkMonitorNM) for ?gio-network-monitor?
+(process:31248): GLib-GIO-DEBUG: 11:18:40.404: Failed to initialize portal (GPowerProfileMonitorPortal) for gio-power-profile-monitor: Not using portals
+(process:31248): GLib-GIO-DEBUG: 11:18:40.404: _g_io_module_get_default: Found default implementation dbus (GPowerProfileMonitorDBus) for ?gio-power-profile-monitor?
+(process:31248): GLib-GIO-DEBUG: 11:18:40.404: _g_io_module_get_default: Found default implementation local (GLocalVfs) for ?gio-vfs?
+(WebKitWebProcess:31252): GLib-GIO-DEBUG: 11:18:40.418: _g_io_module_get_default: Found default implementation local (GLocalVfs) for ‘gio-vfs’
+(WebKitWebProcess:31252): GLib-GIO-DEBUG: 11:18:40.466: Failed to initialize portal (GPowerProfileMonitorPortal) for gio-power-profile-monitor: Not using portals
+(WebKitWebProcess:31252): GLib-GIO-DEBUG: 11:18:40.466: _g_io_module_get_default: Found default implementation dbus (GPowerProfileMonitorDBus) for ‘gio-power-profile-monitor’
 Could not create default EGL display: EGL_BAD_PARAMETER. Aborting...
 --- run appimage with software GL
-Could not create default EGL display: EGL_BAD_PARAMETER. Aborting...
-
-===== Container / SteamOS specifics =====
---- gamescope env hints
-XDG_RUNTIME_DIR=/run/user/1000
---- is immutable fs
