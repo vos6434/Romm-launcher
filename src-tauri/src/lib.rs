@@ -14,6 +14,7 @@ fn configure_linux_webview_env() {
 
     // SteamOS/gamescope can show a black WebKitGTK view with GPU-backed paths.
     // Keep these overridable by honoring existing user-provided environment.
+    set_default_env("GDK_BACKEND", "x11");
     set_default_env("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     set_default_env("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
     set_default_env("GSK_RENDERER", "cairo");
