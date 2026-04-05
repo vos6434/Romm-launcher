@@ -27,16 +27,20 @@ chmod +x "$APPIMAGE_FILE"
 rm -rf squashfs-root
 APPIMAGE_EXTRACT_AND_RUN=1 "./$APPIMAGE_FILE" --appimage-extract
 
+APPDIR="$WORKDIR/squashfs-root"
+LIB_DIR="$APPDIR/usr/lib"
+LIB_DIR_MULTIARCH="$APPDIR/usr/lib/x86_64-linux-gnu"
+
 if [[ ! -x "squashfs-root/usr/bin/tauri-app" ]]; then
   echo "Could not find executable at squashfs-root/usr/bin/tauri-app"
   exit 1
 fi
 
 WEBKIT_EXEC_PATH=""
-if [[ -x "squashfs-root/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess" ]]; then
-  WEBKIT_EXEC_PATH="squashfs-root/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
-elif [[ -x "squashfs-root/usr/libexec/webkit2gtk-4.1/WebKitNetworkProcess" ]]; then
-  WEBKIT_EXEC_PATH="squashfs-root/usr/libexec/webkit2gtk-4.1"
+if [[ -x "$APPDIR/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess" ]]; then
+  WEBKIT_EXEC_PATH="$APPDIR/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
+elif [[ -x "$APPDIR/usr/libexec/webkit2gtk-4.1/WebKitNetworkProcess" ]]; then
+  WEBKIT_EXEC_PATH="$APPDIR/usr/libexec/webkit2gtk-4.1"
 fi
 
 if [[ -z "$WEBKIT_EXEC_PATH" ]]; then
@@ -49,11 +53,11 @@ fi
 
 echo "Running extracted AppDir binary with bundled libs..."
 exec env \
-  LD_LIBRARY_PATH="squashfs-root/usr/lib:squashfs-root/usr/lib/x86_64-linux-gnu" \
+  LD_LIBRARY_PATH="$LIB_DIR:$LIB_DIR_MULTIARCH" \
   WEBKIT_EXEC_PATH="$WEBKIT_EXEC_PATH" \
   GDK_BACKEND=x11 \
   WAYLAND_DISPLAY= \
   WEBKIT_DISABLE_DMABUF_RENDERER=1 \
   WEBKIT_DISABLE_COMPOSITING_MODE=1 \
   GSK_RENDERER=cairo \
-  ./squashfs-root/usr/bin/tauri-app
+  "$APPDIR/usr/bin/tauri-app"

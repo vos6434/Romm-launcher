@@ -93,20 +93,24 @@ From the folder containing the AppImage:
 
 Run the inner binary with explicit library path:
 
-  WEBKIT_EXEC_PATH="squashfs-root/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
+  APPDIR="$PWD/squashfs-root"
+  WEBKIT_EXEC_PATH="$APPDIR/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
 
-  LD_LIBRARY_PATH="squashfs-root/usr/lib:squashfs-root/usr/lib/x86_64-linux-gnu" \
+  LD_LIBRARY_PATH="$APPDIR/usr/lib:$APPDIR/usr/lib/x86_64-linux-gnu" \
   WEBKIT_EXEC_PATH="$WEBKIT_EXEC_PATH" \
   GDK_BACKEND=x11 \
   WAYLAND_DISPLAY= \
   WEBKIT_DISABLE_DMABUF_RENDERER=1 \
   WEBKIT_DISABLE_COMPOSITING_MODE=1 \
   GSK_RENDERER=cairo \
-  ./squashfs-root/usr/bin/tauri-app
+  "$APPDIR/usr/bin/tauri-app"
 
 If that folder does not exist, try this alternate WebKit process path:
 
-  WEBKIT_EXEC_PATH="squashfs-root/usr/libexec/webkit2gtk-4.1"
+  WEBKIT_EXEC_PATH="$APPDIR/usr/libexec/webkit2gtk-4.1"
+
+Note: messages like "failed to load module canberra-gtk-module" are common on SteamOS
+and are usually non-fatal for this test.
 
 Interpretation:
 - If this works but running AppImage directly is white:
