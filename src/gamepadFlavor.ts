@@ -1,5 +1,5 @@
 /** Visual / naming style for on-screen controller prompts. */
-export type GamepadFlavor = "xbox" | "playstation" | "nintendo" | "generic";
+export type GamepadFlavor = "xbox" | "playstation" | "nintendo" | "steamdeck" | "generic";
 
 /**
  * Best-effort flavor from `Gamepad#id` (browser-provided string).
@@ -7,6 +7,10 @@ export type GamepadFlavor = "xbox" | "playstation" | "nintendo" | "generic";
  */
 export function flavorFromGamepadId(id: string): GamepadFlavor {
   const s = id.toLowerCase();
+
+  if (/steam\s*deck|steamdeck|valve|28de/.test(s)) {
+    return "steamdeck";
+  }
 
   if (
     /sony|dualshock|dualsense|054c|cech|playstation|ps4|ps5/.test(s)

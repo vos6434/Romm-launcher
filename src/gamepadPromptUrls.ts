@@ -32,6 +32,16 @@ import psTriangle from "./assets/kenney prompts/PlayStation Series/Vector/playst
 import xboxY from "./assets/kenney prompts/Xbox Series/Vector/xbox_button_y.svg?url";
 import switchX from "./assets/kenney prompts/Nintendo Switch/Vector/switch_button_x.svg?url";
 
+import steamdeckA from "./assets/kenney prompts/Steam Deck/Vector/steamdeck_button_a.svg?url";
+import steamdeckB from "./assets/kenney prompts/Steam Deck/Vector/steamdeck_button_b.svg?url";
+import steamdeckY from "./assets/kenney prompts/Steam Deck/Vector/steamdeck_button_y.svg?url";
+import steamdeckDpadVerticalOutline from "./assets/kenney prompts/Steam Deck/Vector/steamdeck_dpad_vertical_outline.svg?url";
+import steamdeckDpadHorizontalOutline from "./assets/kenney prompts/Steam Deck/Vector/steamdeck_dpad_horizontal_outline.svg?url";
+import steamdeckL1 from "./assets/kenney prompts/Steam Deck/Vector/steamdeck_button_l1.svg?url";
+import steamdeckR1 from "./assets/kenney prompts/Steam Deck/Vector/steamdeck_button_r1.svg?url";
+import steamdeckOptions from "./assets/kenney prompts/Steam Deck/Vector/steamdeck_button_options.svg?url";
+import steamdeckView from "./assets/kenney prompts/Steam Deck/Vector/steamdeck_button_view.svg?url";
+
 /** South / confirm (A, Cross, B on Switch). */
 export function primaryPromptUrl(flavor: GamepadFlavor): string {
   switch (flavor) {
@@ -39,6 +49,8 @@ export function primaryPromptUrl(flavor: GamepadFlavor): string {
       return psCross;
     case "nintendo":
       return switchB;
+    case "steamdeck":
+      return steamdeckA;
     case "xbox":
     case "generic":
     default:
@@ -53,6 +65,8 @@ export function backPromptUrl(flavor: GamepadFlavor): string {
       return psCircle;
     case "nintendo":
       return switchA;
+    case "steamdeck":
+      return steamdeckB;
     case "xbox":
     case "generic":
     default:
@@ -62,12 +76,14 @@ export function backPromptUrl(flavor: GamepadFlavor): string {
 
 /** Combined ↑↓ D-pad outline art per controller family. */
 export function dpadVerticalOutlineUrl(flavor: GamepadFlavor): string {
+  if (flavor === "steamdeck") return steamdeckDpadVerticalOutline;
   if (flavor === "playstation") return psDpadVerticalOutline;
   if (flavor === "nintendo") return switchDpadVerticalOutline;
   return xboxDpadVerticalOutline;
 }
 
 export function dpadHorizontalOutlineUrl(flavor: GamepadFlavor): string {
+  if (flavor === "steamdeck") return steamdeckDpadHorizontalOutline;
   if (flavor === "playstation") return psDpadHorizontalOutline;
   if (flavor === "nintendo") return switchDpadHorizontalOutline;
   return xboxDpadHorizontalOutline;
@@ -75,6 +91,7 @@ export function dpadHorizontalOutlineUrl(flavor: GamepadFlavor): string {
 
 /** Previous-page shoulder button (LB / L1 / L). */
 export function previousPagePromptUrl(flavor: GamepadFlavor): string {
+  if (flavor === "steamdeck") return steamdeckL1;
   if (flavor === "playstation") return psL1Alternative;
   if (flavor === "nintendo") return switchL;
   return xboxLb;
@@ -82,6 +99,7 @@ export function previousPagePromptUrl(flavor: GamepadFlavor): string {
 
 /** Next-page shoulder button (RB / R1 / R). */
 export function nextPagePromptUrl(flavor: GamepadFlavor): string {
+  if (flavor === "steamdeck") return steamdeckR1;
   if (flavor === "playstation") return psR1Alternative;
   if (flavor === "nintendo") return switchR;
   return xboxRb;
@@ -94,6 +112,8 @@ export function startPromptUrl(flavor: GamepadFlavor): string {
       return ps5Options;
     case "nintendo":
       return switchPlusOutline;
+    case "steamdeck":
+      return steamdeckOptions;
     case "xbox":
     case "generic":
     default:
@@ -108,6 +128,8 @@ export function collectionSettingsPromptUrl(flavor: GamepadFlavor): string {
       return psTriangle;
     case "nintendo":
       return switchX;
+    case "steamdeck":
+      return steamdeckY;
     case "xbox":
     case "generic":
     default:
@@ -122,6 +144,8 @@ export function selectPromptUrl(flavor: GamepadFlavor): string {
       return ps5Create;
     case "nintendo":
       return switchMinusOutline;
+    case "steamdeck":
+      return steamdeckView;
     case "xbox":
     case "generic":
     default:
