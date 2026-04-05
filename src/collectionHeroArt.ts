@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./desktopApi";
 import { rommAssetUrl } from "./rommAssets";
 import {
   itemsFromRomsPage,

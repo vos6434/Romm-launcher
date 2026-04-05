@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, invoke, hasDesktopBridge } from "./desktopApi";
 import { CollectionsView, type Session } from "./CollectionsView";
 import { GamepadNavPromptGlyphs } from "./GamepadNavPromptGlyphs";
 import { GamepadPromptGlyph } from "./GamepadPromptGlyph";
@@ -33,7 +32,7 @@ type LoginOk = {
 };
 
 function hasSavedCredentialsForAutoLogin(): boolean {
-  if (!isTauri()) return false;
+  if (!hasDesktopBridge()) return false;
   const s = loadSavedCredentials();
   return !!(
     s &&
@@ -82,16 +81,16 @@ function App() {
   const retryRef = useRef<HTMLButtonElement>(null);
 
   const { flavor: gamepadFlavor, gamepadConnected } = useGamepadInput();
-  const tauriShell = isTauri();
+  const desktopShell = hasDesktopBridge();
   const slotNavChrome = session === null;
   const showGamepadFooterHints =
-    slotNavChrome && tauriShell && gamepadConnected;
+    slotNavChrome && desktopShell && gamepadConnected;
   const showKeyboardFooterHints = slotNavChrome && !showGamepadFooterHints;
 
   const slotOrder = useMemo(() => loginSlotOrder(!!error), [error]);
 
   useEffect(() => {
-    if (!tauriShell) {
+    if (!desktopShell) {
       setInputActive(true);
       return;
     }
@@ -162,7 +161,7 @@ function App() {
       focusUnlisten?.();
       resizeUnlisten?.();
     };
-  }, [tauriShell]);
+  }, [desktopShell]);
 
   useEffect(() => {
     const saved = loadSavedCredentials();
@@ -280,7 +279,7 @@ function App() {
   });
 
   useLoginGamepadNavigation({
-    enabled: session === null && tauriShell && inputActive,
+    enabled: session === null && desktopShell && inputActive,
     loading,
     slotCount: slotOrder.length,
     setFocusIndex: setGpFocusIndex,
@@ -290,9 +289,9 @@ function App() {
   async function onLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!tauriShell) {
+    if (!desktopShell) {
       setError(
-        "This page is open in a normal browser without the Tauri app. Close the tab and run: npm run tauri dev — then use the desktop window that opens (not localhost in Chrome/Edge).",
+        "This page is open in a normal browser without the Electron app. Close this tab and run npm run dev, then use the desktop window.",
       );
       return;
     }
@@ -346,9 +345,9 @@ function App() {
       <div className="login-card">
         <h1 className="login-title">Log In</h1>
 
-        {!tauriShell ? (
+        {!desktopShell ? (
           <p className="login-warn" role="status">
-            No desktop shell detected. Run <code>npm run tauri:dev</code> and
+            No desktop shell detected. Run <code>npm run dev</code> and
             log in from the <strong>app window</strong>, not from a browser tab.
           </p>
         ) : null}

@@ -3,7 +3,6 @@ const STORAGE_KEY = "romm-launcher-emulator-settings-v1";
 type EmulatorSettings = {
   romsDownloadDir?: string;
   retroArchPath?: string;
-  retroArchCorePath?: string;
   minimizeLauncherOnGameLaunch?: boolean;
 };
 
@@ -46,17 +45,6 @@ export function loadRetroArchPath(): string {
 export function saveRetroArchPath(path: string): void {
   const settings = loadSettings();
   settings.retroArchPath = path;
-  saveSettings(settings);
-}
-
-export function loadRetroArchCorePath(): string {
-  const value = loadSettings().retroArchCorePath;
-  return typeof value === "string" ? value : "";
-}
-
-export function saveRetroArchCorePath(path: string): void {
-  const settings = loadSettings();
-  settings.retroArchCorePath = path;
   saveSettings(settings);
 }
 

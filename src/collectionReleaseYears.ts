@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./desktopApi";
 
 export type RommSession = {
   apiBase: string;

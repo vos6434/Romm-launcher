@@ -1,4 +1,4 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke, hasDesktopBridge } from "./desktopApi";
 import { collectionRowKey } from "./collectionKey";
 import type { CollectionRomsFilter, RommSession } from "./collectionReleaseYears";
 import { fetchSteamGridSearchQuery } from "./collectionSteamGridSearch";
@@ -15,7 +15,7 @@ export async function fetchCollectionGridCoverUrl(
   gridIndex: number,
 ): Promise<string | undefined> {
   const steamKey = getSteamGridDbApiKey();
-  if (!steamKey || !isTauri()) return undefined;
+  if (!steamKey || !hasDesktopBridge()) return undefined;
 
   const rowKey = collectionRowKey(collection);
   const searchName = await fetchSteamGridSearchQuery(session, collection);

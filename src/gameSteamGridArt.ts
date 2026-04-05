@@ -1,4 +1,4 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke, hasDesktopBridge } from "./desktopApi";
 import type { RommGame } from "./rommGames";
 import {
   getCachedSteamGridGrid,
@@ -22,7 +22,7 @@ export async function fetchGameSteamGridCoverUrl(
   gridIndex: number,
 ): Promise<string | undefined> {
   const steamKey = getSteamGridDbApiKey();
-  if (!steamKey || !isTauri()) return undefined;
+  if (!steamKey || !hasDesktopBridge()) return undefined;
 
   const searchQuery = searchQueryForGame(game);
   const cached = getCachedSteamGridGrid(
@@ -55,7 +55,7 @@ export async function fetchGameSteamGridBackgroundUrl(
   heroIndex: number,
 ): Promise<string | undefined> {
   const steamKey = getSteamGridDbApiKey();
-  if (!steamKey || !isTauri()) return undefined;
+  if (!steamKey || !hasDesktopBridge()) return undefined;
 
   const searchQuery = searchQueryForGame(game);
   const cached = getCachedSteamGridHero(
