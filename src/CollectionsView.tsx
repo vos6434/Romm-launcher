@@ -63,7 +63,14 @@ import {
   saveVirtualCollectionType,
   type VirtualCollectionType,
 } from "./virtualCollectionType";
-import { loadRomsDownloadDir, saveRomsDownloadDir } from "./emulatorSettings";
+import {
+  loadRetroArchCorePath,
+  loadRetroArchPath,
+  loadRomsDownloadDir,
+  saveRetroArchCorePath,
+  saveRetroArchPath,
+  saveRomsDownloadDir,
+} from "./emulatorSettings";
 import "./CollectionsView.css";
 
 export type Session = {
@@ -219,8 +226,8 @@ function estimateCollectionGapPx(): number {
 const MAX_CAROUSEL_SLOT_RADIUS = 30;
 const BACKGROUND_CROSSFADE_MS = 320;
 
-/** Settings panel: IGDB, franchise, SteamGrid key, save, unhide, download dir pick/open. */
-const SETTINGS_NAV_SLOTS = 7;
+/** Settings panel: IGDB, franchise, SteamGrid key, save, unhide, RetroArch path pick/core, download dir pick/open. */
+const SETTINGS_NAV_SLOTS = 10;
 
 /** Hide + pick background + clear background + pick cover + clear cover. */
 const COLLECTION_SETTINGS_NAV_SLOTS = 5;
@@ -602,6 +609,9 @@ export function CollectionsView({ session, onLogout }: Props) {
   const settingsSteamKeyRef = useRef<HTMLInputElement>(null);
   const settingsSaveRef = useRef<HTMLButtonElement>(null);
   const settingsUnhideAllRef = useRef<HTMLButtonElement>(null);
+  const settingsRetroArchPathRef = useRef<HTMLInputElement>(null);
+  const settingsPickRetroArchPathRef = useRef<HTMLButtonElement>(null);
+  const settingsRetroArchCoreRef = useRef<HTMLInputElement>(null);
   const settingsPickDownloadsDirRef = useRef<HTMLButtonElement>(null);
   const settingsOpenDownloadsDirRef = useRef<HTMLButtonElement>(null);
   const collectionHideRef = useRef<HTMLButtonElement>(null);
@@ -620,6 +630,12 @@ export function CollectionsView({ session, onLogout }: Props) {
   );
   const [romsDownloadDir, setRomsDownloadDir] = useState(() =>
     loadRomsDownloadDir(),
+  );
+  const [retroArchPathDraft, setRetroArchPathDraft] = useState(() =>
+    loadRetroArchPath(),
+  );
+  const [retroArchCorePathDraft, setRetroArchCorePathDraft] = useState(() =>
+    loadRetroArchCorePath(),
   );
   const [gameDownloadState, setGameDownloadState] = useState<
     Record<string, "missing" | "downloading" | "downloaded" | "error">
@@ -1107,6 +1123,18 @@ export function CollectionsView({ session, onLogout }: Props) {
     }
   }, [tauriShell]);
 
+  const pickRetroArchPath = useCallback(async () => {
+    if (!tauriShell) return;
+    try {
+      const picked = await invoke<string | null>("pick_retroarch_path");
+      if (!picked) return;
+      saveRetroArchPath(picked);
+      setRetroArchPathDraft(picked);
+    } catch {
+      /* ignore picker failure */
+    }
+  }, [tauriShell]);
+
   const openRomsDownloadDir = useCallback(async () => {
     const dir = romsDownloadDir.trim();
     if (!dir) return;
@@ -1117,15 +1145,28 @@ export function CollectionsView({ session, onLogout }: Props) {
     }
   }, [romsDownloadDir]);
 
+  const onRetroArchCorePathChange = useCallback((next: string) => {
+    setRetroArchCorePathDraft(next);
+    saveRetroArchCorePath(next);
+  }, []);
+
+  const onRetroArchPathChange = useCallback((next: string) => {
+    setRetroArchPathDraft(next);
+    saveRetroArchPath(next);
+  }, []);
+
   const downloadFocusedGame = useCallback(async () => {
     if (!tauriShell || !focusedGame) return;
     if (gameDownloadState[focusedGame.key] === "downloading") return;
 
     const dir = romsDownloadDir.trim();
     if (!dir) {
+      setGamesError("Pick a ROMs download location in Emulator Settings before downloading.");
       await pickRomsDownloadDir();
       return;
     }
+
+    setGamesError(null);
 
     const relativePath = gameDownloadRelativePath(focusedGame);
     const destinationPath = joinLocalPath(dir, relativePath);
@@ -1141,8 +1182,9 @@ export function CollectionsView({ session, onLogout }: Props) {
         destinationPath,
       });
       setGameDownloadState((prev) => ({ ...prev, [focusedGame.key]: "downloaded" }));
-    } catch {
+    } catch (e) {
       setGameDownloadState((prev) => ({ ...prev, [focusedGame.key]: "error" }));
+      setGamesError(formatInvokeError(e));
     }
   }, [
     focusedGame,
@@ -1154,15 +1196,55 @@ export function CollectionsView({ session, onLogout }: Props) {
     tauriShell,
   ]);
 
+  const launchFocusedGame = useCallback(async () => {
+    if (!tauriShell || !focusedGame) return;
+    const dir = romsDownloadDir.trim();
+    if (!dir) {
+      setGamesError("Pick a ROMs download location in Emulator Settings before launching.");
+      return;
+    }
+    const relativePath = gameDownloadRelativePath(focusedGame);
+    const romPath = joinLocalPath(dir, relativePath);
+
+    try {
+      setGamesError(null);
+      const exists = await invoke<boolean>("local_path_exists", { path: romPath });
+      if (!exists) {
+        setGameDownloadState((prev) => ({ ...prev, [focusedGame.key]: "missing" }));
+        setGamesError("ROM file is missing on disk. Download it again or verify your ROMs download location.");
+        return;
+      }
+      await invoke("launch_retroarch", {
+        romPath,
+        retroArchPath: retroArchPathDraft.trim() || null,
+        corePath: retroArchCorePathDraft.trim() || null,
+        platformSlug: focusedGame.platformSlug ?? null,
+      });
+    } catch (e) {
+      setGamesError(formatInvokeError(e));
+    }
+  }, [
+    focusedGame,
+    retroArchCorePathDraft,
+    retroArchPathDraft,
+    romsDownloadDir,
+    tauriShell,
+  ]);
+
   const handleGamePrimaryAction = useCallback(() => {
     if (!focusedGame) return;
     if (focusedGameDownloadState === "downloaded") {
-      // Play hook will be wired in a follow-up step.
+      void launchFocusedGame();
       return;
     }
     if (focusedGameDownloadState === "downloading") return;
     void downloadFocusedGame();
-  }, [downloadFocusedGame, focusedGame, focusedGameDownloadState]);
+  }, [
+    downloadFocusedGame,
+    focusedGame,
+    focusedGameDownloadState,
+    launchFocusedGame,
+  ]);
 
   const steamGridPickerOpen = steamGridPickerTarget !== null;
   const steamGridPickerCols = useMemo(() => {
@@ -1716,9 +1798,18 @@ export function CollectionsView({ session, onLogout }: Props) {
         onUnhideAllCollections();
         break;
       case 5:
-        void pickRomsDownloadDir();
+        settingsRetroArchPathRef.current?.focus();
         break;
       case 6:
+        void pickRetroArchPath();
+        break;
+      case 7:
+        settingsRetroArchCoreRef.current?.focus();
+        break;
+      case 8:
+        void pickRomsDownloadDir();
+        break;
+      case 9:
         void openRomsDownloadDir();
         break;
       default:
@@ -1727,6 +1818,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   }, [
     onUnhideAllCollections,
     openRomsDownloadDir,
+    pickRetroArchPath,
     pickRomsDownloadDir,
     saveSteamGridKey,
     settingsNavIndex,
@@ -1856,6 +1948,9 @@ export function CollectionsView({ session, onLogout }: Props) {
       settingsSteamKeyRef,
       settingsSaveRef,
       settingsUnhideAllRef,
+      settingsRetroArchPathRef,
+      settingsPickRetroArchPathRef,
+      settingsRetroArchCoreRef,
       settingsPickDownloadsDirRef,
       settingsOpenDownloadsDirRef,
     ] as const;
@@ -3011,6 +3106,41 @@ export function CollectionsView({ session, onLogout }: Props) {
                 <p className="collections-settings-menu-hint">
                   Configure emulator launch behavior and defaults.
                 </p>
+                <p className="collections-settings-menu-title">RetroArch</p>
+                <p className="collections-settings-menu-hint">
+                  Play launches downloaded ROMs with your local RetroArch install. On Linux, leaving RetroArch path empty uses Flatpak app id org.libretro.RetroArch.
+                </p>
+                <input
+                  ref={settingsRetroArchPathRef}
+                  type="text"
+                  className={`collections-settings-steamgrid-input${settingsNavIndex === 5 ? " collections-settings-steamgrid-input--active" : ""}`}
+                  autoComplete="off"
+                  placeholder="RetroArch executable/command (Windows: C:\\RetroArch\\retroarch.exe)"
+                  value={retroArchPathDraft}
+                  onChange={(e) => onRetroArchPathChange(e.target.value)}
+                  onFocus={() => setSettingsNavIndex(5)}
+                />
+                <button
+                  ref={settingsPickRetroArchPathRef}
+                  type="button"
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 6 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  onClick={() => {
+                    void pickRetroArchPath();
+                  }}
+                  onFocus={() => setSettingsNavIndex(6)}
+                >
+                  Pick RetroArch location
+                </button>
+                <input
+                  ref={settingsRetroArchCoreRef}
+                  type="text"
+                  className={`collections-settings-steamgrid-input${settingsNavIndex === 7 ? " collections-settings-steamgrid-input--active" : ""}`}
+                  autoComplete="off"
+                  placeholder="Core path (e.g. C:\\RetroArch\\cores\\nestopia_libretro.dll)"
+                  value={retroArchCorePathDraft}
+                  onChange={(e) => onRetroArchCorePathChange(e.target.value)}
+                  onFocus={() => setSettingsNavIndex(7)}
+                />
                 <input
                   type="text"
                   className="collections-settings-steamgrid-input"
@@ -3020,22 +3150,22 @@ export function CollectionsView({ session, onLogout }: Props) {
                 <button
                   ref={settingsPickDownloadsDirRef}
                   type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 5 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 8 ? " collections-settings-steamgrid-save--active" : ""}`}
                   onClick={() => {
                     void pickRomsDownloadDir();
                   }}
-                  onFocus={() => setSettingsNavIndex(5)}
+                  onFocus={() => setSettingsNavIndex(8)}
                 >
                   Pick ROMs download location
                 </button>
                 <button
                   ref={settingsOpenDownloadsDirRef}
                   type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 6 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 9 ? " collections-settings-steamgrid-save--active" : ""}`}
                   onClick={() => {
                     void openRomsDownloadDir();
                   }}
-                  onFocus={() => setSettingsNavIndex(6)}
+                  onFocus={() => setSettingsNavIndex(9)}
                   disabled={!romsDownloadDir.trim()}
                 >
                   Open downloads location

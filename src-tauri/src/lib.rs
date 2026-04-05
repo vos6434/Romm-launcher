@@ -2,6 +2,7 @@ use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 
 #[derive(Debug, Deserialize)]
 struct TokenResponse {
@@ -115,6 +116,85 @@ fn download_url_candidates(
         .collect()
 }
 
+fn libretro_core_extension() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        ".dll"
+    }
+    #[cfg(target_os = "macos")]
+    {
+        ".dylib"
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        ".so"
+    }
+}
+
+fn core_candidates_for_platform(platform: &str) -> &'static [&'static str] {
+    match platform {
+        "nes" | "famicom" => &[
+            "nestopia_libretro",
+            "fceumm_libretro",
+            "mesen_libretro",
+            "quicknes_libretro",
+        ],
+        "snes" | "super-nintendo" | "sfc" => &["snes9x_libretro", "bsnes_libretro"],
+        "n64" | "nintendo-64" => &["mupen64plus_next_libretro", "parallel_n64_libretro"],
+        "game-boy" | "gb" => &["gambatte_libretro", "gearboy_libretro"],
+        "game-boy-color" | "gbc" => &["gambatte_libretro", "gearboy_libretro"],
+        "game-boy-advance" | "gba" => &["mgba_libretro", "gpsp_libretro"],
+        "genesis" | "megadrive" | "mega-drive" | "sega-genesis" | "sega-mega-drive" => {
+            &["genesis_plus_gx_libretro", "picodrive_libretro"]
+        }
+        "psx" | "ps1" | "playstation" => {
+            &["pcsx_rearmed_libretro", "beetle_psx_hw_libretro", "beetle_psx_libretro"]
+        }
+        _ => &[],
+    }
+}
+
+fn auto_core_path_from_platform(
+    retro_arch_path: Option<&str>,
+    platform_slug: Option<&str>,
+) -> Option<String> {
+    let platform = platform_slug
+        .map(str::trim)
+        .filter(|v| !v.is_empty())?
+        .to_lowercase();
+    let candidates = core_candidates_for_platform(&platform);
+    if candidates.is_empty() {
+        return None;
+    }
+
+    let ra_path = retro_arch_path
+        .map(str::trim)
+        .filter(|v| !v.is_empty())?;
+    let ra = Path::new(ra_path);
+    let base_dir = if ra.is_file() {
+        ra.parent()
+    } else if ra.is_dir() {
+        Some(ra)
+    } else {
+        ra.parent()
+    }?;
+
+    let cores_dir = base_dir.join("cores");
+    if !cores_dir.is_dir() {
+        return None;
+    }
+
+    let ext = libretro_core_extension();
+    for base_name in candidates {
+        let candidate = cores_dir.join(format!("{base_name}{ext}"));
+        if candidate.is_file() {
+            return Some(candidate.to_string_lossy().to_string());
+        }
+    }
+
+    None
+}
+
 /// OAuth2 password grant against RomM `/api/token`.
 /// Scopes are a subset typical for browsing and downloading (viewer-capable).
 #[tauri::command]
@@ -220,6 +300,26 @@ async fn pick_folder() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+async fn pick_retroarch_path() -> Result<Option<String>, String> {
+    let picked = tauri::async_runtime::spawn_blocking(|| {
+        #[cfg(target_os = "windows")]
+        {
+            return rfd::FileDialog::new()
+                .add_filter("Executable", &["exe"])
+                .pick_file();
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            rfd::FileDialog::new().pick_file()
+        }
+    })
+    .await
+    .map_err(|e| format!("RetroArch picker failed: {e}"))?;
+    Ok(picked.map(|p| p.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
 async fn local_path_exists(path: String) -> Result<bool, String> {
     let path = path.trim();
     if path.is_empty() {
@@ -270,6 +370,127 @@ async fn open_local_folder(path: String) -> Result<(), String> {
 
     cmd.spawn()
         .map_err(|e| format!("Failed to open folder in file manager: {e}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn launch_retroarch(
+    rom_path: String,
+    core_path: Option<String>,
+    retro_arch_path: Option<String>,
+    platform_slug: Option<String>,
+) -> Result<(), String> {
+    let rom = rom_path.trim();
+    if rom.is_empty() {
+        return Err("ROM path is required.".to_string());
+    }
+
+    let rom_path = PathBuf::from(rom);
+    if !rom_path.exists() {
+        return Err("ROM file does not exist.".to_string());
+    }
+
+    let configured_retroarch = retro_arch_path
+        .as_deref()
+        .map(str::trim)
+        .map(|v| v.trim_matches('"').trim_matches('\''))
+        .filter(|v| !v.is_empty())
+        .map(str::to_string);
+
+    if let Some(executable) = configured_retroarch.as_deref() {
+        let looks_like_path = executable.contains(['\\', '/', ':']);
+        if looks_like_path && !Path::new(executable).exists() {
+            return Err(format!(
+                "Configured RetroArch path does not exist: {executable}"
+            ));
+        }
+    }
+
+    let explicit_core_path = core_path
+        .as_deref()
+        .map(str::trim)
+        .map(|v| v.trim_matches('"').trim_matches('\''))
+        .filter(|v| !v.is_empty())
+        .map(str::to_string);
+
+    if let Some(core) = explicit_core_path.as_deref() {
+        let looks_like_path = core.contains(['\\', '/', ':']);
+        if looks_like_path && !Path::new(core).exists() {
+            return Err(format!("Configured RetroArch core path does not exist: {core}"));
+        }
+    }
+
+    let resolved_core_path = explicit_core_path.or_else(|| {
+        auto_core_path_from_platform(
+            configured_retroarch.as_deref(),
+            platform_slug.as_deref(),
+        )
+    });
+
+    let mut launch_args = Vec::<String>::new();
+    if let Some(core) = resolved_core_path {
+        launch_args.push("-L".to_string());
+        launch_args.push(core);
+    }
+    launch_args.push(rom_path.to_string_lossy().to_string());
+
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let executable = configured_retroarch.as_deref().unwrap_or("retroarch.exe");
+        let c = Command::new(executable);
+        c
+    };
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut cmd = {
+        let c = if let Some(executable) = configured_retroarch.as_deref() {
+            Command::new(executable)
+        } else {
+            let mut fallback = Command::new("flatpak");
+            fallback.arg("run").arg("org.libretro.RetroArch");
+            fallback
+        };
+        c
+    };
+
+    #[cfg(target_os = "macos")]
+    let mut cmd = {
+        let executable = configured_retroarch.as_deref().unwrap_or("retroarch");
+        let c = Command::new(executable);
+        c
+    };
+
+    cmd.args(&launch_args);
+
+    let mut child = cmd.spawn().map_err(|e| {
+        #[cfg(target_os = "windows")]
+        {
+            if configured_retroarch.is_none() {
+                return format!(
+                    "Failed to launch RetroArch: {e}. Set RetroArch executable path in Emulator Settings or add retroarch.exe to PATH."
+                );
+            }
+        }
+
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            if configured_retroarch.is_none() {
+                return format!(
+                    "Failed to launch RetroArch: {e}. Install Flatpak RetroArch (org.libretro.RetroArch) or set a custom RetroArch command/path in Emulator Settings."
+                );
+            }
+        }
+
+        format!("Failed to launch RetroArch: {e}")
+    })?;
+
+    std::thread::sleep(Duration::from_millis(350));
+    if let Ok(Some(status)) = child.try_wait() {
+        return Err(format!(
+            "RetroArch exited immediately (status: {status}). Verify RetroArch path, optional core path, and ROM compatibility."
+        ));
+    }
 
     Ok(())
 }
@@ -701,8 +922,10 @@ pub fn run() {
             romm_login,
             romm_api_get,
             pick_folder,
+            pick_retroarch_path,
             local_path_exists,
             open_local_folder,
+            launch_retroarch,
             romm_download_rom,
             steamgriddb_hero_url,
             steamgriddb_hero_urls,
