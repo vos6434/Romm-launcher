@@ -2951,7 +2951,7 @@ export function CollectionsView({ session, onLogout }: Props) {
 
                   <p className="steamgrid-picker-filters-title">Filters</p>
                   <label
-                    className={`steamgrid-picker-check${
+                    className={`steamgrid-picker-check collections-settings-option${
                       steamGridPickerFocusPane === "filters" &&
                       steamGridPickerFilterNavIndex === 2
                         ? " steamgrid-picker-control--active"
@@ -2971,7 +2971,7 @@ export function CollectionsView({ session, onLogout }: Props) {
                     <span>Static only</span>
                   </label>
                   <label
-                    className={`steamgrid-picker-check${
+                    className={`steamgrid-picker-check collections-settings-option${
                       steamGridPickerFocusPane === "filters" &&
                       steamGridPickerFilterNavIndex === 3
                         ? " steamgrid-picker-control--active"
@@ -2991,7 +2991,7 @@ export function CollectionsView({ session, onLogout }: Props) {
                     <span>NSFW off</span>
                   </label>
                   <label
-                    className={`steamgrid-picker-check${
+                    className={`steamgrid-picker-check collections-settings-option${
                       steamGridPickerFocusPane === "filters" &&
                       steamGridPickerFilterNavIndex === 4
                         ? " steamgrid-picker-control--active"

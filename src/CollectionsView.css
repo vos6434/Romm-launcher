@@ -121,7 +121,8 @@ button.collections-settings-action:focus-visible {
   background: rgba(255, 255, 255, 0.06);
 }
 
-.collections-settings-option input[type="radio"] {
+.collections-settings-option input[type="radio"],
+.collections-settings-option input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
   margin: 0;
@@ -136,7 +137,8 @@ button.collections-settings-action:focus-visible {
   cursor: pointer;
 }
 
-.collections-settings-option input[type="radio"]:checked {
+.collections-settings-option input[type="radio"]:checked,
+.collections-settings-option input[type="checkbox"]:checked {
   border-color: #ffffff;
   background-color: #ffffff;
   /* SVG dot avoids diamond-shaped aliasing from tiny radial-gradient stops on the pixel grid. */
@@ -147,13 +149,18 @@ button.collections-settings-action:focus-visible {
 }
 
 .collections-settings-option input[type="radio"]:focus,
-.collections-settings-option input[type="radio"]:focus-visible {
+.collections-settings-option input[type="radio"]:focus-visible,
+.collections-settings-option input[type="checkbox"]:focus,
+.collections-settings-option input[type="checkbox"]:focus-visible {
   outline: none;
 }
 
 .collections-settings-option--active input[type="radio"],
 .collections-settings-option--active input[type="radio"]:focus,
-.collections-settings-option--active input[type="radio"]:focus-visible {
+.collections-settings-option--active input[type="radio"]:focus-visible,
+.collections-settings-option--active input[type="checkbox"],
+.collections-settings-option--active input[type="checkbox"]:focus,
+.collections-settings-option--active input[type="checkbox"]:focus-visible {
   outline: none;
   box-shadow:
     0 0 0 2px rgba(28, 28, 28, 0.98),
@@ -405,7 +412,11 @@ button.collections-settings-action:focus-visible {
   color: #cbd5e1;
   border: 1px solid transparent;
   border-radius: 8px;
-  padding: 4px 6px;
+  padding: 6px 8px;
+}
+
+.steamgrid-picker-check input[type="checkbox"] {
+  margin-top: 0;
 }
 
 .steamgrid-picker-refresh {
