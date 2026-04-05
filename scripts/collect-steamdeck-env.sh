@@ -4,20 +4,67 @@ set -u
 OUT_FILE="${1:-steamdeck-diagnostics.txt}"
 APPIMAGE_PATH="${2:-}"
 
+pick_appimage_path() {
+  local picked=""
+
+  if command -v zenity >/dev/null 2>&1; then
+    picked=$(zenity --file-selection \
+      --title="Select RomM Launcher AppImage" \
+      --file-filter="AppImage files | *.AppImage" \
+      --file-filter="All files | *" 2>/dev/null || true)
+  elif command -v kdialog >/dev/null 2>&1; then
+    picked=$(kdialog --getopenfilename "$HOME" "*.AppImage" 2>/dev/null || true)
+  elif command -v qarma >/dev/null 2>&1; then
+    picked=$(qarma --file-selection \
+      --title="Select RomM Launcher AppImage" \
+      --file-filter="*.AppImage" 2>/dev/null || true)
+  fi
+
+  if [[ -z "$picked" ]]; then
+    printf "Enter full AppImage path (leave blank to auto-detect): "
+    IFS= read -r picked || true
+  fi
+
+  APPIMAGE_PATH="$picked"
+}
+
 if [[ -z "${APPIMAGE_PATH}" ]]; then
+  pick_appimage_path
+fi
+
+if [[ -z "${APPIMAGE_PATH}" ]]; then
+  found=""
   for probe in \
     "$HOME/Downloads" \
     "$HOME/Desktop" \
     "$HOME" \
     "/run/media/mmcblk0p1"; do
     [[ -d "$probe" ]] || continue
-    found=$(find "$probe" -maxdepth 4 -type f -name "*.AppImage" | grep -Ei "romm|launcher|tauri" | head -n 1 || true)
+    found=$(find "$probe" -maxdepth 4 -type f -name "*.AppImage" | grep -Ei "romm" | head -n 1 || true)
     if [[ -n "$found" ]]; then
       APPIMAGE_PATH="$found"
       break
     fi
   done
+
+  # Fallback if no RomM-named AppImage was found.
+  if [[ -z "${APPIMAGE_PATH}" ]]; then
+    for probe in \
+      "$HOME/Downloads" \
+      "$HOME/Desktop" \
+      "$HOME" \
+      "/run/media/mmcblk0p1"; do
+      [[ -d "$probe" ]] || continue
+      found=$(find "$probe" -maxdepth 4 -type f -name "*.AppImage" | grep -Ei "tauri|launcher" | head -n 1 || true)
+      if [[ -n "$found" ]]; then
+        APPIMAGE_PATH="$found"
+        break
+      fi
+    done
+  fi
 fi
+
+export APPIMAGE_PATH
 
 log_section() {
   echo
@@ -39,7 +86,7 @@ run_shell() {
   local label="$1"
   local script="$2"
   echo "--- ${label}"
-  sh -lc "$script" 2>&1 || true
+  bash -lc "$script" 2>&1 || true
 }
 
 {
