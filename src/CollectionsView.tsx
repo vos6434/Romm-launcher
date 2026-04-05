@@ -667,6 +667,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   const [minimizeLauncherOnLaunch, setMinimizeLauncherOnLaunch] = useState(() =>
     loadMinimizeLauncherOnGameLaunch(),
   );
+  const [launchingOverlayVisible, setLaunchingOverlayVisible] = useState(false);
   const [gameDownloadState, setGameDownloadState] = useState<
     Record<string, "missing" | "downloading" | "downloaded" | "error">
   >({});
@@ -1343,7 +1344,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   ]);
 
   const launchFocusedGame = useCallback(async () => {
-    if (!tauriShell || !focusedGame) return;
+    if (!tauriShell || !focusedGame || launchingOverlayVisible) return;
     const dir = romsDownloadDir.trim();
     if (!dir) {
       setGamesError("Pick a ROMs download location in Emulator Settings before launching.");
@@ -1379,6 +1380,7 @@ export function CollectionsView({ session, onLogout }: Props) {
         setGamesError("ROM file is missing on disk. Download it again or verify your ROMs download location.");
         return;
       }
+      setLaunchingOverlayVisible(true);
       await invoke("launch_retroarch", {
         romPath,
         retroArchPath: retroArchPathDraft.trim() || null,
@@ -1388,9 +1390,12 @@ export function CollectionsView({ session, onLogout }: Props) {
       });
     } catch (e) {
       setGamesError(formatInvokeError(e));
+    } finally {
+      setLaunchingOverlayVisible(false);
     }
   }, [
     focusedGame,
+    launchingOverlayVisible,
     minimizeLauncherOnLaunch,
     retroArchCorePathDraft,
     retroArchPathDraft,
@@ -3946,6 +3951,16 @@ export function CollectionsView({ session, onLogout }: Props) {
         )
       : null;
 
+  const launchOverlayPortal =
+    launchingOverlayVisible && typeof document !== "undefined"
+      ? createPortal(
+          <div className="collections-launch-overlay" role="status" aria-live="polite">
+            <p className="collections-launch-overlay-text">Launching.</p>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
     <div
       className="collections-screen"
@@ -3954,6 +3969,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       {collectionSettingsPortal}
       {gameSettingsPortal}
       {steamGridPickerPortal}
+      {launchOverlayPortal}
 
       <div className="collections-bg-stack" aria-hidden>
         {bgLayers.length > 0 ? (
@@ -4221,6 +4237,7 @@ export function CollectionsView({ session, onLogout }: Props) {
           </div>
         </footer>
       ) : null}
+
     </div>
   );
 }

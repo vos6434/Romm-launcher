@@ -865,6 +865,8 @@ async fn launch_retroarch(
         ));
     }
 
+    let _ = tauri::async_runtime::spawn_blocking(move || child.wait()).await;
+
     Ok(())
 }
 
