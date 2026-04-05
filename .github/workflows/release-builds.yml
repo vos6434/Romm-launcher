@@ -105,7 +105,15 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Diagnose built frontend entry paths
+        run: |
+          npm run build
+          echo "--- dist/index.html ---"
+          sed -n '1,40p' dist/index.html
+
       - name: Build Tauri app (Linux)
+        env:
+          NO_STRIP: "1"
         run: npm run tauri build -- --bundles appimage,deb
 
       - name: Upload Steam Deck artifacts
