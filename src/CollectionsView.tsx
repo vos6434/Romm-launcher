@@ -540,10 +540,13 @@ export function CollectionsView({ session, onLogout }: Props) {
   const [steamGridPickerError, setSteamGridPickerError] = useState<string | null>(
     null,
   );
+  const [steamGridPickerGalleryMetrics, setSteamGridPickerGalleryMetrics] =
+    useState({ width: 0, height: 0 });
   const [steamGridPickerViewport, setSteamGridPickerViewport] = useState(() => ({
     width: typeof window === "undefined" ? 1366 : window.innerWidth,
     height: typeof window === "undefined" ? 768 : window.innerHeight,
   }));
+  const steamGridPickerGalleryWrapRef = useRef<HTMLDivElement>(null);
   const steamGridPickerSearchInputRef = useRef<HTMLInputElement>(null);
   const steamGridPickerSortButtonRef = useRef<HTMLButtonElement>(null);
   const steamGridPickerSortOptionRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -932,10 +935,36 @@ export function CollectionsView({ session, onLogout }: Props) {
     return steamGridPickerTarget?.artKind === "cover" ? 8 : 6;
   }, [steamGridPickerTarget?.artKind, steamGridPickerViewport.height, steamGridPickerViewport.width]);
   const steamGridPickerRows = useMemo(() => {
-    if (steamGridPickerViewport.height < 760) return 2;
-    if (steamGridPickerViewport.width < 760) return 2;
-    return steamGridPickerTarget?.artKind === "cover" ? 3 : 4;
-  }, [steamGridPickerTarget?.artKind, steamGridPickerViewport.height, steamGridPickerViewport.width]);
+    const fallbackRows =
+      steamGridPickerViewport.height < 760 || steamGridPickerViewport.width < 760
+        ? 2
+        : steamGridPickerTarget?.artKind === "cover"
+          ? 3
+          : 4;
+
+    const availableWidth = steamGridPickerGalleryMetrics.width;
+    const availableHeight = steamGridPickerGalleryMetrics.height;
+    if (availableWidth <= 0 || availableHeight <= 0) return fallbackRows;
+
+    const tileGap = 10;
+    const tileWidth =
+      (availableWidth - tileGap * Math.max(0, steamGridPickerCols - 1)) /
+      Math.max(1, steamGridPickerCols);
+    if (!Number.isFinite(tileWidth) || tileWidth <= 0) return fallbackRows;
+
+    const imageRatio = steamGridPickerTarget?.artKind === "cover" ? 3 / 2 : 9 / 16;
+    const tileIndexBand = 24;
+    const tileHeight = tileWidth * imageRatio + tileIndexBand;
+    const rows = Math.floor((availableHeight + tileGap) / (tileHeight + tileGap));
+    return Math.max(1, rows);
+  }, [
+    steamGridPickerCols,
+    steamGridPickerGalleryMetrics.height,
+    steamGridPickerGalleryMetrics.width,
+    steamGridPickerTarget?.artKind,
+    steamGridPickerViewport.height,
+    steamGridPickerViewport.width,
+  ]);
   const steamGridPickerPageSize = Math.max(1, steamGridPickerCols * steamGridPickerRows);
   const steamGridPickerPageCount = Math.max(
     1,
@@ -1119,6 +1148,64 @@ export function CollectionsView({ session, onLogout }: Props) {
     return () => window.removeEventListener("resize", sync);
   }, [steamGridPickerOpen]);
 
+  useEffect(() => {
+    if (!steamGridPickerOpen || typeof window === "undefined") return;
+    const wrap = steamGridPickerGalleryWrapRef.current;
+    if (!wrap) return;
+
+    const measure = () => {
+      const toolbar = wrap.querySelector<HTMLElement>(
+        ".steamgrid-picker-gallery-toolbar",
+      );
+      const status = wrap.querySelector<HTMLElement>(".steamgrid-picker-status");
+      const error = wrap.querySelector<HTMLElement>(".steamgrid-picker-error");
+
+      const cs = window.getComputedStyle(wrap);
+      const padX =
+        Number.parseFloat(cs.paddingLeft || "0") +
+        Number.parseFloat(cs.paddingRight || "0");
+      const padY =
+        Number.parseFloat(cs.paddingTop || "0") +
+        Number.parseFloat(cs.paddingBottom || "0");
+      const gap = Number.parseFloat(cs.rowGap || cs.gap || "0");
+
+      const topBlocks = [toolbar, status, error].filter(
+        (el): el is HTMLElement => !!el,
+      );
+      const topHeight = topBlocks.reduce((sum, el) => sum + el.offsetHeight, 0);
+      const verticalGaps = topBlocks.length > 0 ? gap * topBlocks.length : 0;
+
+      const width = Math.max(0, Math.floor(wrap.clientWidth - padX));
+      const height = Math.max(
+        0,
+        Math.floor(wrap.clientHeight - padY - topHeight - verticalGaps),
+      );
+
+      setSteamGridPickerGalleryMetrics((prev) =>
+        prev.width === width && prev.height === height ? prev : { width, height },
+      );
+    };
+
+    measure();
+
+    const ro = new ResizeObserver(() => {
+      measure();
+    });
+    ro.observe(wrap);
+
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [
+    steamGridPickerError,
+    steamGridPickerLoading,
+    steamGridPickerOpen,
+    steamGridPickerPage,
+    steamGridPickerPageCount,
+  ]);
+
   useLayoutEffect(() => {
     if (!steamGridPickerOpen || steamGridPickerFocusPane !== "filters") return;
     if (steamGridPickerSortMenuOpen && steamGridPickerFilterNavIndex === 1) {
@@ -1280,11 +1367,6 @@ export function CollectionsView({ session, onLogout }: Props) {
 
       const rowKey = collectionRowKey(c);
       const searchQuery = await fetchSteamGridSearchQuery(session, c);
-      const prefs = getCollectionPrefs(rowKey);
-      const initialIndex =
-        artKind === "background"
-          ? (prefs.heroSteamIndex ?? -1)
-          : (prefs.coverSteamIndex ?? -1);
 
       await openSteamGridPicker(
         {
@@ -1294,7 +1376,7 @@ export function CollectionsView({ session, onLogout }: Props) {
           artKind,
         },
         searchQuery,
-        initialIndex,
+        -1,
       );
     },
     [collectionSettingsTarget, openSteamGridPicker, session],
@@ -1307,11 +1389,6 @@ export function CollectionsView({ session, onLogout }: Props) {
       const steamKey = getSteamGridDbApiKey()?.trim();
       if (!steamKey) return;
 
-      const prefs = getGamePrefs(game.key, game.name);
-      const initialIndex =
-        artKind === "background"
-          ? (prefs.backgroundSteamIndex ?? -1)
-          : (prefs.coverSteamIndex ?? -1);
       const searchQuery = game.name.trim() || "game";
 
       await openSteamGridPicker(
@@ -1322,7 +1399,7 @@ export function CollectionsView({ session, onLogout }: Props) {
           artKind,
         },
         searchQuery,
-        initialIndex,
+        -1,
       );
     },
     [gameSettingsTarget, openSteamGridPicker],
@@ -3084,6 +3161,7 @@ export function CollectionsView({ session, onLogout }: Props) {
                 </aside>
 
                 <div
+                  ref={steamGridPickerGalleryWrapRef}
                   className={`steamgrid-picker-gallery-wrap${
                     steamGridPickerFocusPane === "gallery"
                       ? " steamgrid-picker-pane--active"
