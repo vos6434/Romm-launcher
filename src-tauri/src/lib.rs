@@ -1,7 +1,7 @@
 use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::Duration;
 
 #[derive(Debug, Deserialize)]
@@ -167,28 +167,60 @@ fn auto_core_path_from_platform(
         return None;
     }
 
-    let ra_path = retro_arch_path
-        .map(str::trim)
-        .filter(|v| !v.is_empty())?;
-    let ra = Path::new(ra_path);
-    let base_dir = if ra.is_file() {
-        ra.parent()
-    } else if ra.is_dir() {
-        Some(ra)
-    } else {
-        ra.parent()
-    }?;
+    let mut candidate_dirs: Vec<PathBuf> = Vec::new();
 
-    let cores_dir = base_dir.join("cores");
-    if !cores_dir.is_dir() {
+    if let Some(ra_path) = retro_arch_path
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        let ra = Path::new(ra_path);
+        let base_dir = if ra.is_file() {
+            ra.parent()
+        } else if ra.is_dir() {
+            Some(ra)
+        } else {
+            ra.parent()
+        };
+
+        if let Some(base) = base_dir {
+            candidate_dirs.push(base.join("cores"));
+        }
+
+        // AppImage portable mode stores user config at <AppImage>.home.
+        if ra_path.to_ascii_lowercase().ends_with(".appimage") {
+            let portable_home = PathBuf::from(format!("{ra_path}.home"));
+            candidate_dirs.push(portable_home.join(".config/retroarch/cores"));
+        }
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        let home_dir = PathBuf::from(home);
+        candidate_dirs.push(home_dir.join(".config/retroarch/cores"));
+        candidate_dirs.push(home_dir.join(".var/app/org.libretro.RetroArch/config/retroarch/cores"));
+    }
+
+    let mut unique_dirs: Vec<PathBuf> = Vec::new();
+    for dir in candidate_dirs {
+        if !dir.is_dir() {
+            continue;
+        }
+        if unique_dirs.iter().any(|seen| seen == &dir) {
+            continue;
+        }
+        unique_dirs.push(dir);
+    }
+
+    if unique_dirs.is_empty() {
         return None;
     }
 
     let ext = libretro_core_extension();
-    for base_name in candidates {
-        let candidate = cores_dir.join(format!("{base_name}{ext}"));
-        if candidate.is_file() {
-            return Some(candidate.to_string_lossy().to_string());
+    for cores_dir in &unique_dirs {
+        for base_name in candidates {
+            let candidate = cores_dir.join(format!("{base_name}{ext}"));
+            if candidate.is_file() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
         }
     }
 
@@ -445,6 +477,43 @@ async fn local_path_exists(path: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
+async fn move_local_file(from_path: String, to_path: String) -> Result<bool, String> {
+    let from_trimmed = from_path.trim();
+    let to_trimmed = to_path.trim();
+    if from_trimmed.is_empty() || to_trimmed.is_empty() {
+        return Err("Source and destination paths are required.".to_string());
+    }
+
+    let from = PathBuf::from(from_trimmed);
+    let to = PathBuf::from(to_trimmed);
+
+    if !from.exists() {
+        return Ok(false);
+    }
+    if from == to || to.exists() {
+        return Ok(true);
+    }
+
+    if let Some(parent) = to.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create destination folder: {e}"))?;
+    }
+
+    if let Err(rename_err) = std::fs::rename(&from, &to) {
+        if from.is_file() {
+            std::fs::copy(&from, &to)
+                .map_err(|e| format!("Failed to copy file to destination: {e}"))?;
+            std::fs::remove_file(&from)
+                .map_err(|e| format!("Failed to remove legacy source file: {e}"))?;
+        } else {
+            return Err(format!("Failed to move file: {rename_err}"));
+        }
+    }
+
+    Ok(true)
+}
+
+#[tauri::command]
 async fn open_local_folder(path: String) -> Result<(), String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
@@ -546,6 +615,11 @@ async fn launch_retroarch(
         )
     });
 
+    let is_appimage = configured_retroarch
+        .as_deref()
+        .map(|path| path.to_ascii_lowercase().ends_with(".appimage"))
+        .unwrap_or(false);
+
     let mut launch_args = Vec::<String>::new();
     if let Some(core) = resolved_core_path {
         launch_args.push("-L".to_string());
@@ -579,6 +653,14 @@ async fn launch_retroarch(
         c
     };
 
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if is_appimage {
+        // AppImage can fail on some systems/containers without FUSE. This fallback
+        // tells AppImage to extract and run directly from a temp location.
+        cmd.env("APPIMAGE_EXTRACT_AND_RUN", "1");
+    }
+
+    cmd.stderr(Stdio::piped());
     cmd.args(&launch_args);
 
     let mut child = cmd.spawn().map_err(|e| {
@@ -611,8 +693,28 @@ async fn launch_retroarch(
 
     std::thread::sleep(Duration::from_millis(350));
     if let Ok(Some(status)) = child.try_wait() {
+        let stderr_hint = child
+            .wait_with_output()
+            .ok()
+            .and_then(|output| {
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                if stderr.is_empty() {
+                    None
+                } else {
+                    Some(stderr)
+                }
+            })
+            .map(|stderr| {
+                format!(
+                    "\nRetroArch stderr:\n{}",
+                    stderr.lines().take(8).collect::<Vec<_>>().join("\n")
+                )
+            })
+            .unwrap_or_default();
+
         return Err(format!(
-            "RetroArch exited immediately (status: {status}). Verify RetroArch path, optional core path, and ROM compatibility."
+            "RetroArch exited immediately (status: {status}).{}\nVerify RetroArch path, optional core path, and ROM compatibility.",
+            stderr_hint
         ));
     }
 
@@ -1048,6 +1150,7 @@ pub fn run() {
             pick_folder,
             pick_retroarch_path,
             local_path_exists,
+            move_local_file,
             open_local_folder,
             launch_retroarch,
             romm_download_rom,

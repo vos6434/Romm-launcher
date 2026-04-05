@@ -434,7 +434,26 @@ function gameDownloadRelativePath(game: RommGame): string {
 function joinLocalPath(baseDir: string, relativePath: string): string {
   const base = baseDir.trim().replace(/[\\/]+$/, "");
   if (!base) return relativePath;
+
+  const isWindowsBase = /^[A-Za-z]:[\\/]/.test(base) || base.startsWith("\\\\");
+  const sep = isWindowsBase ? "\\" : "/";
+  const normalizedRelative = isWindowsBase
+    ? relativePath.replace(/\//g, "\\")
+    : relativePath.replace(/\\/g, "/");
+
+  return `${base}${sep}${normalizedRelative}`;
+}
+
+function joinLegacyWindowsPath(baseDir: string, relativePath: string): string {
+  const base = baseDir.trim().replace(/[\\/]+$/, "");
+  if (!base) return relativePath;
   return `${base}\\${relativePath.replace(/\//g, "\\")}`;
+}
+
+function isWindowsStylePath(path: string): boolean {
+  const p = path.trim();
+  if (!p) return false;
+  return /^[A-Za-z]:[\\/]/.test(p) || p.startsWith("\\\\");
 }
 
 /** Track width: one centered slot is scaled (~1.05); matches `.collection-slot--focus`. */
@@ -1024,7 +1043,20 @@ export function CollectionsView({ session, onLogout }: Props) {
         const relativePath = gameDownloadRelativePath(game);
         const fullPath = joinLocalPath(romsDownloadDir, relativePath);
         try {
-          const exists = await invoke<boolean>("local_path_exists", { path: fullPath });
+          let exists = await invoke<boolean>("local_path_exists", { path: fullPath });
+          if (!exists && !isWindowsStylePath(romsDownloadDir)) {
+            const legacyPath = joinLegacyWindowsPath(romsDownloadDir, relativePath);
+            const legacyExists = await invoke<boolean>("local_path_exists", {
+              path: legacyPath,
+            });
+            if (legacyExists) {
+              await invoke<boolean>("move_local_file", {
+                fromPath: legacyPath,
+                toPath: fullPath,
+              });
+              exists = await invoke<boolean>("local_path_exists", { path: fullPath });
+            }
+          }
           next[game.key] = exists ? "downloaded" : "missing";
         } catch {
           next[game.key] = "missing";
@@ -1287,11 +1319,30 @@ export function CollectionsView({ session, onLogout }: Props) {
       return;
     }
     const relativePath = gameDownloadRelativePath(focusedGame);
-    const romPath = joinLocalPath(dir, relativePath);
+    const canonicalRomPath = joinLocalPath(dir, relativePath);
 
     try {
       setGamesError(null);
-      const exists = await invoke<boolean>("local_path_exists", { path: romPath });
+      let romPath = canonicalRomPath;
+      let exists = await invoke<boolean>("local_path_exists", { path: romPath });
+      if (!exists && !isWindowsStylePath(dir)) {
+        const legacyPath = joinLegacyWindowsPath(dir, relativePath);
+        const legacyExists = await invoke<boolean>("local_path_exists", {
+          path: legacyPath,
+        });
+        if (legacyExists) {
+          await invoke<boolean>("move_local_file", {
+            fromPath: legacyPath,
+            toPath: canonicalRomPath,
+          });
+          exists = await invoke<boolean>("local_path_exists", {
+            path: canonicalRomPath,
+          });
+          if (exists) {
+            romPath = canonicalRomPath;
+          }
+        }
+      }
       if (!exists) {
         setGameDownloadState((prev) => ({ ...prev, [focusedGame.key]: "missing" }));
         setGamesError("ROM file is missing on disk. Download it again or verify your ROMs download location.");
