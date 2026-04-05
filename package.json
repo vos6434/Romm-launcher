@@ -8,7 +8,12 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev"
+    "tauri:dev": "tauri dev",
+    "tauri:build:windows": "tauri build --bundles msi,nsis",
+    "tauri:build:steamdeck": "tauri build --bundles appimage",
+    "tauri:build:steamdeck:container": "bash ./scripts/build-steamdeck-appimage-container.sh",
+    "steamdeck:run": "bash ./scripts/run-extracted-appdir-on-steamdeck.sh",
+    "steamdeck:install-desktop": "bash ./scripts/install-steamdeck-desktop-entry.sh"
   },
   "dependencies": {
     "react": "^19.1.0",

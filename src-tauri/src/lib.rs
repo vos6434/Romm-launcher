@@ -545,6 +545,28 @@ async fn retroarch_flatpak_exists() -> Result<bool, String> {
 }
 
 #[tauri::command]
+async fn recommended_roms_download_dir() -> Result<String, String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set.".to_string())?;
+    let home_dir = PathBuf::from(home);
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        // EmuDeck and many Steam Deck setups use this shared ROM root.
+        let emudeck_roms = home_dir.join("Emulation").join("roms");
+        if emudeck_roms.is_dir() {
+            return Ok(emudeck_roms.to_string_lossy().to_string());
+        }
+    }
+
+    Ok(home_dir
+        .join("Downloads")
+        .join("Romm")
+        .join("roms")
+        .to_string_lossy()
+        .to_string())
+}
+
+#[tauri::command]
 async fn local_path_exists(path: String) -> Result<bool, String> {
     let path = path.trim();
     if path.is_empty() {
@@ -754,6 +776,17 @@ async fn launch_retroarch(
         let mut c3 = Command::new("host-spawn");
         c3.arg("flatpak").arg("run").arg("org.libretro.RetroArch");
         launch_attempts.push(("host-spawn flatpak run org.libretro.RetroArch".to_string(), c3, false));
+
+        let mut c4 = Command::new("flatpak-spawn");
+        c4.arg("--host")
+            .arg("flatpak")
+            .arg("run")
+            .arg("org.libretro.RetroArch");
+        launch_attempts.push((
+            "flatpak-spawn --host flatpak run org.libretro.RetroArch".to_string(),
+            c4,
+            false,
+        ));
 
         if let Some(auto_executable) = detect_local_retroarch_executable() {
             let already_added = launch_attempts
@@ -1299,6 +1332,7 @@ pub fn run() {
             pick_folder,
             pick_retroarch_path,
             retroarch_flatpak_exists,
+            recommended_roms_download_dir,
             local_path_exists,
             move_local_file,
             open_local_folder,

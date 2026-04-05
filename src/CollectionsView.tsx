@@ -721,6 +721,29 @@ export function CollectionsView({ session, onLogout }: Props) {
   const steamGridPickerRefreshRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    if (!tauriShell) return;
+    if (romsDownloadDir.trim()) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const suggested = await invoke<string>("recommended_roms_download_dir");
+        if (cancelled) return;
+        const normalized = suggested.trim();
+        if (!normalized) return;
+        saveRomsDownloadDir(normalized);
+        setRomsDownloadDir(normalized);
+      } catch {
+        /* ignore recommendation failures */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [romsDownloadDir, tauriShell]);
+
+  useEffect(() => {
     gameDownloadStateRef.current = gameDownloadState;
   }, [gameDownloadState]);
 
