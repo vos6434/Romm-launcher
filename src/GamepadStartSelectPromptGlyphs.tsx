@@ -1,5 +1,10 @@
 import type { GamepadFlavor } from "./gamepadFlavor";
-import { selectPromptUrl, startPromptUrl } from "./gamepadPromptUrls";
+import {
+  nextPagePromptUrl,
+  previousPagePromptUrl,
+  selectPromptUrl,
+  startPromptUrl,
+} from "./gamepadPromptUrls";
 
 export function GamepadStartPromptGlyph({ flavor }: { flavor: GamepadFlavor }) {
   return (
@@ -21,6 +26,40 @@ export function GamepadSelectPromptGlyph({ flavor }: { flavor: GamepadFlavor }) 
         src={selectPromptUrl(flavor)}
         alt=""
         className="gp-prompt-img gp-prompt-img--gp-select"
+        draggable={false}
+      />
+    </span>
+  );
+}
+
+export function GamepadPreviousPagePromptGlyph({
+  flavor,
+}: {
+  flavor: GamepadFlavor;
+}) {
+  return (
+    <span className="gp-prompt-svg-wrap" aria-hidden>
+      <img
+        src={previousPagePromptUrl(flavor)}
+        alt=""
+        className="gp-prompt-img gp-prompt-img--gp-page-prev"
+        draggable={false}
+      />
+    </span>
+  );
+}
+
+export function GamepadNextPagePromptGlyph({
+  flavor,
+}: {
+  flavor: GamepadFlavor;
+}) {
+  return (
+    <span className="gp-prompt-svg-wrap" aria-hidden>
+      <img
+        src={nextPagePromptUrl(flavor)}
+        alt=""
+        className="gp-prompt-img gp-prompt-img--gp-page-next"
         draggable={false}
       />
     </span>

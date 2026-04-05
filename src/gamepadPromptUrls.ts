@@ -4,16 +4,22 @@ import xboxA from "./assets/kenney prompts/Xbox Series/Vector/xbox_button_a.svg?
 import xboxB from "./assets/kenney prompts/Xbox Series/Vector/xbox_button_b.svg?url";
 import xboxDpadVerticalOutline from "./assets/kenney prompts/Xbox Series/Vector/xbox_dpad_vertical_outline.svg?url";
 import xboxDpadHorizontalOutline from "./assets/kenney prompts/Xbox Series/Vector/xbox_dpad_horizontal_outline.svg?url";
+import xboxLb from "./assets/kenney prompts/Xbox Series/Vector/xbox_lb.svg?url";
+import xboxRb from "./assets/kenney prompts/Xbox Series/Vector/xbox_rb.svg?url";
 
 import psCross from "./assets/kenney prompts/PlayStation Series/Vector/playstation_button_cross.svg?url";
 import psCircle from "./assets/kenney prompts/PlayStation Series/Vector/playstation_button_circle.svg?url";
 import psDpadVerticalOutline from "./assets/kenney prompts/PlayStation Series/Vector/playstation_dpad_vertical_outline.svg?url";
 import psDpadHorizontalOutline from "./assets/kenney prompts/PlayStation Series/Vector/playstation_dpad_horizontal_outline.svg?url";
+import psL1Alternative from "./assets/kenney prompts/PlayStation Series/Vector/playstation_trigger_l1_alternative.svg?url";
+import psR1Alternative from "./assets/kenney prompts/PlayStation Series/Vector/playstation_trigger_r1_alternative.svg?url";
 
 import switchA from "./assets/kenney prompts/Nintendo Switch/Vector/switch_button_a.svg?url";
 import switchB from "./assets/kenney prompts/Nintendo Switch/Vector/switch_button_b.svg?url";
 import switchDpadVerticalOutline from "./assets/kenney prompts/Nintendo Switch/Vector/switch_dpad_vertical_outline.svg?url";
 import switchDpadHorizontalOutline from "./assets/kenney prompts/Nintendo Switch/Vector/switch_dpad_horizontal_outline.svg?url";
+import switchL from "./assets/kenney prompts/Nintendo Switch/Vector/switch_button_l.svg?url";
+import switchR from "./assets/kenney prompts/Nintendo Switch/Vector/switch_button_r.svg?url";
 import switchPlusOutline from "./assets/kenney prompts/Nintendo Switch/Vector/switch_button_plus_outline.svg?url";
 import switchMinusOutline from "./assets/kenney prompts/Nintendo Switch/Vector/switch_button_minus_outline.svg?url";
 
@@ -65,6 +71,20 @@ export function dpadHorizontalOutlineUrl(flavor: GamepadFlavor): string {
   if (flavor === "playstation") return psDpadHorizontalOutline;
   if (flavor === "nintendo") return switchDpadHorizontalOutline;
   return xboxDpadHorizontalOutline;
+}
+
+/** Previous-page shoulder button (LB / L1 / L). */
+export function previousPagePromptUrl(flavor: GamepadFlavor): string {
+  if (flavor === "playstation") return psL1Alternative;
+  if (flavor === "nintendo") return switchL;
+  return xboxLb;
+}
+
+/** Next-page shoulder button (RB / R1 / R). */
+export function nextPagePromptUrl(flavor: GamepadFlavor): string {
+  if (flavor === "playstation") return psR1Alternative;
+  if (flavor === "nintendo") return switchR;
+  return xboxRb;
 }
 
 /** Start (Xbox Menu / PS5 Options / Switch +). */

@@ -381,6 +381,15 @@ body {
   object-position: center;
 }
 
+.gp-prompt-img--gp-page-prev,
+.gp-prompt-img--gp-page-next {
+  height: 26px;
+  width: auto;
+  max-width: 42px;
+  object-fit: contain;
+  object-position: center;
+}
+
 .login-error {
   margin: 16px 0 0;
   font-size: 0.875rem;

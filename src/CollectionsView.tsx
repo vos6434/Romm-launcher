@@ -13,6 +13,8 @@ import { GamepadCollectionSettingsPromptGlyph } from "./GamepadCollectionSetting
 import { GamepadHorizontalNavPromptGlyphs } from "./GamepadHorizontalNavPromptGlyphs";
 import { GamepadPromptGlyph } from "./GamepadPromptGlyph";
 import {
+  GamepadNextPagePromptGlyph,
+  GamepadPreviousPagePromptGlyph,
   GamepadSelectPromptGlyph,
   GamepadStartPromptGlyph,
 } from "./GamepadStartSelectPromptGlyphs";
@@ -3244,10 +3246,20 @@ export function CollectionsView({ session, onLogout }: Props) {
                   <span>Move</span>
                 </div>
                 <div className="collections-footer-hint">
-                  <span className="steamgrid-picker-footer-key">
-                    {showGamepadHints ? "LB/RB" : "PgUp/PgDn"}
-                  </span>
-                  <span>Page</span>
+                  {showGamepadHints ? (
+                    <GamepadPreviousPagePromptGlyph flavor={gamepadFlavor} />
+                  ) : (
+                    <span className="steamgrid-picker-footer-key">PgUp</span>
+                  )}
+                  <span>Previous</span>
+                </div>
+                <div className="collections-footer-hint">
+                  {showGamepadHints ? (
+                    <GamepadNextPagePromptGlyph flavor={gamepadFlavor} />
+                  ) : (
+                    <span className="steamgrid-picker-footer-key">PgDn</span>
+                  )}
+                  <span>Next</span>
                 </div>
                 <div className="collections-footer-hint">
                   {showGamepadHints ? (
