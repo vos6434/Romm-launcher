@@ -48,12 +48,15 @@ Steam Deck targets Linux x86_64, so build Linux artifacts on Linux/CI.
 This repo includes GitHub Actions workflow:
 
 - `.github/workflows/release-builds.yml`
+- `.github/workflows/flatpak-ci.yml` (runs Flatpak build on pushes, PRs, and manual dispatch)
 
 It runs on tag push (for example `v0.1.0`) or manual dispatch and uploads:
 
 - `AppImage` (`src-tauri/target/release/bundle/appimage/*.AppImage`)
 - `DEB` (`src-tauri/target/release/bundle/deb/*.deb`)
 - `Flatpak` (`src-tauri/target/release/bundle/flatpak/*.flatpak`)
+
+For rapid Flatpak iteration on branches, use `Flatpak CI` in Actions. It uploads only the `.flatpak` artifact plus SHA-256 checksum for each push/PR.
 
 For Steam Deck, prefer the `AppImage` first (simple portable install). Mark it executable before running.
 

@@ -1,6 +1,6 @@
 app-id: com.kacper.tauri-app
 runtime: org.gnome.Platform
-runtime-version: "46"
+runtime-version: "50"
 sdk: org.gnome.Sdk
 command: tauri-app
 finish-args:

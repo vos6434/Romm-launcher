@@ -1,0 +1,70 @@
+name: Flatpak CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+concurrency:
+  group: flatpak-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-flatpak:
+    name: Build Flatpak
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            flatpak \
+            flatpak-builder \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libsoup-3.0-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Debian bundle
+        env:
+          NO_STRIP: "1"
+        run: npm run tauri -- build --bundles deb
+
+      - name: Build Flatpak
+        env:
+          FLATPAK_SKIP_DEB_BUILD: "1"
+        run: bash scripts/build-flatpak.sh
+
+      - name: Generate Flatpak checksums
+        run: |
+          mkdir -p src-tauri/target/release/bundle/metadata
+          FLATPAK_PATH=$(ls -1 src-tauri/target/release/bundle/flatpak/*.flatpak | head -n 1)
+          sha256sum "$FLATPAK_PATH" > src-tauri/target/release/bundle/metadata/flatpak.sha256
+
+      - name: Upload Flatpak artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-${{ github.ref_name }}-${{ github.sha }}
+          path: |
+            src-tauri/target/release/bundle/flatpak/*.flatpak
+            src-tauri/target/release/bundle/metadata/flatpak.sha256
