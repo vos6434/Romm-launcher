@@ -5,8 +5,10 @@ sdk: org.gnome.Sdk
 command: tauri-app
 finish-args:
   - --device=dri
+  - --device=input
   - --share=ipc
   - --share=network
+  - --filesystem=/run/udev:ro
   - --socket=fallback-x11
   - --socket=wayland
 
@@ -27,7 +29,7 @@ modules:
           exit 1
         fi
       - cp -a usr/. /app/
-      - rm -f /app/share/applications/tauri-app.desktop
+      - rm -f /app/share/applications/*.desktop
       - install -Dm644 com.kacper.tauri-app.desktop /app/share/applications/com.kacper.tauri-app.desktop
       - install -Dm644 com.kacper.tauri-app.metainfo.xml /app/share/metainfo/com.kacper.tauri-app.metainfo.xml
       - install -Dm644 32x32.png /app/share/icons/hicolor/32x32/apps/com.kacper.tauri-app.png
