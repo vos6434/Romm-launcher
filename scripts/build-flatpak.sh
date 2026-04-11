@@ -45,12 +45,22 @@ rm -rf "$BUILD_DIR" "$REPO_DIR"
 cp -f "$DEB_SOURCE" "$DEB_INPUT_PATH"
 
 echo "Repacking $(basename "$DEB_SOURCE") as Flatpak..."
+FLATPAK_BUILDER_EXTRA_ARGS=()
+# Some flatpak-builder versions can skip appstream compose, which avoids
+# appstream-compose/appstreamcli compatibility mismatches on CI images.
+if flatpak-builder --help 2>&1 | grep -q -- '--disable-appstream-compose'; then
+  FLATPAK_BUILDER_EXTRA_ARGS+=(--disable-appstream-compose)
+elif flatpak-builder --help 2>&1 | grep -q -- '--disable-appstream'; then
+  FLATPAK_BUILDER_EXTRA_ARGS+=(--disable-appstream)
+fi
+
 flatpak-builder \
   --user \
   --force-clean \
   --default-branch="$APP_BRANCH" \
   --install-deps-from=flathub \
   --repo="$REPO_DIR" \
+  "${FLATPAK_BUILDER_EXTRA_ARGS[@]}" \
   "$BUILD_DIR" \
   flatpak/com.kacper.tauri-app.yml
 
