@@ -38,9 +38,9 @@ jobs:
         run: |
           if ! command -v appstream-compose >/dev/null 2>&1; then
             if command -v appstreamcli >/dev/null 2>&1; then
-              echo '#!/usr/bin/env bash' | sudo tee /usr/local/bin/appstream-compose >/dev/null
-              echo 'exec appstreamcli compose "$@"' | sudo tee -a /usr/local/bin/appstream-compose >/dev/null
-              sudo chmod +x /usr/local/bin/appstream-compose
+              echo '#!/usr/bin/env bash' | sudo tee /usr/bin/appstream-compose >/dev/null
+              echo 'exec appstreamcli compose "$@"' | sudo tee -a /usr/bin/appstream-compose >/dev/null
+              sudo chmod +x /usr/bin/appstream-compose
             else
               echo "Missing both appstream-compose and appstreamcli"
               exit 1
