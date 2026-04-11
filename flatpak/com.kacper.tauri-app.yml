@@ -5,7 +5,7 @@ sdk: org.gnome.Sdk
 command: tauri-app
 finish-args:
   - --device=dri
-  - --device=input
+  - --device=all
   - --share=ipc
   - --share=network
   - --filesystem=/run/udev:ro

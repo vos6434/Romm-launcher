@@ -103,7 +103,7 @@ After install, Flatpak exports `RomM Launcher` as a standard desktop app entry. 
 
 If it does not appear immediately, restart Steam in Desktop Mode and try again. Flatpak exports desktop entries into the standard application export paths that desktop launchers scan.
 
-If you already installed an older Flatpak build before controller permissions were added, reinstall the updated `.flatpak` or run `flatpak override --user --device=input --filesystem=/run/udev:ro com.kacper.tauri-app`.
+If you already installed an older Flatpak build before controller permissions were added, reinstall the updated `.flatpak` or run `flatpak override --user --device=all --filesystem=/run/udev:ro com.kacper.tauri-app`.
 
 ### Rust build fails with `link.exe` not found (Windows)
 
