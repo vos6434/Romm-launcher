@@ -53,8 +53,52 @@ It runs on tag push (for example `v0.1.0`) or manual dispatch and uploads:
 
 - `AppImage` (`src-tauri/target/release/bundle/appimage/*.AppImage`)
 - `DEB` (`src-tauri/target/release/bundle/deb/*.deb`)
+- `Flatpak` (`src-tauri/target/release/bundle/flatpak/*.flatpak`)
 
 For Steam Deck, prefer the `AppImage` first (simple portable install). Mark it executable before running.
+
+### Local Flatpak build (Linux)
+
+Flatpak packaging is wired through a manifest in [`flatpak/`](./flatpak) and a helper script that repacks the Linux Tauri bundle.
+
+Prerequisites:
+
+- `flatpak`
+- `flatpak-builder`
+- Flathub remote configured (`flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo`)
+
+Build command:
+
+```bash
+npm install
+npm run tauri:build:flatpak:local
+```
+
+That command:
+
+1. Builds the Linux `.deb` bundle with Tauri.
+2. Repackages it using `flatpak-builder`.
+3. Writes the final bundle to `src-tauri/target/release/bundle/flatpak/`.
+
+Expected output:
+
+- `src-tauri/target/release/bundle/flatpak/RomM_Launcher_<version>_amd64.flatpak`
+
+### Steam Deck install and Steam shortcut
+
+Steam Deck can install the generated `.flatpak` in Desktop Mode. The `.deb` file is only an intermediate build artifact used during packaging; the Deck-facing artifact is the final `.flatpak`.
+
+Install on Steam Deck:
+
+```bash
+flatpak install --user ./RomM_Launcher_<version>_amd64.flatpak
+```
+
+The bundle is built with an embedded Flathub runtime source hint, so Deck can fetch the required runtime if it is missing.
+
+After install, Flatpak exports `RomM Launcher` as a standard desktop app entry. In Desktop Mode, open Steam and use **Games > Add a Non-Steam Game to My Library**. `RomM Launcher` should appear in the application list as an addable shortcut.
+
+If it does not appear immediately, restart Steam in Desktop Mode and try again. Flatpak exports desktop entries into the standard application export paths that desktop launchers scan.
 
 ### Rust build fails with `link.exe` not found (Windows)
 

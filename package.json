@@ -11,7 +11,8 @@
     "tauri:dev": "tauri dev",
     "tauri:build:local": "tauri build --no-bundle",
     "tauri:run:local": "./src-tauri/target/release/tauri-app",
-    "tauri:build:appimage:local": "bash -lc 'set -e; APPIMAGE_EXTRACT_AND_RUN=1 npm run tauri -- build --bundles appimage || true; APPDIR=\"src-tauri/target/release/bundle/appimage/RomM Launcher.AppDir\"; LINUXDEPLOY=\"$HOME/.cache/tauri/linuxdeploy-x86_64.AppImage\"; chmod +x \"$LINUXDEPLOY\"; APPIMAGE_EXTRACT_AND_RUN=1 NO_STRIP=1 \"$LINUXDEPLOY\" --appdir \"$APPDIR\" --output appimage; mkdir -p \"src-tauri/target/release/bundle/appimage\"; mv -f RomM_Launcher-x86_64.AppImage \"src-tauri/target/release/bundle/appimage/RomM Launcher_0.1.0_amd64.AppImage\"; echo \"Built src-tauri/target/release/bundle/appimage/RomM Launcher_0.1.0_amd64.AppImage\"'"
+    "tauri:build:appimage:local": "bash -lc 'set -e; APPIMAGE_EXTRACT_AND_RUN=1 npm run tauri -- build --bundles appimage || true; APPDIR=\"src-tauri/target/release/bundle/appimage/RomM Launcher.AppDir\"; LINUXDEPLOY=\"$HOME/.cache/tauri/linuxdeploy-x86_64.AppImage\"; chmod +x \"$LINUXDEPLOY\"; APPIMAGE_EXTRACT_AND_RUN=1 NO_STRIP=1 \"$LINUXDEPLOY\" --appdir \"$APPDIR\" --output appimage; mkdir -p \"src-tauri/target/release/bundle/appimage\"; mv -f RomM_Launcher-x86_64.AppImage \"src-tauri/target/release/bundle/appimage/RomM Launcher_0.1.0_amd64.AppImage\"; echo \"Built src-tauri/target/release/bundle/appimage/RomM Launcher_0.1.0_amd64.AppImage\"'",
+    "tauri:build:flatpak:local": "bash scripts/build-flatpak.sh"
   },
   "dependencies": {
     "react": "^19.1.0",

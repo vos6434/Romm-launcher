@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=RomM Launcher
+Comment=Browse and launch your RomM library from a desktop shell
+Exec=tauri-app
+Icon=com.kacper.tauri-app
+Terminal=false
+Categories=Game;Utility;
+Keywords=RomM;ROM;Games;Launcher;
+StartupNotify=true
+StartupWMClass=RomM Launcher
