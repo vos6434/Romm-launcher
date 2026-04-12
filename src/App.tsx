@@ -225,6 +225,31 @@ function App() {
     [slotNavChrome, slotOrder],
   );
 
+  const focusTextField = useCallback((id: LoginSlotId) => {
+    const el =
+      id === "host"
+        ? hostRef.current
+        : id === "username"
+          ? usernameRef.current
+          : id === "password"
+            ? passwordRef.current
+            : null;
+
+    if (!el) return;
+
+    // Steam Deck gaming mode is more reliable when a fresh focus action happens
+    // on text fields instead of only keeping an already-focused element alive.
+    if (document.activeElement === el) {
+      el.blur();
+      window.requestAnimationFrame(() => {
+        el.focus();
+      });
+      return;
+    }
+
+    el.focus();
+  }, []);
+
   useEffect(() => {
     if (!slotNavChrome) return;
     const id = slotOrder[gpFocusIndex];
@@ -253,6 +278,10 @@ function App() {
 
   const activateLoginSlot = useCallback(() => {
     const id = slotOrder[gpFocusIndex];
+    if (id === "host" || id === "username" || id === "password") {
+      focusTextField(id);
+      return;
+    }
     if (id === "togglePassword") {
       toggleRef.current?.click();
       return;
@@ -269,7 +298,7 @@ function App() {
       onRetry();
       return;
     }
-  }, [slotOrder, gpFocusIndex, onRetry]);
+  }, [slotOrder, gpFocusIndex, onRetry, focusTextField]);
 
   useLoginKeyboardNavigation({
     enabled: slotNavChrome && inputActive,
