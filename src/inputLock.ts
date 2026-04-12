@@ -9,14 +9,13 @@
  */
 
 let locked = false;
-let lockTimeoutId: NodeJS.Timeout | null = null;
+let lockTimeoutId: number | null = null;
 let lastGamepadActivityTime = 0;
 const subscribers = new Set<(locked: boolean) => void>();
 
 // Lock duration constants
 const MANUAL_LOCK_MS = 10000; // Manual lock timeout (10 seconds)
 const INACTIVITY_THRESHOLD_MS = 800; // If gamepad silent for 800ms, assume overlay active
-const INACTIVITY_LOCK_DURATION_MS = 3000; // Keep lock active for 3s after silence
 
 /**
  * Report gamepad input activity. Called whenever a gamepad input is processed.
