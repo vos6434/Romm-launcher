@@ -11,6 +11,9 @@ finish-args:
   - --filesystem=/run/udev:ro
   - --socket=fallback-x11
   - --socket=wayland
+  - --talk-name=org.freedesktop.portal.Desktop
+  - --talk-name=org.freedesktop.Flatpak
+  - --talk-name=com.valvesoftware.Steam
 
 modules:
   - name: romm-launcher

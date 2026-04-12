@@ -656,6 +656,47 @@ async fn open_local_folder(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn open_steam_keyboard() -> Result<bool, String> {
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let attempts: [(&str, &[&str]); 7] = [
+            ("xdg-open", &["steam://open/keyboard"]),
+            ("steam", &["steam://open/keyboard"]),
+            ("/usr/bin/steam", &["steam://open/keyboard"]),
+            (
+                "flatpak-spawn",
+                &["--host", "xdg-open", "steam://open/keyboard"],
+            ),
+            (
+                "flatpak-spawn",
+                &["--host", "steam", "steam://open/keyboard"],
+            ),
+            (
+                "flatpak-spawn",
+                &["--host", "/usr/bin/steam", "steam://open/keyboard"],
+            ),
+            ("host-spawn", &["xdg-open", "steam://open/keyboard"]),
+        ];
+
+        for (program, args) in attempts {
+            match Command::new(program).args(args).status() {
+                Ok(status) if status.success() => return Ok(true),
+                Ok(_) => continue,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(_) => continue,
+            }
+        }
+
+        Ok(false)
+    }
+
+    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    {
+        Ok(false)
+    }
+}
+
+#[tauri::command]
 async fn launch_retroarch(
     window: tauri::Window,
     rom_path: String,
@@ -1323,6 +1364,7 @@ pub fn run() {
             local_path_exists,
             move_local_file,
             open_local_folder,
+            open_steam_keyboard,
             launch_retroarch,
             romm_download_rom,
             steamgriddb_hero_url,

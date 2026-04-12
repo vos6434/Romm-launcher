@@ -250,6 +250,11 @@ function App() {
     el.focus();
   }, []);
 
+  const requestSteamKeyboard = useCallback(() => {
+    if (!tauriShell) return;
+    void invoke<boolean>("open_steam_keyboard").catch(() => {});
+  }, [tauriShell]);
+
   useEffect(() => {
     if (!slotNavChrome) return;
     const id = slotOrder[gpFocusIndex];
@@ -280,6 +285,7 @@ function App() {
     const id = slotOrder[gpFocusIndex];
     if (id === "host" || id === "username" || id === "password") {
       focusTextField(id);
+      requestSteamKeyboard();
       return;
     }
     if (id === "togglePassword") {
@@ -298,7 +304,7 @@ function App() {
       onRetry();
       return;
     }
-  }, [slotOrder, gpFocusIndex, onRetry, focusTextField]);
+  }, [slotOrder, gpFocusIndex, onRetry, focusTextField, requestSteamKeyboard]);
 
   useLoginKeyboardNavigation({
     enabled: slotNavChrome && inputActive,
