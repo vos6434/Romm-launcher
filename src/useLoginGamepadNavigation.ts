@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { getActiveGamepad } from "./gamepadAccess";
+import { isInputLocked } from "./inputLock";
 import { GP_FACE_SOUTH } from "./gamepadFlavor";
 
 /** Common Chromium / Firefox mapping: D-pad as extra buttons. */
@@ -57,7 +58,11 @@ export function useLoginGamepadNavigation({
     };
 
     const tick = () => {
-      if (document.visibilityState !== "visible" || !document.hasFocus()) {
+      if (
+        document.visibilityState !== "visible" ||
+        !document.hasFocus() ||
+        isInputLocked()
+      ) {
         lastGamepadIndexRef.current = null;
         prevBtnRef.current = null;
         stickHoldRef.current = { ySign: 0, lastStep: 0 };
