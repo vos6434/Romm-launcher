@@ -1,12 +1,27 @@
 use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "steam-input")]
-use std::ffi::CString;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-#[cfg(feature = "steam-input")]
-use std::sync::{Mutex, OnceLock};
+use std::process::{Command, Stdio};
 use std::time::Duration;
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn configure_linux_webview_env() {
+    fn set_default_env(key: &str, value: &str) {
+        if std::env::var_os(key).is_none() {
+            std::env::set_var(key, value);
+        }
+    }
+
+    // SteamOS/gamescope can show a black WebKitGTK view with GPU-backed paths.
+    // Keep these overridable by honoring existing user-provided environment.
+    set_default_env("GDK_BACKEND", "x11");
+    set_default_env("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    set_default_env("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+    set_default_env("GSK_RENDERER", "cairo");
+}
+
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+fn configure_linux_webview_env() {}
 
 #[derive(Debug, Deserialize)]
 struct TokenResponse {
@@ -26,476 +41,6 @@ pub struct LoginOk {
     pub refresh_token: String,
     pub refresh_expires: i64,
     pub api_base: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct InputBackendCapabilities {
-    steam_input_compiled: bool,
-    steam_input_available: bool,
-    steam_keyboard_supported: bool,
-    action_mapping_stub_enabled: bool,
-    active_backend: String,
-    reason: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct InputActionMappingStatus {
-    steam_input_compiled: bool,
-    steam_runtime_detected: bool,
-    action_mapping_stub_enabled: bool,
-    active_backend: String,
-    reason: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct InputActionSnapshot {
-    backend: String,
-    navigate_up: bool,
-    navigate_down: bool,
-    navigate_left: bool,
-    navigate_right: bool,
-    confirm: bool,
-    back: bool,
-    open_text_input: bool,
-    toggle_settings: bool,
-    toggle_item_settings: bool,
-    refresh: bool,
-}
-
-#[cfg(feature = "steam-input")]
-#[derive(Debug, Clone, Copy)]
-struct SteamInputActionHandles {
-    action_set: u64,
-    navigate_axis: u64,
-    navigate_up: u64,
-    navigate_down: u64,
-    navigate_left: u64,
-    navigate_right: u64,
-    confirm: u64,
-    back: u64,
-    open_text_input: u64,
-    toggle_settings: u64,
-    toggle_item_settings: u64,
-    refresh: u64,
-}
-
-#[cfg(feature = "steam-input")]
-const STEAM_ACTION_SET_NAME: &str = "menu";
-#[cfg(feature = "steam-input")]
-const STEAM_NAVIGATE_AXIS_ACTION_NAME: &str = "navigate";
-#[cfg(feature = "steam-input")]
-const STEAM_NAVIGATE_UP_ACTION_NAME: &str = "navigate_up";
-#[cfg(feature = "steam-input")]
-const STEAM_NAVIGATE_DOWN_ACTION_NAME: &str = "navigate_down";
-#[cfg(feature = "steam-input")]
-const STEAM_NAVIGATE_LEFT_ACTION_NAME: &str = "navigate_left";
-#[cfg(feature = "steam-input")]
-const STEAM_NAVIGATE_RIGHT_ACTION_NAME: &str = "navigate_right";
-#[cfg(feature = "steam-input")]
-const STEAM_CONFIRM_ACTION_NAME: &str = "confirm";
-#[cfg(feature = "steam-input")]
-const STEAM_BACK_ACTION_NAME: &str = "back";
-#[cfg(feature = "steam-input")]
-const STEAM_OPEN_TEXT_INPUT_ACTION_NAME: &str = "open_text_input";
-#[cfg(feature = "steam-input")]
-const STEAM_TOGGLE_SETTINGS_ACTION_NAME: &str = "toggle_settings";
-#[cfg(feature = "steam-input")]
-const STEAM_TOGGLE_ITEM_SETTINGS_ACTION_NAME: &str = "toggle_item_settings";
-#[cfg(feature = "steam-input")]
-const STEAM_REFRESH_ACTION_NAME: &str = "refresh";
-#[cfg(feature = "steam-input")]
-const STEAM_MANIFEST_RELATIVE_PATH: &str = "steam_input/romm_launcher_actions.vdf";
-
-#[cfg(feature = "steam-input")]
-const STEAM_EXPECTED_ACTION_MAP: &[&str] = &[
-    "action_set: menu",
-    "analog: navigate",
-    "digital: navigate_up",
-    "digital: navigate_down",
-    "digital: navigate_left",
-    "digital: navigate_right",
-    "digital: confirm",
-    "digital: back",
-    "digital: open_text_input",
-    "digital: toggle_settings",
-    "digital: toggle_item_settings",
-    "digital: refresh",
-];
-
-#[cfg(feature = "steam-input")]
-fn expected_action_map_string() -> String {
-    STEAM_EXPECTED_ACTION_MAP.join(", ")
-}
-
-#[cfg(feature = "steam-input")]
-impl SteamInputActionHandles {
-    fn resolve(input: &steamworks::Input<steamworks::ClientManager>) -> Self {
-        Self {
-            action_set: input.get_action_set_handle(STEAM_ACTION_SET_NAME),
-            navigate_axis: input.get_analog_action_handle(STEAM_NAVIGATE_AXIS_ACTION_NAME),
-            navigate_up: input.get_digital_action_handle(STEAM_NAVIGATE_UP_ACTION_NAME),
-            navigate_down: input.get_digital_action_handle(STEAM_NAVIGATE_DOWN_ACTION_NAME),
-            navigate_left: input.get_digital_action_handle(STEAM_NAVIGATE_LEFT_ACTION_NAME),
-            navigate_right: input.get_digital_action_handle(STEAM_NAVIGATE_RIGHT_ACTION_NAME),
-            confirm: input.get_digital_action_handle(STEAM_CONFIRM_ACTION_NAME),
-            back: input.get_digital_action_handle(STEAM_BACK_ACTION_NAME),
-            open_text_input: input.get_digital_action_handle(STEAM_OPEN_TEXT_INPUT_ACTION_NAME),
-            toggle_settings: input.get_digital_action_handle(STEAM_TOGGLE_SETTINGS_ACTION_NAME),
-            toggle_item_settings: input
-                .get_digital_action_handle(STEAM_TOGGLE_ITEM_SETTINGS_ACTION_NAME),
-            refresh: input.get_digital_action_handle(STEAM_REFRESH_ACTION_NAME),
-        }
-    }
-
-    fn missing_required_actions(&self) -> Vec<&'static str> {
-        let mut missing = Vec::new();
-        if self.action_set == 0 {
-            missing.push("action_set: menu");
-        }
-        let has_full_digital_navigation =
-            self.navigate_up != 0
-                && self.navigate_down != 0
-                && self.navigate_left != 0
-                && self.navigate_right != 0;
-        if self.navigate_axis == 0 && !has_full_digital_navigation {
-            missing.push("analog: navigate OR digital: navigate_up/down/left/right");
-        }
-        if self.confirm == 0 {
-            missing.push("digital: confirm");
-        }
-        if self.back == 0 {
-            missing.push("digital: back");
-        }
-        missing
-    }
-}
-
-#[cfg(feature = "steam-input")]
-#[derive(Default)]
-struct SteamInputRuntime {
-    attempted_init: bool,
-    client: Option<steamworks::Client>,
-    single: Option<steamworks::SingleClient>,
-    handles: Option<SteamInputActionHandles>,
-    manifest_path: Option<String>,
-    manifest_warning: Option<String>,
-    init_error: Option<String>,
-}
-
-#[cfg(feature = "steam-input")]
-impl SteamInputRuntime {
-    fn ensure_initialized(&mut self) {
-        if self.client.is_some() || self.attempted_init {
-            return;
-        }
-        self.attempted_init = true;
-
-        match steamworks::Client::init() {
-            Ok((client, single)) => {
-                match configure_steam_input_action_manifest_path() {
-                    Ok(path) => {
-                        self.manifest_path = path;
-                        self.manifest_warning = None;
-                    }
-                    Err(err) => {
-                        self.manifest_path = None;
-                        self.manifest_warning = Some(err);
-                    }
-                }
-
-                let input = client.input();
-                input.init(false);
-                let handles = SteamInputActionHandles::resolve(&input);
-
-                self.handles = Some(handles);
-                self.single = Some(single);
-                self.client = Some(client);
-                self.init_error = None;
-            }
-            Err(err) => {
-                self.init_error = Some(format!("Steam Input initialization failed: {err:?}"));
-            }
-        }
-    }
-
-    fn status(&mut self) -> (bool, Option<String>) {
-        self.ensure_initialized();
-
-        let Some(_) = self.client.as_ref() else {
-            return (
-                false,
-                Some(
-                    self.init_error
-                        .clone()
-                        .unwrap_or_else(|| "Steam Input client is unavailable.".to_string()),
-                ),
-            );
-        };
-
-        let handles = self.handles.get_or_insert_with(|| {
-            let input = self
-                .client
-                .as_ref()
-                .expect("steam client checked above")
-                .input();
-            SteamInputActionHandles::resolve(&input)
-        });
-
-        let missing = handles.missing_required_actions();
-        if !missing.is_empty() {
-            let manifest_hint = if let Some(path) = self.manifest_path.as_deref() {
-                format!(" Manifest loaded from: {path}.")
-            } else if let Some(warning) = self.manifest_warning.as_deref() {
-                format!(" Manifest warning: {warning}")
-            } else {
-                " Manifest warning: No manifest file was auto-loaded; ensure Steam partner action manifest is configured or include a local manifest.".to_string()
-            };
-
-            return (
-                false,
-                Some(
-                    format!(
-                        "Steam Input is missing required actions: {}. Expected mapping: {}.{}",
-                        missing.join(", "),
-                        expected_action_map_string(),
-                        manifest_hint
-                    ),
-                ),
-            );
-        }
-
-        (true, None)
-    }
-}
-
-#[cfg(feature = "steam-input")]
-static STEAM_INPUT_RUNTIME: OnceLock<Mutex<SteamInputRuntime>> = OnceLock::new();
-
-#[cfg(feature = "steam-input")]
-fn with_steam_input_runtime<T>(
-    f: impl FnOnce(&mut SteamInputRuntime) -> T,
-) -> Result<T, String> {
-    let runtime = STEAM_INPUT_RUNTIME.get_or_init(|| Mutex::new(SteamInputRuntime::default()));
-    let mut guard = runtime
-        .lock()
-        .map_err(|_| "Steam Input runtime lock poisoned.".to_string())?;
-    Ok(f(&mut guard))
-}
-
-#[cfg(feature = "steam-input")]
-fn configure_steam_input_action_manifest_path() -> Result<Option<String>, String> {
-    for candidate in steam_input_manifest_candidates() {
-        if !candidate.is_file() {
-            continue;
-        }
-
-        let full_path = candidate
-            .canonicalize()
-            .unwrap_or_else(|_| candidate.clone());
-        let full_path_str = full_path.to_string_lossy().to_string();
-        let c_path = CString::new(full_path_str.clone())
-            .map_err(|_| "Steam Input manifest path contains interior null bytes.".to_string())?;
-
-        let set_ok = unsafe {
-            let input = steamworks::sys::SteamAPI_SteamInput_v006();
-            if input.is_null() {
-                false
-            } else {
-                steamworks::sys::SteamAPI_ISteamInput_SetInputActionManifestFilePath(
-                    input,
-                    c_path.as_ptr(),
-                )
-            }
-        };
-
-        if set_ok {
-            return Ok(Some(full_path_str));
-        }
-    }
-
-    Ok(None)
-}
-
-#[cfg(feature = "steam-input")]
-fn steam_input_manifest_candidates() -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
-
-    if let Ok(from_env) = std::env::var("ROMM_STEAM_INPUT_MANIFEST") {
-        let trimmed = from_env.trim();
-        if !trimmed.is_empty() {
-            candidates.push(PathBuf::from(trimmed));
-        }
-    }
-
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            candidates.push(exe_dir.join(STEAM_MANIFEST_RELATIVE_PATH));
-            candidates.push(exe_dir.join("resources").join(STEAM_MANIFEST_RELATIVE_PATH));
-            candidates.push(
-                exe_dir
-                    .join("..")
-                    .join("resources")
-                    .join(STEAM_MANIFEST_RELATIVE_PATH),
-            );
-        }
-    }
-
-    if let Ok(cwd) = std::env::current_dir() {
-        candidates.push(cwd.join(STEAM_MANIFEST_RELATIVE_PATH));
-        candidates.push(cwd.join("src-tauri").join(STEAM_MANIFEST_RELATIVE_PATH));
-    }
-
-    let mut unique = Vec::new();
-    for path in candidates {
-        if !unique.iter().any(|seen: &PathBuf| seen == &path) {
-            unique.push(path);
-        }
-    }
-
-    unique
-}
-
-#[cfg(feature = "steam-input")]
-fn read_digital_action(
-    input: &steamworks::Input<steamworks::ClientManager>,
-    controller: u64,
-    handle: u64,
-) -> bool {
-    if handle == 0 {
-        return false;
-    }
-
-    let state = input.get_digital_action_data(controller, handle);
-    state.bActive && state.bState
-}
-
-#[cfg(feature = "steam-input")]
-fn read_analog_axis(
-    input: &steamworks::Input<steamworks::ClientManager>,
-    controller: u64,
-    handle: u64,
-) -> Option<(f32, f32)> {
-    if handle == 0 {
-        return None;
-    }
-
-    let data = input.get_analog_action_data(controller, handle);
-    let active = unsafe { std::ptr::addr_of!(data.bActive).read_unaligned() };
-    if !active {
-        return None;
-    }
-
-    let x = unsafe { std::ptr::addr_of!(data.x).read_unaligned() };
-    let y = unsafe { std::ptr::addr_of!(data.y).read_unaligned() };
-    Some((x, y))
-}
-
-fn empty_input_snapshot(backend: &str) -> InputActionSnapshot {
-    InputActionSnapshot {
-        backend: backend.to_string(),
-        navigate_up: false,
-        navigate_down: false,
-        navigate_left: false,
-        navigate_right: false,
-        confirm: false,
-        back: false,
-        open_text_input: false,
-        toggle_settings: false,
-        toggle_item_settings: false,
-        refresh: false,
-    }
-}
-
-#[cfg(feature = "steam-input")]
-fn steam_input_status() -> (bool, Option<String>) {
-    match with_steam_input_runtime(|runtime| runtime.status()) {
-        Ok(status) => status,
-        Err(err) => (false, Some(err)),
-    }
-}
-
-#[cfg(not(feature = "steam-input"))]
-fn steam_input_status() -> (bool, Option<String>) {
-    (false, Some("Steam input feature is not compiled in this build.".to_string()))
-}
-
-#[cfg(feature = "steam-input")]
-fn poll_steam_input_actions_snapshot() -> Result<InputActionSnapshot, String> {
-    let snapshot = with_steam_input_runtime(|runtime| {
-        let (ready, reason) = runtime.status();
-        if !ready {
-            return Err(reason.unwrap_or_else(|| "Steam Input is not ready.".to_string()));
-        }
-
-        let client = runtime
-            .client
-            .as_ref()
-            .ok_or_else(|| "Steam Input client missing after initialization.".to_string())?;
-        let single = runtime
-            .single
-            .as_ref()
-            .ok_or_else(|| "Steam Input callback dispatcher missing.".to_string())?;
-
-        single.run_callbacks();
-
-        let input = client.input();
-        input.run_frame();
-
-        let handles = runtime
-            .handles
-            .as_ref()
-            .ok_or_else(|| "Steam Input handles were not resolved.".to_string())?;
-
-        let controllers = input.get_connected_controllers();
-        if controllers.is_empty() {
-            return Ok(empty_input_snapshot("steam"));
-        }
-
-        const ANALOG_DEADZONE: f32 = 0.45;
-
-        let mut snapshot = empty_input_snapshot("steam");
-        for controller in controllers {
-            if handles.action_set != 0 {
-                input.activate_action_set_handle(controller, handles.action_set);
-            }
-
-            snapshot.navigate_up |= read_digital_action(&input, controller, handles.navigate_up);
-            snapshot.navigate_down |=
-                read_digital_action(&input, controller, handles.navigate_down);
-            snapshot.navigate_left |=
-                read_digital_action(&input, controller, handles.navigate_left);
-            snapshot.navigate_right |=
-                read_digital_action(&input, controller, handles.navigate_right);
-            snapshot.confirm |= read_digital_action(&input, controller, handles.confirm);
-            snapshot.back |= read_digital_action(&input, controller, handles.back);
-            snapshot.open_text_input |=
-                read_digital_action(&input, controller, handles.open_text_input);
-            snapshot.toggle_settings |=
-                read_digital_action(&input, controller, handles.toggle_settings);
-            snapshot.toggle_item_settings |=
-                read_digital_action(&input, controller, handles.toggle_item_settings);
-            snapshot.refresh |= read_digital_action(&input, controller, handles.refresh);
-
-            if let Some((x, y)) = read_analog_axis(&input, controller, handles.navigate_axis) {
-                snapshot.navigate_up |= y <= -ANALOG_DEADZONE;
-                snapshot.navigate_down |= y >= ANALOG_DEADZONE;
-                snapshot.navigate_left |= x <= -ANALOG_DEADZONE;
-                snapshot.navigate_right |= x >= ANALOG_DEADZONE;
-            }
-        }
-
-        Ok(snapshot)
-    })?;
-
-    snapshot
-}
-
-#[cfg(not(feature = "steam-input"))]
-fn poll_steam_input_actions_snapshot() -> Result<InputActionSnapshot, String> {
-    Err("Steam input feature is not compiled in this build.".to_string())
 }
 
 fn normalize_base_url(host: &str) -> Result<String, String> {
@@ -641,28 +186,108 @@ fn auto_core_path_from_platform(
         return None;
     }
 
-    let ra_path = retro_arch_path
-        .map(str::trim)
-        .filter(|v| !v.is_empty())?;
-    let ra = Path::new(ra_path);
-    let base_dir = if ra.is_file() {
-        ra.parent()
-    } else if ra.is_dir() {
-        Some(ra)
-    } else {
-        ra.parent()
-    }?;
+    let mut candidate_dirs: Vec<PathBuf> = Vec::new();
 
-    let cores_dir = base_dir.join("cores");
-    if !cores_dir.is_dir() {
+    if let Some(ra_path) = retro_arch_path
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        let ra = Path::new(ra_path);
+        let base_dir = if ra.is_file() {
+            ra.parent()
+        } else if ra.is_dir() {
+            Some(ra)
+        } else {
+            ra.parent()
+        };
+
+        if let Some(base) = base_dir {
+            candidate_dirs.push(base.join("cores"));
+        }
+
+        // AppImage portable mode stores user config at <AppImage>.home.
+        if ra_path.to_ascii_lowercase().ends_with(".appimage") {
+            let portable_home = PathBuf::from(format!("{ra_path}.home"));
+            candidate_dirs.push(portable_home.join(".config/retroarch/cores"));
+        }
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        let home_dir = PathBuf::from(home);
+        candidate_dirs.push(home_dir.join(".config/retroarch/cores"));
+        candidate_dirs.push(home_dir.join(".var/app/org.libretro.RetroArch/config/retroarch/cores"));
+    }
+
+    let mut unique_dirs: Vec<PathBuf> = Vec::new();
+    for dir in candidate_dirs {
+        if !dir.is_dir() {
+            continue;
+        }
+        if unique_dirs.iter().any(|seen| seen == &dir) {
+            continue;
+        }
+        unique_dirs.push(dir);
+    }
+
+    if unique_dirs.is_empty() {
         return None;
     }
 
     let ext = libretro_core_extension();
-    for base_name in candidates {
-        let candidate = cores_dir.join(format!("{base_name}{ext}"));
-        if candidate.is_file() {
-            return Some(candidate.to_string_lossy().to_string());
+    for cores_dir in &unique_dirs {
+        for base_name in candidates {
+            let candidate = cores_dir.join(format!("{base_name}{ext}"));
+            if candidate.is_file() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn detect_local_retroarch_executable() -> Option<String> {
+    let home = std::env::var("HOME").ok()?;
+    let home_dir = PathBuf::from(home);
+    let mut search_roots = vec![home_dir.join("Downloads"), home_dir.clone()];
+
+    // Toolbox/Bazzite can expose either /home/<user> or /var/home/<user>.
+    if let Some(stripped) = home_dir.to_string_lossy().strip_prefix("/home/") {
+        search_roots.push(PathBuf::from(format!("/var/home/{stripped}")).join("Downloads"));
+    }
+    if let Some(stripped) = home_dir.to_string_lossy().strip_prefix("/var/home/") {
+        search_roots.push(PathBuf::from(format!("/home/{stripped}")).join("Downloads"));
+    }
+
+    let mut queue: Vec<(PathBuf, usize)> = Vec::new();
+    for root in search_roots {
+        queue.push((root, 0));
+    }
+
+    while let Some((dir, depth)) = queue.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if depth < 4 {
+                    queue.push((path, depth + 1));
+                }
+                continue;
+            }
+            if !path.is_file() {
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let lower = name.to_ascii_lowercase();
+            if lower.contains("retroarch") && lower.ends_with(".appimage") {
+                return Some(path.to_string_lossy().to_string());
+            }
         }
     }
 
@@ -910,12 +535,78 @@ async fn pick_retroarch_path() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+async fn retroarch_flatpak_exists() -> Result<bool, String> {
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let app_id = "org.libretro.RetroArch";
+        let attempts: [(&str, &[&str]); 3] = [
+            ("flatpak", &["info", app_id]),
+            ("/usr/bin/flatpak", &["info", app_id]),
+            ("host-spawn", &["flatpak", "info", app_id]),
+        ];
+
+        for (program, args) in attempts {
+            match Command::new(program).args(args).status() {
+                Ok(status) if status.success() => return Ok(true),
+                Ok(_) => continue,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(_) => continue,
+            }
+        }
+
+        Ok(false)
+    }
+
+    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    {
+        Ok(false)
+    }
+}
+
+#[tauri::command]
 async fn local_path_exists(path: String) -> Result<bool, String> {
     let path = path.trim();
     if path.is_empty() {
         return Ok(false);
     }
     Ok(Path::new(path).exists())
+}
+
+#[tauri::command]
+async fn move_local_file(from_path: String, to_path: String) -> Result<bool, String> {
+    let from_trimmed = from_path.trim();
+    let to_trimmed = to_path.trim();
+    if from_trimmed.is_empty() || to_trimmed.is_empty() {
+        return Err("Source and destination paths are required.".to_string());
+    }
+
+    let from = PathBuf::from(from_trimmed);
+    let to = PathBuf::from(to_trimmed);
+
+    if !from.exists() {
+        return Ok(false);
+    }
+    if from == to || to.exists() {
+        return Ok(true);
+    }
+
+    if let Some(parent) = to.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create destination folder: {e}"))?;
+    }
+
+    if let Err(rename_err) = std::fs::rename(&from, &to) {
+        if from.is_file() {
+            std::fs::copy(&from, &to)
+                .map_err(|e| format!("Failed to copy file to destination: {e}"))?;
+            std::fs::remove_file(&from)
+                .map_err(|e| format!("Failed to remove legacy source file: {e}"))?;
+        } else {
+            return Err(format!("Failed to move file: {rename_err}"));
+        }
+    }
+
+    Ok(true)
 }
 
 #[tauri::command]
@@ -964,147 +655,6 @@ async fn open_local_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
-fn steam_runtime_detected() -> bool {
-    std::env::var_os("SteamGameId").is_some()
-        || std::env::var_os("STEAM_GAME_ID").is_some()
-        || std::env::var_os("SteamAppId").is_some()
-        || std::env::var_os("STEAM_COMPAT_DATA_PATH").is_some()
-}
-
-fn action_mapping_stub_enabled() -> bool {
-    cfg!(feature = "steam-input") && steam_runtime_detected()
-}
-
-fn action_mapping_backend() -> String {
-    if !cfg!(feature = "steam-input") || !steam_runtime_detected() {
-        return "native".to_string();
-    }
-
-    let (ready, _) = steam_input_status();
-    if ready {
-        "steam".to_string()
-    } else {
-        "native".to_string()
-    }
-}
-
-fn steam_keyboard_support() -> (bool, Option<String>) {
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        if steam_runtime_detected() {
-            (true, None)
-        } else {
-            (
-                false,
-                Some("Steam runtime not detected in environment.".to_string()),
-            )
-        }
-    }
-
-    #[cfg(not(all(unix, not(target_os = "macos"))))]
-    {
-        (
-            false,
-            Some("Steam keyboard URL trigger is only supported on Linux builds.".to_string()),
-        )
-    }
-}
-
-fn request_steam_keyboard_url() -> Result<(), String> {
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        Command::new("xdg-open")
-            .arg("steam://open/keyboard")
-            .spawn()
-            .map_err(|e| format!("Failed to request Steam keyboard: {e}"))?;
-        Ok(())
-    }
-
-    #[cfg(not(all(unix, not(target_os = "macos"))))]
-    {
-        Err("Steam keyboard URL trigger is only supported on Linux builds.".to_string())
-    }
-}
-
-#[tauri::command]
-async fn get_input_backend_capabilities() -> InputBackendCapabilities {
-    let steam_input_compiled = cfg!(feature = "steam-input");
-    let steam_runtime = steam_runtime_detected();
-    let (steam_input_ready, steam_input_reason) = steam_input_status();
-    let (steam_keyboard_supported, reason) = steam_keyboard_support();
-    let action_mapping_stub_enabled = action_mapping_stub_enabled();
-    let steam_input_available = steam_input_compiled && steam_runtime && steam_input_ready;
-    let active_backend = if steam_input_available || steam_keyboard_supported {
-        "steam".to_string()
-    } else {
-        "native".to_string()
-    };
-
-    InputBackendCapabilities {
-        steam_input_compiled,
-        steam_input_available,
-        steam_keyboard_supported,
-        action_mapping_stub_enabled,
-        active_backend,
-        reason: reason.or(steam_input_reason),
-    }
-}
-
-#[tauri::command]
-async fn get_input_action_mapping_status() -> InputActionMappingStatus {
-    let steam_input_compiled = cfg!(feature = "steam-input");
-    let steam_runtime = steam_runtime_detected();
-    let action_mapping_stub_enabled = action_mapping_stub_enabled();
-    let (steam_input_ready, steam_input_reason) = steam_input_status();
-    let active_backend = action_mapping_backend();
-    let reason = if steam_input_compiled && steam_runtime && steam_input_ready {
-        None
-    } else if !steam_input_compiled {
-        Some("Steam input feature is not compiled; using native backend.".to_string())
-    } else if !steam_runtime {
-        Some("Steam runtime was not detected; using native backend.".to_string())
-    } else {
-        steam_input_reason
-    };
-
-    InputActionMappingStatus {
-        steam_input_compiled,
-        steam_runtime_detected: steam_runtime,
-        action_mapping_stub_enabled,
-        active_backend,
-        reason,
-    }
-}
-
-#[tauri::command]
-async fn poll_input_actions() -> InputActionSnapshot {
-    if action_mapping_backend() == "steam" {
-        if let Ok(snapshot) = poll_steam_input_actions_snapshot() {
-            return snapshot;
-        }
-    }
-
-    empty_input_snapshot("native")
-}
-
-#[tauri::command]
-async fn open_text_input() -> Result<bool, String> {
-    let capabilities = get_input_backend_capabilities().await;
-    if !capabilities.steam_keyboard_supported {
-        return Ok(false);
-    }
-
-    request_steam_keyboard_url()?;
-    Ok(true)
-}
-
-#[tauri::command]
-async fn show_steam_keyboard() -> Result<(), String> {
-    #[cfg(all(unix, not(target_os = "macos")))]
-    request_steam_keyboard_url()?;
-    Ok(())
-}
-
 #[tauri::command]
 async fn launch_retroarch(
     window: tauri::Window,
@@ -1129,7 +679,28 @@ async fn launch_retroarch(
         .map(str::trim)
         .map(|v| v.trim_matches('"').trim_matches('\''))
         .filter(|v| !v.is_empty())
-        .map(str::to_string);
+        .map(str::to_string)
+        .map(|p| {
+            if Path::new(&p).exists() {
+                return p;
+            }
+
+            if let Some(stripped) = p.strip_prefix("/home/") {
+                let alt = format!("/var/home/{stripped}");
+                if Path::new(&alt).exists() {
+                    return alt;
+                }
+            }
+
+            if let Some(stripped) = p.strip_prefix("/var/home/") {
+                let alt = format!("/home/{stripped}");
+                if Path::new(&alt).exists() {
+                    return alt;
+                }
+            }
+
+            p
+        });
 
     if let Some(executable) = configured_retroarch.as_deref() {
         let looks_like_path = executable.contains(['\\', '/', ':']);
@@ -1175,18 +746,6 @@ async fn launch_retroarch(
         c
     };
 
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let mut cmd = {
-        let c = if let Some(executable) = configured_retroarch.as_deref() {
-            Command::new(executable)
-        } else {
-            let mut fallback = Command::new("flatpak");
-            fallback.arg("run").arg("org.libretro.RetroArch");
-            fallback
-        };
-        c
-    };
-
     #[cfg(target_os = "macos")]
     let mut cmd = {
         let executable = configured_retroarch.as_deref().unwrap_or("retroarch");
@@ -1194,8 +753,82 @@ async fn launch_retroarch(
         c
     };
 
-    cmd.args(&launch_args);
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut child = {
+        let mut launch_attempts: Vec<(String, Command, bool)> = Vec::new();
 
+        if let Some(executable) = configured_retroarch.as_deref() {
+            let is_appimage = executable.to_ascii_lowercase().ends_with(".appimage");
+            launch_attempts.push((executable.to_string(), Command::new(executable), is_appimage));
+        }
+
+        let mut c1 = Command::new("flatpak");
+        c1.arg("run").arg("org.libretro.RetroArch");
+        launch_attempts.push(("flatpak run org.libretro.RetroArch".to_string(), c1, false));
+
+        let mut c2 = Command::new("/usr/bin/flatpak");
+        c2.arg("run").arg("org.libretro.RetroArch");
+        launch_attempts.push(("/usr/bin/flatpak run org.libretro.RetroArch".to_string(), c2, false));
+
+        let mut c3 = Command::new("host-spawn");
+        c3.arg("flatpak").arg("run").arg("org.libretro.RetroArch");
+        launch_attempts.push(("host-spawn flatpak run org.libretro.RetroArch".to_string(), c3, false));
+
+        if let Some(auto_executable) = detect_local_retroarch_executable() {
+            let already_added = launch_attempts
+                .iter()
+                .any(|(label, _, _)| label == &auto_executable);
+            if !already_added {
+                launch_attempts.push((
+                    auto_executable.clone(),
+                    Command::new(auto_executable),
+                    true,
+                ));
+            }
+        }
+
+        launch_attempts.push(("retroarch".to_string(), Command::new("retroarch"), false));
+
+        let mut failures = Vec::<String>::new();
+        let mut spawned: Option<std::process::Child> = None;
+
+        for (label, mut candidate_cmd, candidate_is_appimage) in launch_attempts {
+            if candidate_is_appimage {
+                // AppImage can fail on some systems/containers without FUSE. This fallback
+                // tells AppImage to extract and run directly from a temp location.
+                candidate_cmd.env("APPIMAGE_EXTRACT_AND_RUN", "1");
+            }
+            candidate_cmd.stderr(Stdio::piped());
+            candidate_cmd.args(&launch_args);
+
+            match candidate_cmd.spawn() {
+                Ok(child) => {
+                    spawned = Some(child);
+                    break;
+                }
+                Err(e) => failures.push(format!("{label}: {e}")),
+            }
+        }
+
+        if let Some(child) = spawned {
+            child
+        } else if configured_retroarch.is_none() {
+            return Err(format!(
+                "Failed to launch RetroArch. Attempted: {}. Install Flatpak RetroArch (org.libretro.RetroArch) on the host or set a custom RetroArch command/path in Emulator Settings.",
+                failures.join(" | ")
+            ));
+        } else {
+            return Err(format!("Failed to launch RetroArch: {}", failures.join(" | ")));
+        }
+    };
+
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        cmd.stderr(Stdio::piped());
+        cmd.args(&launch_args);
+    }
+
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     let mut child = cmd.spawn().map_err(|e| {
         #[cfg(target_os = "windows")]
         {
@@ -1226,10 +859,32 @@ async fn launch_retroarch(
 
     std::thread::sleep(Duration::from_millis(350));
     if let Ok(Some(status)) = child.try_wait() {
+        let stderr_hint = child
+            .wait_with_output()
+            .ok()
+            .and_then(|output| {
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                if stderr.is_empty() {
+                    None
+                } else {
+                    Some(stderr)
+                }
+            })
+            .map(|stderr| {
+                format!(
+                    "\nRetroArch stderr:\n{}",
+                    stderr.lines().take(8).collect::<Vec<_>>().join("\n")
+                )
+            })
+            .unwrap_or_default();
+
         return Err(format!(
-            "RetroArch exited immediately (status: {status}). Verify RetroArch path, optional core path, and ROM compatibility."
+            "RetroArch exited immediately (status: {status}).{}\nVerify RetroArch path, optional core path, and ROM compatibility.",
+            stderr_hint
         ));
     }
+
+    let _ = tauri::async_runtime::spawn_blocking(move || child.wait()).await;
 
     Ok(())
 }
@@ -1655,6 +1310,8 @@ async fn steamgriddb_grid_url_at(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    configure_linux_webview_env();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -1662,13 +1319,10 @@ pub fn run() {
             romm_api_get,
             pick_folder,
             pick_retroarch_path,
+            retroarch_flatpak_exists,
             local_path_exists,
+            move_local_file,
             open_local_folder,
-            get_input_backend_capabilities,
-            get_input_action_mapping_status,
-            open_text_input,
-            poll_input_actions,
-            show_steam_keyboard,
             launch_retroarch,
             romm_download_rom,
             steamgriddb_hero_url,

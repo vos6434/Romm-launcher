@@ -16,7 +16,6 @@ import {
 import { useLoginGamepadNavigation } from "./useLoginGamepadNavigation";
 import { useLoginKeyboardNavigation } from "./useLoginKeyboardNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
-import { requestSteamKeyboard } from "./steamKeyboard";
 import {
   loginSlotIndex,
   loginSlotOrder,
@@ -254,17 +253,6 @@ function App() {
 
   const activateLoginSlot = useCallback(() => {
     const id = slotOrder[gpFocusIndex];
-    if (id === "host" || id === "username" || id === "password") {
-      const input =
-        id === "host"
-          ? hostRef.current
-          : id === "username"
-            ? usernameRef.current
-            : passwordRef.current;
-      input?.focus();
-      void requestSteamKeyboard();
-      return;
-    }
     if (id === "togglePassword") {
       toggleRef.current?.click();
       return;

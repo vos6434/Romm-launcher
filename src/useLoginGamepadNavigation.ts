@@ -1,10 +1,13 @@
 import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import {
-  readUnifiedInputActions,
-  type InputActionSnapshot,
-} from "./gamepadActionAdapter";
+import { getActiveGamepad } from "./gamepadAccess";
+import { GP_FACE_SOUTH } from "./gamepadFlavor";
 
+/** Common Chromium / Firefox mapping: D-pad as extra buttons. */
+const DPAD_UP = 12;
+const DPAD_DOWN = 13;
+
+const STICK_DEAD = 0.42;
 const STICK_REPEAT_MS = 140;
 const ACTION_DEBOUNCE_MS = 360;
 
@@ -32,15 +35,16 @@ export function useLoginGamepadNavigation({
   slotCountRef.current = slotCount;
   onSelectRef.current = onSelect;
 
-  const prevActionsRef = useRef<InputActionSnapshot | null>(null);
+  const prevBtnRef = useRef<boolean[] | null>(null);
   const stickHoldRef = useRef<{ ySign: -1 | 0 | 1; lastStep: number }>({
     ySign: 0,
     lastStep: 0,
   });
   const lastActionRef = useRef(0);
+  const lastGamepadIndexRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || typeof navigator === "undefined" || !("getGamepads" in navigator)) {
       return;
     }
 
@@ -58,45 +62,73 @@ export function useLoginGamepadNavigation({
         return;
       }
 
-      const now = performance.now();
-      const actions = readUnifiedInputActions();
-      const prev = prevActionsRef.current;
-
-      const navY =
-        actions.navigateUp === actions.navigateDown
-          ? 0
-          : actions.navigateUp
-            ? -1
-            : 1;
-      const prevNavY = prev
-        ? prev.navigateUp === prev.navigateDown
-          ? 0
-          : prev.navigateUp
-            ? -1
-            : 1
-        : 0;
-
-      const hold = stickHoldRef.current;
-
-      if (navY === 0) {
+      const g = getActiveGamepad();
+      if (!g) {
+        lastGamepadIndexRef.current = null;
+        prevBtnRef.current = null;
         stickHoldRef.current = { ySign: 0, lastStep: 0 };
-      } else if (navY !== hold.ySign || prevNavY === 0) {
-        step(navY);
-        stickHoldRef.current = { ySign: navY, lastStep: now };
-      } else if (now - hold.lastStep >= STICK_REPEAT_MS) {
-        step(navY);
-        stickHoldRef.current = { ySign: navY, lastStep: now };
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+
+      if (lastGamepadIndexRef.current !== g.index) {
+        lastGamepadIndexRef.current = g.index;
+        prevBtnRef.current = null;
+        stickHoldRef.current = { ySign: 0, lastStep: 0 };
+      }
+
+      const now = performance.now();
+      const pressed = g.buttons.map(
+        (b) => b.pressed || (typeof b.value === "number" && b.value > 0.5),
+      );
+      const prev = prevBtnRef.current ?? pressed.map(() => false);
+
+      let navigated = false;
+
+      const up = pressed[DPAD_UP] ?? false;
+      const down = pressed[DPAD_DOWN] ?? false;
+      const prevUp = prev[DPAD_UP] ?? false;
+      const prevDown = prev[DPAD_DOWN] ?? false;
+
+      if (up && !prevUp) {
+        step(-1);
+        navigated = true;
+      } else if (down && !prevDown) {
+        step(1);
+        navigated = true;
+      }
+
+      if (!navigated) {
+        const ax = g.axes[0] ?? 0;
+        const ay = g.axes[1] ?? 0;
+        let ySign: -1 | 0 | 1 = 0;
+        if (Math.abs(ay) > STICK_DEAD && Math.abs(ay) >= Math.abs(ax)) {
+          ySign = ay < 0 ? -1 : 1;
+        }
+
+        const hold = stickHoldRef.current;
+
+        if (ySign === 0) {
+          stickHoldRef.current = { ySign: 0, lastStep: 0 };
+        } else if (ySign !== hold.ySign) {
+          step(ySign);
+          stickHoldRef.current = { ySign, lastStep: now };
+        } else if (now - hold.lastStep >= STICK_REPEAT_MS) {
+          step(ySign);
+          stickHoldRef.current = { ySign, lastStep: now };
+        }
       }
 
       if (!loading && now - lastActionRef.current >= ACTION_DEBOUNCE_MS) {
-        const prevConfirm = prev?.confirm ?? false;
-        if (actions.confirm && !prevConfirm) {
+        const south = pressed[GP_FACE_SOUTH] ?? false;
+        const prevSouth = prev[GP_FACE_SOUTH] ?? false;
+        if (south && !prevSouth) {
           lastActionRef.current = now;
           onSelectRef.current();
         }
       }
 
-      prevActionsRef.current = actions;
+      prevBtnRef.current = pressed;
       raf = requestAnimationFrame(tick);
     };
 

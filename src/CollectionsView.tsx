@@ -31,11 +31,6 @@ import { getActiveGamepad } from "./gamepadAccess";
 import { GP_FACE_EAST, GP_FACE_NORTH, GP_FACE_SOUTH } from "./gamepadFlavor";
 import { useCollectionsGamepadNavigation } from "./useCollectionsGamepadNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
-import {
-  getInputBackendCapabilities,
-  type InputBackendCapabilities,
-} from "./inputBackend";
-import { requestSteamKeyboard } from "./steamKeyboard";
 import { fetchCollectionBackgroundUrl } from "./collectionBackground";
 import { fetchCollectionGridCoverUrl } from "./collectionGridCover";
 import { fetchSteamGridSearchQuery } from "./collectionSteamGridSearch";
@@ -234,8 +229,8 @@ function estimateCollectionGapPx(): number {
 const MAX_CAROUSEL_SLOT_RADIUS = 30;
 const BACKGROUND_CROSSFADE_MS = 320;
 
-/** Settings panel: IGDB, franchise, SteamGrid key/save/unhide, emulator launch toggle, RetroArch path pick/core, download dir pick/open. */
-const SETTINGS_NAV_SLOTS = 11;
+/** Settings panel: IGDB, franchise, SteamGrid key/save/unhide, emulator launch toggle, RetroArch path pick/core/flatpak scan, download dir pick/open. */
+const SETTINGS_NAV_SLOTS = 12;
 
 /** Hide + pick background + clear background + pick cover + clear cover. */
 const COLLECTION_SETTINGS_NAV_SLOTS = 5;
@@ -439,7 +434,26 @@ function gameDownloadRelativePath(game: RommGame): string {
 function joinLocalPath(baseDir: string, relativePath: string): string {
   const base = baseDir.trim().replace(/[\\/]+$/, "");
   if (!base) return relativePath;
+
+  const isWindowsBase = /^[A-Za-z]:[\\/]/.test(base) || base.startsWith("\\\\");
+  const sep = isWindowsBase ? "\\" : "/";
+  const normalizedRelative = isWindowsBase
+    ? relativePath.replace(/\//g, "\\")
+    : relativePath.replace(/\\/g, "/");
+
+  return `${base}${sep}${normalizedRelative}`;
+}
+
+function joinLegacyWindowsPath(baseDir: string, relativePath: string): string {
+  const base = baseDir.trim().replace(/[\\/]+$/, "");
+  if (!base) return relativePath;
   return `${base}\\${relativePath.replace(/\//g, "\\")}`;
+}
+
+function isWindowsStylePath(path: string): boolean {
+  const p = path.trim();
+  if (!p) return false;
+  return /^[A-Za-z]:[\\/]/.test(p) || p.startsWith("\\\\");
 }
 
 /** Track width: one centered slot is scaled (~1.05); matches `.collection-slot--focus`. */
@@ -619,6 +633,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   const settingsUnhideAllRef = useRef<HTMLButtonElement>(null);
   const settingsRetroArchPathRef = useRef<HTMLInputElement>(null);
   const settingsPickRetroArchPathRef = useRef<HTMLButtonElement>(null);
+  const settingsScanFlatpakRef = useRef<HTMLButtonElement>(null);
   const settingsRetroArchCoreRef = useRef<HTMLInputElement>(null);
   const settingsMinimizeOnLaunchRef = useRef<HTMLInputElement>(null);
   const settingsPickDownloadsDirRef = useRef<HTMLButtonElement>(null);
@@ -647,9 +662,12 @@ export function CollectionsView({ session, onLogout }: Props) {
   const [retroArchCorePathDraft, setRetroArchCorePathDraft] = useState(() =>
     loadRetroArchCorePath(),
   );
+  const [flatpakRetroArchFound, setFlatpakRetroArchFound] = useState(false);
+  const [flatpakCheckInProgress, setFlatpakCheckInProgress] = useState(false);
   const [minimizeLauncherOnLaunch, setMinimizeLauncherOnLaunch] = useState(() =>
     loadMinimizeLauncherOnGameLaunch(),
   );
+  const [launchingOverlayVisible, setLaunchingOverlayVisible] = useState(false);
   const [gameDownloadState, setGameDownloadState] = useState<
     Record<string, "missing" | "downloading" | "downloaded" | "error">
   >({});
@@ -689,8 +707,6 @@ export function CollectionsView({ session, onLogout }: Props) {
   );
   const [steamGridPickerGalleryMetrics, setSteamGridPickerGalleryMetrics] =
     useState({ width: 0, height: 0 });
-  const [inputBackendCapabilities, setInputBackendCapabilities] =
-    useState<InputBackendCapabilities | null>(null);
   const [steamGridPickerViewport, setSteamGridPickerViewport] = useState(() => ({
     width: typeof window === "undefined" ? 1366 : window.innerWidth,
     height: typeof window === "undefined" ? 768 : window.innerHeight,
@@ -799,21 +815,6 @@ export function CollectionsView({ session, onLogout }: Props) {
       resizeUnlisten?.();
     };
   }, [tauriShell]);
-
-  useEffect(() => {
-    if (!settingsOpen) return;
-    let cancelled = false;
-
-    void getInputBackendCapabilities(true).then((capabilities) => {
-      if (!cancelled) {
-        setInputBackendCapabilities(capabilities);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [settingsOpen]);
 
   const inGamesView = activeCollection !== null;
 
@@ -1046,7 +1047,20 @@ export function CollectionsView({ session, onLogout }: Props) {
         const relativePath = gameDownloadRelativePath(game);
         const fullPath = joinLocalPath(romsDownloadDir, relativePath);
         try {
-          const exists = await invoke<boolean>("local_path_exists", { path: fullPath });
+          let exists = await invoke<boolean>("local_path_exists", { path: fullPath });
+          if (!exists && !isWindowsStylePath(romsDownloadDir)) {
+            const legacyPath = joinLegacyWindowsPath(romsDownloadDir, relativePath);
+            const legacyExists = await invoke<boolean>("local_path_exists", {
+              path: legacyPath,
+            });
+            if (legacyExists) {
+              await invoke<boolean>("move_local_file", {
+                fromPath: legacyPath,
+                toPath: fullPath,
+              });
+              exists = await invoke<boolean>("local_path_exists", { path: fullPath });
+            }
+          }
           next[game.key] = exists ? "downloaded" : "missing";
         } catch {
           next[game.key] = "missing";
@@ -1260,6 +1274,34 @@ export function CollectionsView({ session, onLogout }: Props) {
     saveMinimizeLauncherOnGameLaunch(next);
   }, []);
 
+  const scanFlatpakRetroArch = useCallback(async () => {
+    if (!tauriShell) {
+      setFlatpakRetroArchFound(false);
+      return;
+    }
+    const startedAt = Date.now();
+    const minimumIndicatorMs = 600;
+    setFlatpakCheckInProgress(true);
+    try {
+      const found = await invoke<boolean>("retroarch_flatpak_exists");
+      setFlatpakRetroArchFound(Boolean(found));
+    } catch {
+      setFlatpakRetroArchFound(false);
+    } finally {
+      const elapsed = Date.now() - startedAt;
+      const remaining = Math.max(0, minimumIndicatorMs - elapsed);
+      if (remaining > 0) {
+        await new Promise((resolve) => setTimeout(resolve, remaining));
+      }
+      setFlatpakCheckInProgress(false);
+    }
+  }, [tauriShell]);
+
+  useEffect(() => {
+    if (!settingsOpen || !tauriShell) return;
+    void scanFlatpakRetroArch();
+  }, [scanFlatpakRetroArch, settingsOpen, tauriShell]);
+
   const downloadFocusedGame = useCallback(async () => {
     if (!tauriShell || !focusedGame) return;
     if (gameDownloadState[focusedGame.key] === "downloading") return;
@@ -1302,23 +1344,43 @@ export function CollectionsView({ session, onLogout }: Props) {
   ]);
 
   const launchFocusedGame = useCallback(async () => {
-    if (!tauriShell || !focusedGame) return;
+    if (!tauriShell || !focusedGame || launchingOverlayVisible) return;
     const dir = romsDownloadDir.trim();
     if (!dir) {
       setGamesError("Pick a ROMs download location in Emulator Settings before launching.");
       return;
     }
     const relativePath = gameDownloadRelativePath(focusedGame);
-    const romPath = joinLocalPath(dir, relativePath);
+    const canonicalRomPath = joinLocalPath(dir, relativePath);
 
     try {
       setGamesError(null);
-      const exists = await invoke<boolean>("local_path_exists", { path: romPath });
+      let romPath = canonicalRomPath;
+      let exists = await invoke<boolean>("local_path_exists", { path: romPath });
+      if (!exists && !isWindowsStylePath(dir)) {
+        const legacyPath = joinLegacyWindowsPath(dir, relativePath);
+        const legacyExists = await invoke<boolean>("local_path_exists", {
+          path: legacyPath,
+        });
+        if (legacyExists) {
+          await invoke<boolean>("move_local_file", {
+            fromPath: legacyPath,
+            toPath: canonicalRomPath,
+          });
+          exists = await invoke<boolean>("local_path_exists", {
+            path: canonicalRomPath,
+          });
+          if (exists) {
+            romPath = canonicalRomPath;
+          }
+        }
+      }
       if (!exists) {
         setGameDownloadState((prev) => ({ ...prev, [focusedGame.key]: "missing" }));
         setGamesError("ROM file is missing on disk. Download it again or verify your ROMs download location.");
         return;
       }
+      setLaunchingOverlayVisible(true);
       await invoke("launch_retroarch", {
         romPath,
         retroArchPath: retroArchPathDraft.trim() || null,
@@ -1328,9 +1390,12 @@ export function CollectionsView({ session, onLogout }: Props) {
       });
     } catch (e) {
       setGamesError(formatInvokeError(e));
+    } finally {
+      setLaunchingOverlayVisible(false);
     }
   }, [
     focusedGame,
+    launchingOverlayVisible,
     minimizeLauncherOnLaunch,
     retroArchCorePathDraft,
     retroArchPathDraft,
@@ -1496,7 +1561,6 @@ export function CollectionsView({ session, onLogout }: Props) {
     switch (steamGridPickerFilterNavIndex) {
       case 0:
         steamGridPickerSearchInputRef.current?.focus();
-        void requestSteamKeyboard();
         break;
       case 1:
         if (steamGridPickerSortMenuOpen) {
@@ -1898,7 +1962,6 @@ export function CollectionsView({ session, onLogout }: Props) {
         break;
       case 2:
         settingsSteamKeyRef.current?.focus();
-        void requestSteamKeyboard();
         break;
       case 3:
         saveSteamGridKey();
@@ -1911,19 +1974,20 @@ export function CollectionsView({ session, onLogout }: Props) {
         break;
       case 6:
         settingsRetroArchPathRef.current?.focus();
-        void requestSteamKeyboard();
         break;
       case 7:
         void pickRetroArchPath();
         break;
       case 8:
         settingsRetroArchCoreRef.current?.focus();
-        void requestSteamKeyboard();
         break;
       case 9:
-        void pickRomsDownloadDir();
+        void scanFlatpakRetroArch();
         break;
       case 10:
+        void pickRomsDownloadDir();
+        break;
+      case 11:
         void openRomsDownloadDir();
         break;
       default:
@@ -1934,6 +1998,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     openRomsDownloadDir,
     pickRetroArchPath,
     pickRomsDownloadDir,
+    scanFlatpakRetroArch,
     saveSteamGridKey,
     settingsNavIndex,
   ]);
@@ -2066,6 +2131,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       settingsRetroArchPathRef,
       settingsPickRetroArchPathRef,
       settingsRetroArchCoreRef,
+      settingsScanFlatpakRef,
       settingsPickDownloadsDirRef,
       settingsOpenDownloadsDirRef,
     ] as const;
@@ -3249,14 +3315,6 @@ export function CollectionsView({ session, onLogout }: Props) {
                 <p className="collections-settings-menu-hint">
                   Play launches downloaded ROMs with your local RetroArch install. On Linux, leaving RetroArch path empty uses Flatpak app id org.libretro.RetroArch.
                 </p>
-                <p className="collections-settings-debug">
-                  Debug: Steam Input API in use:{" "}
-                  {inputBackendCapabilities
-                    ? inputBackendCapabilities.steamInputAvailable
-                      ? "Yes"
-                      : "No"
-                    : "Checking..."}
-                </p>
                 <input
                   ref={settingsRetroArchPathRef}
                   type="text"
@@ -3288,6 +3346,32 @@ export function CollectionsView({ session, onLogout }: Props) {
                   onChange={(e) => onRetroArchCorePathChange(e.target.value)}
                   onFocus={() => setSettingsNavIndex(8)}
                 />
+                <p
+                  className={`collections-settings-flatpak-status ${flatpakRetroArchFound ? "collections-settings-flatpak-status--found" : "collections-settings-flatpak-status--missing"}`}
+                >
+                  {flatpakRetroArchFound
+                    ? "Flatpak found"
+                    : "Flatpak not found"}
+                </p>
+                {flatpakCheckInProgress ? (
+                  <p className="collections-settings-flatpak-scanning" aria-live="polite">
+                    Scanning Flatpak installation...
+                  </p>
+                ) : null}
+                <button
+                  ref={settingsScanFlatpakRef}
+                  type="button"
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 9 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  onClick={() => {
+                    void scanFlatpakRetroArch();
+                  }}
+                  onFocus={() => setSettingsNavIndex(9)}
+                  disabled={flatpakCheckInProgress}
+                >
+                  {flatpakCheckInProgress
+                    ? "Scanning Flatpak RetroArch..."
+                    : "Scan Flatpak RetroArch"}
+                </button>
                 <input
                   type="text"
                   className="collections-settings-steamgrid-input"
@@ -3297,22 +3381,22 @@ export function CollectionsView({ session, onLogout }: Props) {
                 <button
                   ref={settingsPickDownloadsDirRef}
                   type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 9 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 10 ? " collections-settings-steamgrid-save--active" : ""}`}
                   onClick={() => {
                     void pickRomsDownloadDir();
                   }}
-                  onFocus={() => setSettingsNavIndex(9)}
+                  onFocus={() => setSettingsNavIndex(10)}
                 >
                   Pick ROMs download location
                 </button>
                 <button
                   ref={settingsOpenDownloadsDirRef}
                   type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 10 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 11 ? " collections-settings-steamgrid-save--active" : ""}`}
                   onClick={() => {
                     void openRomsDownloadDir();
                   }}
-                  onFocus={() => setSettingsNavIndex(10)}
+                  onFocus={() => setSettingsNavIndex(11)}
                   disabled={!romsDownloadDir.trim()}
                 >
                   Open downloads location
@@ -3867,6 +3951,16 @@ export function CollectionsView({ session, onLogout }: Props) {
         )
       : null;
 
+  const launchOverlayPortal =
+    launchingOverlayVisible && typeof document !== "undefined"
+      ? createPortal(
+          <div className="collections-launch-overlay" role="status" aria-live="polite">
+            <p className="collections-launch-overlay-text">Launching.</p>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
     <div
       className="collections-screen"
@@ -3875,6 +3969,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       {collectionSettingsPortal}
       {gameSettingsPortal}
       {steamGridPickerPortal}
+      {launchOverlayPortal}
 
       <div className="collections-bg-stack" aria-hidden>
         {bgLayers.length > 0 ? (
@@ -4142,6 +4237,7 @@ export function CollectionsView({ session, onLogout }: Props) {
           </div>
         </footer>
       ) : null}
+
     </div>
   );
 }

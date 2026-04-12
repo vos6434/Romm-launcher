@@ -204,16 +204,6 @@ button.collections-settings-action:focus-visible {
   margin-top: 4px;
 }
 
-.collections-settings-debug {
-  margin: 8px 0 12px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid #4a4a4a;
-  background: rgba(0, 0, 0, 0.25);
-  color: #d1d5db;
-  font-size: 0.78rem;
-}
-
 .collections-settings-steamgrid .collections-settings-menu-hint a {
   color: #93c5fd;
   text-decoration: underline;
@@ -272,6 +262,61 @@ button.collections-settings-action:focus-visible {
   .collections-settings-steamgrid-save
   + .collections-settings-steamgrid-save {
   margin-top: 10px;
+}
+
+.collections-settings-flatpak-status {
+  margin: -2px 0 8px;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.collections-settings-flatpak-status--found {
+  color: #86efac;
+}
+
+.collections-settings-flatpak-status--missing {
+  color: #fca5a5;
+}
+
+.collections-launch-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 6, 10, 0.82);
+  backdrop-filter: blur(2px);
+}
+
+.collections-launch-overlay-text {
+  margin: 0;
+  font-size: clamp(1.2rem, 2.4vw, 2rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #f3f4f6;
+}
+
+.collections-settings-flatpak-scanning {
+  margin: -2px 0 8px;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  font-weight: 600;
+  color: #fde68a;
+  animation: collections-flatpak-scan-pulse 0.95s ease-in-out infinite;
+}
+
+@keyframes collections-flatpak-scan-pulse {
+  0% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.55;
+  }
 }
 
 .steamgrid-picker-backdrop {
