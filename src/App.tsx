@@ -16,6 +16,7 @@ import {
 import { useLoginGamepadNavigation } from "./useLoginGamepadNavigation";
 import { useLoginKeyboardNavigation } from "./useLoginKeyboardNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
+import { setInputLocked, initInputLock } from "./inputLock";
 import {
   loginSlotIndex,
   loginSlotOrder,
@@ -89,6 +90,11 @@ function App() {
   const showKeyboardFooterHints = slotNavChrome && !showGamepadFooterHints;
 
   const slotOrder = useMemo(() => loginSlotOrder(!!error), [error]);
+
+  // Initialize gamescope overlay detection on mount
+  useEffect(() => {
+    initInputLock();
+  }, []);
 
   useEffect(() => {
     if (!tauriShell) {
@@ -252,7 +258,10 @@ function App() {
 
   const requestSteamKeyboard = useCallback(() => {
     if (!tauriShell) return;
-    void invoke<boolean>("open_steam_keyboard").catch(() => {});
+    setInputLocked(true); // Lock input while keyboard is active
+    void invoke<boolean>("open_steam_keyboard").catch(() => {
+      setInputLocked(false); // Unlock if command fails
+    });
   }, [tauriShell]);
 
   useEffect(() => {

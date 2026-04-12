@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useRef } from "react";
 import { getActiveGamepad } from "./gamepadAccess";
+import { isInputLocked, recordGamepadActivity } from "./inputLock";
 import {
   GP_FACE_EAST,
   GP_FACE_NORTH,
@@ -104,7 +105,11 @@ export function useCollectionsGamepadNavigation({
     let raf = 0;
 
     const tick = () => {
-      if (document.visibilityState !== "visible" || !document.hasFocus()) {
+      if (
+        document.visibilityState !== "visible" ||
+        !document.hasFocus() ||
+        isInputLocked()
+      ) {
         lastGamepadIndexRef.current = null;
         prevBtnRef.current = null;
         stickHoldRef.current = { xSign: 0, lastStep: 0 };
@@ -123,6 +128,9 @@ export function useCollectionsGamepadNavigation({
         raf = requestAnimationFrame(tick);
         return;
       }
+
+      // Record activity for gamescope overlay detection
+      recordGamepadActivity();
 
       if (lastGamepadIndexRef.current !== g.index) {
         lastGamepadIndexRef.current = g.index;

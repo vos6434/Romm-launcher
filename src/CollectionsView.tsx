@@ -28,6 +28,7 @@ import {
 } from "./KeyboardCollectionsHintGlyphs";
 import { KeyboardEnterPromptGlyph } from "./KeyboardNavPromptGlyphs";
 import { getActiveGamepad } from "./gamepadAccess";
+import { isInputLocked, recordGamepadActivity } from "./inputLock";
 import { GP_FACE_EAST, GP_FACE_NORTH, GP_FACE_SOUTH } from "./gamepadFlavor";
 import { useCollectionsGamepadNavigation } from "./useCollectionsGamepadNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
@@ -2512,7 +2513,11 @@ export function CollectionsView({ session, onLogout }: Props) {
     let raf = 0;
 
     const tick = () => {
-      if (document.visibilityState !== "visible" || !document.hasFocus()) {
+      if (
+        document.visibilityState !== "visible" ||
+        !document.hasFocus() ||
+        isInputLocked()
+      ) {
         pickerLastGamepadIndexRef.current = null;
         pickerPrevButtonsRef.current = null;
         pickerHoldRef.current = { xSign: 0, ySign: 0, lastStep: 0 };
@@ -2528,6 +2533,9 @@ export function CollectionsView({ session, onLogout }: Props) {
         raf = requestAnimationFrame(tick);
         return;
       }
+
+      // Record activity for gamescope overlay detection
+      recordGamepadActivity();
 
       if (pickerLastGamepadIndexRef.current !== pad.index) {
         pickerLastGamepadIndexRef.current = pad.index;
