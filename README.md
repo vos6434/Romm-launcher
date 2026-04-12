@@ -112,3 +112,31 @@ Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cp
 ## API reference
 
 See the [RomM API Reference](https://docs.romm.app/latest/API-and-Development/API-Reference/). Token scopes requested on login: `roms.read`, `collections.read`, `platforms.read`, `me.read` (must be allowed for your user role on the server).
+
+## Steam Input action contract
+
+Steam Input is enabled in default builds. Backend action polling expects this exact Steam Input naming:
+
+- action set: `menu`
+- analog action: `navigate`
+- digital actions: `navigate_up`, `navigate_down`, `navigate_left`, `navigate_right`
+- digital actions: `confirm`, `back`
+- optional digital actions: `open_text_input`, `toggle_settings`, `toggle_item_settings`, `refresh`
+
+Required for Steam backend activation:
+
+- `menu`
+- `confirm`
+- `back`
+- and either `navigate` or all four digital `navigate_*` actions
+
+If required actions are missing, launcher falls back to native gamepad polling and reports the missing action names through the input backend status command.
+
+Bundled manifest file:
+
+- `src-tauri/steam_input/romm_launcher_actions.vdf`
+
+Runtime loading behavior:
+
+- Attempts to auto-load the bundled manifest in dev and packaged layouts.
+- Optional override: set environment variable `ROMM_STEAM_INPUT_MANIFEST` to an absolute manifest path.
