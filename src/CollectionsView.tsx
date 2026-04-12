@@ -2512,7 +2512,10 @@ export function CollectionsView({ session, onLogout }: Props) {
     let raf = 0;
 
     const tick = () => {
-      if (document.visibilityState !== "visible") {
+      if (document.visibilityState !== "visible" || !document.hasFocus()) {
+        pickerLastGamepadIndexRef.current = null;
+        pickerPrevButtonsRef.current = null;
+        pickerHoldRef.current = { xSign: 0, ySign: 0, lastStep: 0 };
         raf = requestAnimationFrame(tick);
         return;
       }

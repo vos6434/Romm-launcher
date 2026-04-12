@@ -57,7 +57,10 @@ export function useLoginGamepadNavigation({
     };
 
     const tick = () => {
-      if (document.visibilityState !== "visible") {
+      if (document.visibilityState !== "visible" || !document.hasFocus()) {
+        lastGamepadIndexRef.current = null;
+        prevBtnRef.current = null;
+        stickHoldRef.current = { ySign: 0, lastStep: 0 };
         raf = requestAnimationFrame(tick);
         return;
       }
