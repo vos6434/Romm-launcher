@@ -4,9 +4,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-mod debug_log;
-use debug_log::{log_debug, log_frontend};
-
 #[cfg(all(unix, not(target_os = "macos")))]
 fn configure_linux_webview_env() {
     fn set_default_env(key: &str, value: &str) {
@@ -660,8 +657,6 @@ async fn open_local_folder(path: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn open_steam_keyboard() -> Result<bool, String> {
-    log_debug("Opening Steam keyboard");
-    
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         let attempts: [(&str, &[&str]); 7] = [
@@ -685,39 +680,20 @@ async fn open_steam_keyboard() -> Result<bool, String> {
 
         for (program, args) in attempts {
             match Command::new(program).args(args).status() {
-                Ok(status) if status.success() => {
-                    log_debug(&format!("Successfully opened Steam keyboard via {}", program));
-                    return Ok(true);
-                }
-                Ok(_) => {
-                    log_debug(&format!("Failed attempt with {}", program));
-                    continue;
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                    log_debug(&format!("Program {} not found", program));
-                    continue;
-                }
-                Err(e) => {
-                    log_debug(&format!("Error with {}: {:?}", program, e));
-                    continue;
-                }
+                Ok(status) if status.success() => return Ok(true),
+                Ok(_) => continue,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(_) => continue,
             }
         }
 
-        log_debug("All keyboard opening attempts failed");
         Ok(false)
     }
 
     #[cfg(not(all(unix, not(target_os = "macos"))))]
     {
-        log_debug("Keyboard command not supported on this platform");
         Ok(false)
     }
-}
-
-#[tauri::command]
-fn get_window_focused(window: tauri::Window) -> bool {
-    window.is_focused().unwrap_or(false)
 }
 
 #[tauri::command]
@@ -1389,8 +1365,6 @@ pub fn run() {
             move_local_file,
             open_local_folder,
             open_steam_keyboard,
-            get_window_focused,
-            log_frontend,
             launch_retroarch,
             romm_download_rom,
             steamgriddb_hero_url,
@@ -1401,25 +1375,6 @@ pub fn run() {
             steamgriddb_grid_images,
             steamgriddb_grid_url_at
         ])
-        .setup(|app| {
-            log_debug("RomM Launcher startup - overlay detection initialized");
-            let main_window = app.get_window("main").expect("main window not found");
-
-            // Emit window focus state changes to frontend for overlay/keyboard detection
-            let window_clone = main_window.clone();
-            main_window.on_window_event(move |event| {
-                use tauri::WindowEvent;
-                match event {
-                    WindowEvent::Focused(is_focused) => {
-                        log_debug(&format!("Window focus changed: {}", is_focused));
-                        let _ = window_clone.emit("window-focus-changed", *is_focused);
-                    }
-                    _ => {}
-                }
-            });
-
-            Ok(())
-        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

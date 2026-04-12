@@ -16,7 +16,6 @@ import {
 import { useLoginGamepadNavigation } from "./useLoginGamepadNavigation";
 import { useLoginKeyboardNavigation } from "./useLoginKeyboardNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
-import { setInputLocked, initOverlayDetection } from "./inputLock";
 import {
   loginSlotIndex,
   loginSlotOrder,
@@ -90,13 +89,6 @@ function App() {
   const showKeyboardFooterHints = slotNavChrome && !showGamepadFooterHints;
 
   const slotOrder = useMemo(() => loginSlotOrder(!!error), [error]);
-
-  // Initialize overlay detection (window focus tracking for Steam keyboard/overlay)
-  useEffect(() => {
-    if (tauriShell) {
-      void initOverlayDetection();
-    }
-  }, [tauriShell]);
 
   useEffect(() => {
     if (!tauriShell) {
@@ -260,10 +252,7 @@ function App() {
 
   const requestSteamKeyboard = useCallback(() => {
     if (!tauriShell) return;
-    setInputLocked(true); // Lock input while keyboard is open
-    void invoke<boolean>("open_steam_keyboard").catch(() => {
-      setInputLocked(false); // Unlock if command fails
-    });
+    void invoke<boolean>("open_steam_keyboard").catch(() => {});
   }, [tauriShell]);
 
   useEffect(() => {
