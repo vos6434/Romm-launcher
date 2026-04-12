@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { getActiveGamepad } from "./gamepadAccess";
-import { isInputLocked, recordGamepadActivity } from "./inputLock";
+import { isInputLocked } from "./inputLock";
 import { GP_FACE_SOUTH } from "./gamepadFlavor";
 
 /** Common Chromium / Firefox mapping: D-pad as extra buttons. */
@@ -78,9 +78,6 @@ export function useLoginGamepadNavigation({
         raf = requestAnimationFrame(tick);
         return;
       }
-
-      // Record activity for gamescope overlay detection
-      recordGamepadActivity();
 
       if (lastGamepadIndexRef.current !== g.index) {
         lastGamepadIndexRef.current = g.index;

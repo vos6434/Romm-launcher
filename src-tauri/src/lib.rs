@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+mod gamescope_focus;
+
 #[cfg(all(unix, not(target_os = "macos")))]
 fn configure_linux_webview_env() {
     fn set_default_env(key: &str, value: &str) {
@@ -1355,6 +1357,10 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            gamescope_focus::start_monitor();
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             romm_login,
             romm_api_get,
@@ -1365,6 +1371,7 @@ pub fn run() {
             move_local_file,
             open_local_folder,
             open_steam_keyboard,
+            gamescope_launcher_focused,
             launch_retroarch,
             romm_download_rom,
             steamgriddb_hero_url,
@@ -1377,4 +1384,9 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+fn gamescope_launcher_focused() -> bool {
+    gamescope_focus::is_launcher_focused()
 }

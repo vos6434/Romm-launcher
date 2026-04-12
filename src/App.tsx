@@ -16,7 +16,7 @@ import {
 import { useLoginGamepadNavigation } from "./useLoginGamepadNavigation";
 import { useLoginKeyboardNavigation } from "./useLoginKeyboardNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
-import { setInputLocked, initInputLock } from "./inputLock";
+import { setInputLocked, initInputLock, setOverlayLocked } from "./inputLock";
 import {
   loginSlotIndex,
   loginSlotOrder,
@@ -94,6 +94,25 @@ function App() {
   // Initialize gamescope overlay detection on mount
   useEffect(() => {
     initInputLock();
+
+    if (!tauriShell) {
+      return;
+    }
+
+    const pollFocus = () => {
+      void invoke<boolean>("gamescope_launcher_focused")
+        .then((focused) => {
+          setOverlayLocked(!focused);
+        })
+        .catch(() => {
+          // Keep the previous overlay lock state if the query fails.
+        });
+    };
+
+    pollFocus();
+    const interval = window.setInterval(pollFocus, 250);
+
+    return () => window.clearInterval(interval);
   }, []);
 
   useEffect(() => {

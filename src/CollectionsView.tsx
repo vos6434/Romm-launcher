@@ -28,7 +28,7 @@ import {
 } from "./KeyboardCollectionsHintGlyphs";
 import { KeyboardEnterPromptGlyph } from "./KeyboardNavPromptGlyphs";
 import { getActiveGamepad } from "./gamepadAccess";
-import { isInputLocked, recordGamepadActivity } from "./inputLock";
+import { isInputLocked } from "./inputLock";
 import { GP_FACE_EAST, GP_FACE_NORTH, GP_FACE_SOUTH } from "./gamepadFlavor";
 import { useCollectionsGamepadNavigation } from "./useCollectionsGamepadNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
@@ -2533,9 +2533,6 @@ export function CollectionsView({ session, onLogout }: Props) {
         raf = requestAnimationFrame(tick);
         return;
       }
-
-      // Record activity for gamescope overlay detection
-      recordGamepadActivity();
 
       if (pickerLastGamepadIndexRef.current !== pad.index) {
         pickerLastGamepadIndexRef.current = pad.index;

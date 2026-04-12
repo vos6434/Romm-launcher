@@ -1,47 +1,44 @@
 /**
  * Input lock for gamescope overlay/keyboard suppression.
- * 
- * Gamescope is a Wayland compositor that manages overlays at the compositor level.
- * Traditional window focus events are unreliable, so we use:
- * 1. Manual lock when keyboard opens
- * 2. Input activity debounce detection (silence = overlay active)
- * 3. Aggressive timeout fallback
+ *
+ * Manual locking is used while Steam's keyboard is being requested.
+ * Overlay locking is driven by the backend gamescope focus state.
  */
 
-let locked = false;
+let manualLocked = false;
+let overlayLocked = false;
+let currentLocked = false;
 let lockTimeoutId: number | null = null;
-let lastGamepadActivityTime = 0;
 const subscribers = new Set<(locked: boolean) => void>();
 
-// Lock duration constants
-const MANUAL_LOCK_MS = 10000; // Manual lock timeout (10 seconds)
-const INACTIVITY_THRESHOLD_MS = 800; // If gamepad silent for 800ms, assume overlay active
+const MANUAL_LOCK_MS = 10000;
 
-/**
- * Report gamepad input activity. Called whenever a gamepad input is processed.
- * Used to detect when overlay becomes active (via input silence).
- */
-export function recordGamepadActivity(): void {
-  lastGamepadActivityTime = performance.now();
+function setCurrentLocked(nextLocked: boolean): void {
+  if (currentLocked === nextLocked) {
+    return;
+  }
+
+  currentLocked = nextLocked;
+  subscribers.forEach((fn) => fn(nextLocked));
+}
+
+function recomputeLockedState(): void {
+  setCurrentLocked(manualLocked || overlayLocked);
 }
 
 /**
- * Check if input appears locked due to overlay/keyboard being active.
- * Uses activity debounce: if no input for INACTIVITY_THRESHOLD_MS, overlay likely active.
+ * Check if input is currently locked.
  */
 export function isInputLocked(): boolean {
-  // Explicit manual lock (keyboard opened)
-  if (locked) {
-    return true;
-  }
+  return currentLocked;
+}
 
-  // Implicit lock via input silence (gamescope overlay/keyboard likely active)
-  const timeSinceLastActivity = performance.now() - lastGamepadActivityTime;
-  if (timeSinceLastActivity > INACTIVITY_THRESHOLD_MS) {
-    return true;
-  }
-
-  return false;
+/**
+ * Update overlay lock state from the backend focus watcher.
+ */
+export function setOverlayLocked(shouldLock: boolean): void {
+  overlayLocked = shouldLock;
+  recomputeLockedState();
 }
 
 /**
@@ -49,29 +46,22 @@ export function isInputLocked(): boolean {
  * Auto-unlocks after MANUAL_LOCK_MS.
  */
 export function setInputLocked(shouldLock: boolean): void {
-  if (shouldLock && !locked) {
-    locked = true;
-    subscribers.forEach((fn) => fn(true));
+  manualLocked = shouldLock;
 
-    // Clear any existing timeout
-    if (lockTimeoutId !== null) {
-      clearTimeout(lockTimeoutId);
-    }
-
-    // Auto-unlock after timeout
-    lockTimeoutId = setTimeout(() => {
-      locked = false;
-      lockTimeoutId = null;
-      subscribers.forEach((fn) => fn(false));
-    }, MANUAL_LOCK_MS);
-  } else if (!shouldLock && locked) {
-    locked = false;
-    if (lockTimeoutId !== null) {
-      clearTimeout(lockTimeoutId);
-      lockTimeoutId = null;
-    }
-    subscribers.forEach((fn) => fn(false));
+  if (lockTimeoutId !== null) {
+    clearTimeout(lockTimeoutId);
+    lockTimeoutId = null;
   }
+
+  if (shouldLock) {
+    lockTimeoutId = window.setTimeout(() => {
+      manualLocked = false;
+      lockTimeoutId = null;
+      recomputeLockedState();
+    }, MANUAL_LOCK_MS);
+  }
+
+  recomputeLockedState();
 }
 
 /**
@@ -79,7 +69,7 @@ export function setInputLocked(shouldLock: boolean): void {
  */
 export function subscribeInputLock(cb: (locked: boolean) => void): () => void {
   subscribers.add(cb);
-  cb(locked);
+  cb(currentLocked);
   return () => {
     subscribers.delete(cb);
   };
@@ -90,5 +80,5 @@ export function subscribeInputLock(cb: (locked: boolean) => void): () => void {
  * Call once on app startup.
  */
 export function initInputLock(): void {
-  lastGamepadActivityTime = performance.now();
+  // No-op. Polling is started by App.tsx.
 }
