@@ -1287,6 +1287,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     const inputEl = el as HTMLInputElement;
     let done = false;
     let timeoutId: number | null = null;
+    const lockedAt = performance.now();
 
     const unlock = () => {
       if (done) return;
@@ -1302,9 +1303,11 @@ export function CollectionsView({ session, onLogout }: Props) {
       timeoutId = window.setTimeout(unlock, ms);
     };
 
-    // Fast path: Steam keyboard sends Enter as an X11 key event to the window.
+    // Gamescope maps the A button to a keyboard Enter event. Guard: ignore Enter
+    // events within 300ms of the keyboard being requested so the A-press that
+    // opened the keyboard doesn't immediately unlock it.
     const onEnter = (e: KeyboardEvent) => {
-      if (e.key === "Enter") unlock();
+      if (e.key === "Enter" && performance.now() - lockedAt >= 300) unlock();
     };
 
     // While the user is actively typing, extend the lock (keyboard is still open).

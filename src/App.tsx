@@ -281,6 +281,7 @@ function App() {
     const el = document.activeElement as HTMLInputElement | null;
     let done = false;
     let timeoutId: number | null = null;
+    const lockedAt = performance.now();
 
     const unlock = () => {
       if (done) return;
@@ -296,9 +297,11 @@ function App() {
       timeoutId = window.setTimeout(unlock, ms);
     };
 
-    // Fast path: Steam keyboard sends Enter as an X11 key event to the window.
+    // Gamescope maps the A button to a keyboard Enter event. We add this listener
+    // synchronously, so the A-press Enter fires right away and would immediately
+    // unlock. Guard: ignore Enter events within 300ms of the keyboard being requested.
     const onEnter = (e: KeyboardEvent) => {
-      if (e.key === "Enter") unlock();
+      if (e.key === "Enter" && performance.now() - lockedAt >= 300) unlock();
     };
 
     // While the user is actively typing, extend the lock (keyboard is still open).
@@ -365,7 +368,7 @@ function App() {
   }, [slotOrder, gpFocusIndex, onRetry, focusTextField, requestSteamKeyboard]);
 
   useLoginKeyboardNavigation({
-    enabled: slotNavChrome && inputActive,
+    enabled: slotNavChrome && inputActive && !gamepadConnected,
     loading,
     slotCount: slotOrder.length,
     setFocusIndex: setGpFocusIndex,

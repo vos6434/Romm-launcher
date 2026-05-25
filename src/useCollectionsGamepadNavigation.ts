@@ -113,16 +113,18 @@ export function useCollectionsGamepadNavigation({
         isInputLocked();
 
       if (blocked || !g) {
-        // Keep prevBtnRef up-to-date even while blocked so that held buttons
-        // don't appear as fresh presses the moment we unblock (e.g. back
-        // button held across a view transition firing twice).
-        if (g && lastGamepadIndexRef.current === g.index) {
+        // Always record button state while blocked so held buttons don't appear
+        // as fresh presses the moment we unblock. Previously we set null on the
+        // first encounter with a new gamepad index, which left prevBtnRef null
+        // and caused spurious triggers on the first unblocked tick.
+        if (g) {
           prevBtnRef.current = g.buttons.map(
             (b) => b.pressed || (typeof b.value === "number" && b.value > 0.5),
           );
+          lastGamepadIndexRef.current = g.index;
         } else {
           prevBtnRef.current = null;
-          lastGamepadIndexRef.current = g?.index ?? null;
+          lastGamepadIndexRef.current = null;
         }
         stickHoldRef.current = { xSign: 0, lastStep: 0 };
         settingsStickHoldRef.current = { ySign: 0, lastStep: 0 };
