@@ -58,7 +58,7 @@ It runs on tag push (for example `v0.1.0`) or manual dispatch and uploads:
 
 For rapid Flatpak iteration on branches, use `Flatpak CI` in Actions. It uploads only the `.flatpak` artifact plus SHA-256 checksum for each push/PR.
 
-For Steam Deck, prefer the `AppImage` first (simple portable install). Mark it executable before running.
+**Do not use the AppImage on Steam Deck.** AppImages require FUSE to mount themselves, which is not reliably available in Steam Game Mode. Use the raw binary or the Flatpak instead (see below).
 
 ### Local Flatpak build (Linux)
 
@@ -87,23 +87,107 @@ Expected output:
 
 - `src-tauri/target/release/bundle/flatpak/RomM_Launcher_<version>_amd64.flatpak`
 
-### Steam Deck install and Steam shortcut
+---
 
-Steam Deck can install the generated `.flatpak` in Desktop Mode. The `.deb` file is only an intermediate build artifact used during packaging; the Deck-facing artifact is the final `.flatpak`.
+## Installing on Steam Deck (Game Mode)
 
-Install on Steam Deck:
+> SteamOS is immutable — you cannot install system packages. Use either the **raw binary** or the **Flatpak**. Both work in Game Mode.
+
+### Step 1 — Get the build artifacts
+
+Trigger a build via GitHub Actions (Actions → Release Builds → Run workflow, select your branch). When it finishes, download either:
+
+- `steamdeck-raw-binary-...` — contains `tauri-app` (single executable)
+- `steamdeck-build-...` — contains `*.flatpak`
+
+Copy the file to your Deck via USB drive, SSH, or the Deck's browser.
+
+---
+
+### Option A — Raw binary (simpler, good for testing)
+
+The raw binary links against the system's `webkit2gtk-4.1`, which ships with SteamOS 3.x.
+
+**In Desktop Mode, open a terminal (Konsole):**
+
+```bash
+# Extract the tarball (or just copy tauri-app directly if you did that)
+tar -xzf tauri-app-*.tar.gz
+
+mkdir -p ~/.local/bin
+cp tauri-app ~/.local/bin/romm-launcher
+chmod +x ~/.local/bin/romm-launcher
+```
+
+**Test it from the terminal first:**
+
+```bash
+DISPLAY=:0 ~/.local/bin/romm-launcher
+```
+
+If it opens, proceed to [Add to Steam](#step-2--add-to-steam).
+
+---
+
+### Option B — Flatpak (recommended for permanent install)
+
+Flatpak bundles `webkit2gtk` and all other dependencies, so it will not break when Valve updates system libraries.
+
+**In Desktop Mode, open a terminal:**
 
 ```bash
 flatpak install --user ./RomM_Launcher_<version>_amd64.flatpak
 ```
 
-The bundle is built with an embedded Flathub runtime source hint, so Deck can fetch the required runtime if it is missing.
+The bundle includes an embedded runtime source hint, so the Deck will fetch the required Flatpak runtime if it is missing.
 
-After install, Flatpak exports `RomM Launcher` as a standard desktop app entry. In Desktop Mode, open Steam and use **Games > Add a Non-Steam Game to My Library**. `RomM Launcher` should appear in the application list as an addable shortcut.
+**Verify it launches:**
 
-If it does not appear immediately, restart Steam in Desktop Mode and try again. Flatpak exports desktop entries into the standard application export paths that desktop launchers scan.
+```bash
+flatpak run com.kacper.tauri-app
+```
 
-If you already installed an older Flatpak build before controller permissions were added, reinstall the updated `.flatpak` or run `flatpak override --user --device=all --filesystem=/run/udev:ro com.kacper.tauri-app`.
+Then proceed to [Add to Steam](#step-2--add-to-steam).
+
+If you already installed an older Flatpak build before controller permissions were added, reinstall the updated `.flatpak` or run:
+
+```bash
+flatpak override --user --device=all --filesystem=/run/udev:ro com.kacper.tauri-app
+```
+
+---
+
+### Step 2 — Add to Steam
+
+Both options require adding the launcher to Steam so it appears in Game Mode.
+
+#### Raw binary
+
+1. In **Desktop Mode**, open Steam
+2. **Library → Add a Game → Add a Non-Steam Game...**
+3. Click **Browse** → navigate to `/home/deck/.local/bin/romm-launcher` → **Open**
+4. **Add Selected Programs**
+5. Right-click the new entry → **Properties**:
+   - **Target:** `/home/deck/.local/bin/romm-launcher`
+   - **Launch Options:** `DISPLAY=:0 %command%`
+
+#### Flatpak
+
+1. In **Desktop Mode**, open Steam
+2. **Library → Add a Game → Add a Non-Steam Game...**
+3. `RomM Launcher` should appear in the list — tick it and click **Add Selected Programs**
+
+   If it does not appear, restart Steam in Desktop Mode and try again (Flatpak registers a desktop entry that Steam scans for).
+
+4. Right-click the new entry → **Properties**:
+   - **Target:** `/usr/bin/flatpak`
+   - **Launch Options:** `run com.kacper.tauri-app %command%`
+
+---
+
+### Step 3 — Switch to Game Mode
+
+Switch to Game Mode. `RomM Launcher` should appear in your library and launch fullscreen on the Deck's 1280×800 display. The controller D-pad and left stick navigate the UI; the **A** button confirms and opens the Steam keyboard for text fields.
 
 ### Rust build fails with `link.exe` not found (Windows)
 

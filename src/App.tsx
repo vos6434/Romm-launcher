@@ -277,9 +277,15 @@ function App() {
 
   const requestSteamKeyboard = useCallback(() => {
     if (!tauriShell) return;
-    setInputLocked(true); // Lock input while keyboard is active
+    setInputLocked(true);
+
+    // Unlock as soon as the text field loses focus (keyboard dismissed or user moved on).
+    // The 30s safety timeout in inputLock.ts fires if blur never happens.
+    const active = document.activeElement as HTMLElement | null;
+    active?.addEventListener("blur", () => setInputLocked(false), { once: true });
+
     void invoke<boolean>("open_steam_keyboard").catch(() => {
-      setInputLocked(false); // Unlock if command fails
+      setInputLocked(false);
     });
   }, [tauriShell]);
 
