@@ -541,18 +541,35 @@ async fn retroarch_flatpak_exists() -> Result<bool, String> {
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         let app_id = "org.libretro.RetroArch";
-        let attempts: [(&str, &[&str]); 3] = [
+
+        // Prefer a filesystem check: reliable in Game Mode where PATH may be
+        // limited and `flatpak` may not be reachable from inside a sandbox.
+        if Path::new("/var/lib/flatpak/app").join(app_id).is_dir() {
+            return Ok(true);
+        }
+        if let Ok(home) = std::env::var("HOME") {
+            let user_path = PathBuf::from(home)
+                .join(".local/share/flatpak/app")
+                .join(app_id);
+            if user_path.is_dir() {
+                return Ok(true);
+            }
+        }
+
+        // Fallback: run `flatpak info` via various launchers (works in desktop
+        // session or when running as a native app with full PATH).
+        let attempts: [(&str, &[&str]); 5] = [
             ("flatpak", &["info", app_id]),
             ("/usr/bin/flatpak", &["info", app_id]),
+            ("flatpak-spawn", &["--host", "flatpak", "info", app_id]),
+            ("/usr/bin/flatpak-spawn", &["--host", "flatpak", "info", app_id]),
             ("host-spawn", &["flatpak", "info", app_id]),
         ];
 
         for (program, args) in attempts {
             match Command::new(program).args(args).status() {
                 Ok(status) if status.success() => return Ok(true),
-                Ok(_) => continue,
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(_) => continue,
+                Ok(_) | Err(_) => continue,
             }
         }
 
