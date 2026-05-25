@@ -105,24 +105,25 @@ export function useCollectionsGamepadNavigation({
     let raf = 0;
 
     const tick = () => {
-      if (
-        document.visibilityState !== "visible" ||
-        !document.hasFocus() ||
-        isInputLocked()
-      ) {
-        lastGamepadIndexRef.current = null;
-        prevBtnRef.current = null;
-        stickHoldRef.current = { xSign: 0, lastStep: 0 };
-        settingsStickHoldRef.current = { ySign: 0, lastStep: 0 };
-        raf = requestAnimationFrame(tick);
-        return;
-      }
-
       const g = getActiveGamepad();
 
-      if (!g) {
-        lastGamepadIndexRef.current = null;
-        prevBtnRef.current = null;
+      const blocked =
+        document.visibilityState !== "visible" ||
+        !document.hasFocus() ||
+        isInputLocked();
+
+      if (blocked || !g) {
+        // Keep prevBtnRef up-to-date even while blocked so that held buttons
+        // don't appear as fresh presses the moment we unblock (e.g. back
+        // button held across a view transition firing twice).
+        if (g && lastGamepadIndexRef.current === g.index) {
+          prevBtnRef.current = g.buttons.map(
+            (b) => b.pressed || (typeof b.value === "number" && b.value > 0.5),
+          );
+        } else {
+          prevBtnRef.current = null;
+          lastGamepadIndexRef.current = g?.index ?? null;
+        }
         stickHoldRef.current = { xSign: 0, lastStep: 0 };
         settingsStickHoldRef.current = { ySign: 0, lastStep: 0 };
         raf = requestAnimationFrame(tick);

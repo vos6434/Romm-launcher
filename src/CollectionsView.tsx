@@ -10,6 +10,7 @@ import {
 import { createPortal } from "react-dom";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { GamepadCollectionSettingsPromptGlyph } from "./GamepadCollectionSettingsPromptGlyph";
 import { GamepadHorizontalNavPromptGlyphs } from "./GamepadHorizontalNavPromptGlyphs";
 import { GamepadPromptGlyph } from "./GamepadPromptGlyph";
@@ -28,7 +29,7 @@ import {
 } from "./KeyboardCollectionsHintGlyphs";
 import { KeyboardEnterPromptGlyph } from "./KeyboardNavPromptGlyphs";
 import { getActiveGamepad } from "./gamepadAccess";
-import { isInputLocked } from "./inputLock";
+import { isInputLocked, setInputLocked } from "./inputLock";
 import { GP_FACE_EAST, GP_FACE_NORTH, GP_FACE_SOUTH } from "./gamepadFlavor";
 import { useCollectionsGamepadNavigation } from "./useCollectionsGamepadNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
@@ -230,8 +231,8 @@ function estimateCollectionGapPx(): number {
 const MAX_CAROUSEL_SLOT_RADIUS = 30;
 const BACKGROUND_CROSSFADE_MS = 320;
 
-/** Settings panel: IGDB, franchise, SteamGrid key/save/unhide, emulator launch toggle, RetroArch path pick/core/flatpak scan, download dir pick/open. */
-const SETTINGS_NAV_SLOTS = 12;
+/** Settings panel: IGDB, franchise, SteamGrid key/save/unhide, emulator launch toggle, RetroArch path pick/core/flatpak scan, download dir input/pick/open. */
+const SETTINGS_NAV_SLOTS = 13;
 
 /** Hide + pick background + clear background + pick cover + clear cover. */
 const COLLECTION_SETTINGS_NAV_SLOTS = 5;
@@ -637,6 +638,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   const settingsScanFlatpakRef = useRef<HTMLButtonElement>(null);
   const settingsRetroArchCoreRef = useRef<HTMLInputElement>(null);
   const settingsMinimizeOnLaunchRef = useRef<HTMLInputElement>(null);
+  const settingsRomsDirRef = useRef<HTMLInputElement>(null);
   const settingsPickDownloadsDirRef = useRef<HTMLButtonElement>(null);
   const settingsOpenDownloadsDirRef = useRef<HTMLButtonElement>(null);
   const collectionHideRef = useRef<HTMLButtonElement>(null);
@@ -1229,10 +1231,12 @@ export function CollectionsView({ session, onLogout }: Props) {
   const pickRomsDownloadDir = useCallback(async () => {
     if (!tauriShell) return;
     try {
-      const picked = await invoke<string | null>("pick_folder");
+      const picked = await openFileDialog({ directory: true, multiple: false, title: "Select ROMs folder" });
       if (!picked) return;
-      saveRomsDownloadDir(picked);
-      setRomsDownloadDir(picked);
+      const path = typeof picked === "string" ? picked : picked[0];
+      if (!path) return;
+      saveRomsDownloadDir(path);
+      setRomsDownloadDir(path);
     } catch {
       /* ignore picker failure */
     }
@@ -1241,10 +1245,12 @@ export function CollectionsView({ session, onLogout }: Props) {
   const pickRetroArchPath = useCallback(async () => {
     if (!tauriShell) return;
     try {
-      const picked = await invoke<string | null>("pick_retroarch_path");
+      const picked = await openFileDialog({ multiple: false, title: "Select RetroArch executable" });
       if (!picked) return;
-      saveRetroArchPath(picked);
-      setRetroArchPathDraft(picked);
+      const path = typeof picked === "string" ? picked : picked[0];
+      if (!path) return;
+      saveRetroArchPath(path);
+      setRetroArchPathDraft(path);
     } catch {
       /* ignore picker failure */
     }
@@ -1269,6 +1275,49 @@ export function CollectionsView({ session, onLogout }: Props) {
     setRetroArchPathDraft(next);
     saveRetroArchPath(next);
   }, []);
+
+  const onRomsDirChange = useCallback((next: string) => {
+    setRomsDownloadDir(next);
+    saveRomsDownloadDir(next);
+  }, []);
+
+  const requestSteamKeyboard = useCallback((el: HTMLElement | null) => {
+    if (!tauriShell || !el) return;
+
+    const inputEl = el as HTMLInputElement;
+    let done = false;
+    let timeoutId: number | null = null;
+
+    const unlock = () => {
+      if (done) return;
+      done = true;
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      setInputLocked(false);
+      window.removeEventListener("keydown", onEnter);
+      inputEl.removeEventListener("input", onInput);
+    };
+
+    const resetTimeout = (ms: number) => {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(unlock, ms);
+    };
+
+    // Fast path: Steam keyboard sends Enter as an X11 key event to the window.
+    const onEnter = (e: KeyboardEvent) => {
+      if (e.key === "Enter") unlock();
+    };
+
+    // While the user is actively typing, extend the lock (keyboard is still open).
+    // Unlocks 5s after the last keystroke if Enter is never received.
+    const onInput = () => resetTimeout(5000);
+
+    setInputLocked(true);
+    window.addEventListener("keydown", onEnter);
+    inputEl.addEventListener("input", onInput);
+    resetTimeout(10000); // fallback if no interaction at all
+
+    void invoke<boolean>("open_steam_keyboard").catch(unlock);
+  }, [tauriShell]);
 
   const onMinimizeLauncherOnLaunchChange = useCallback((next: boolean) => {
     setMinimizeLauncherOnLaunch(next);
@@ -1389,6 +1438,12 @@ export function CollectionsView({ session, onLogout }: Props) {
         platformSlug: focusedGame.platformSlug ?? null,
         minimizeLauncher: minimizeLauncherOnLaunch,
       });
+      // Game exited — restore launcher window (it was minimized while game ran)
+      if (minimizeLauncherOnLaunch) {
+        const appWindow = getCurrentWindow();
+        await appWindow.unminimize().catch(() => {});
+        await appWindow.setFocus().catch(() => {});
+      }
     } catch (e) {
       setGamesError(formatInvokeError(e));
     } finally {
@@ -1963,6 +2018,7 @@ export function CollectionsView({ session, onLogout }: Props) {
         break;
       case 2:
         settingsSteamKeyRef.current?.focus();
+        requestSteamKeyboard(settingsSteamKeyRef.current);
         break;
       case 3:
         saveSteamGridKey();
@@ -1975,20 +2031,26 @@ export function CollectionsView({ session, onLogout }: Props) {
         break;
       case 6:
         settingsRetroArchPathRef.current?.focus();
+        requestSteamKeyboard(settingsRetroArchPathRef.current);
         break;
       case 7:
         void pickRetroArchPath();
         break;
       case 8:
         settingsRetroArchCoreRef.current?.focus();
+        requestSteamKeyboard(settingsRetroArchCoreRef.current);
         break;
       case 9:
         void scanFlatpakRetroArch();
         break;
       case 10:
-        void pickRomsDownloadDir();
+        settingsRomsDirRef.current?.focus();
+        requestSteamKeyboard(settingsRomsDirRef.current);
         break;
       case 11:
+        void pickRomsDownloadDir();
+        break;
+      case 12:
         void openRomsDownloadDir();
         break;
       default:
@@ -1999,6 +2061,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     openRomsDownloadDir,
     pickRetroArchPath,
     pickRomsDownloadDir,
+    requestSteamKeyboard,
     scanFlatpakRetroArch,
     saveSteamGridKey,
     settingsNavIndex,
@@ -2133,6 +2196,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       settingsPickRetroArchPathRef,
       settingsRetroArchCoreRef,
       settingsScanFlatpakRef,
+      settingsRomsDirRef,
       settingsPickDownloadsDirRef,
       settingsOpenDownloadsDirRef,
     ] as const;
@@ -3381,30 +3445,34 @@ export function CollectionsView({ session, onLogout }: Props) {
                     : "Scan Flatpak RetroArch"}
                 </button>
                 <input
+                  ref={settingsRomsDirRef}
                   type="text"
-                  className="collections-settings-steamgrid-input"
-                  value={romsDownloadDir || "No download location selected"}
-                  readOnly
+                  className={`collections-settings-steamgrid-input${settingsNavIndex === 10 ? " collections-settings-steamgrid-input--active" : ""}`}
+                  autoComplete="off"
+                  placeholder="ROMs download path (e.g. /home/deck/ROMs)"
+                  value={romsDownloadDir}
+                  onChange={(e) => onRomsDirChange(e.target.value)}
+                  onFocus={() => setSettingsNavIndex(10)}
                 />
                 <button
                   ref={settingsPickDownloadsDirRef}
                   type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 10 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 11 ? " collections-settings-steamgrid-save--active" : ""}`}
                   onClick={() => {
                     void pickRomsDownloadDir();
                   }}
-                  onFocus={() => setSettingsNavIndex(10)}
+                  onFocus={() => setSettingsNavIndex(11)}
                 >
-                  Pick ROMs download location
+                  Browse for ROMs location
                 </button>
                 <button
                   ref={settingsOpenDownloadsDirRef}
                   type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 11 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 12 ? " collections-settings-steamgrid-save--active" : ""}`}
                   onClick={() => {
                     void openRomsDownloadDir();
                   }}
-                  onFocus={() => setSettingsNavIndex(11)}
+                  onFocus={() => setSettingsNavIndex(12)}
                   disabled={!romsDownloadDir.trim()}
                 >
                   Open downloads location

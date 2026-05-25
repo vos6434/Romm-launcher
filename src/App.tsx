@@ -277,16 +277,40 @@ function App() {
 
   const requestSteamKeyboard = useCallback(() => {
     if (!tauriShell) return;
-    setInputLocked(true);
 
-    // Unlock as soon as the text field loses focus (keyboard dismissed or user moved on).
-    // The 30s safety timeout in inputLock.ts fires if blur never happens.
-    const active = document.activeElement as HTMLElement | null;
-    active?.addEventListener("blur", () => setInputLocked(false), { once: true });
+    const el = document.activeElement as HTMLInputElement | null;
+    let done = false;
+    let timeoutId: number | null = null;
 
-    void invoke<boolean>("open_steam_keyboard").catch(() => {
+    const unlock = () => {
+      if (done) return;
+      done = true;
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
       setInputLocked(false);
-    });
+      window.removeEventListener("keydown", onEnter);
+      el?.removeEventListener("input", onInput);
+    };
+
+    const resetTimeout = (ms: number) => {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(unlock, ms);
+    };
+
+    // Fast path: Steam keyboard sends Enter as an X11 key event to the window.
+    const onEnter = (e: KeyboardEvent) => {
+      if (e.key === "Enter") unlock();
+    };
+
+    // While the user is actively typing, extend the lock (keyboard is still open).
+    // Unlocks 5s after the last keystroke if Enter is never received.
+    const onInput = () => resetTimeout(5000);
+
+    setInputLocked(true);
+    window.addEventListener("keydown", onEnter);
+    el?.addEventListener("input", onInput);
+    resetTimeout(10000); // fallback if no interaction at all
+
+    void invoke<boolean>("open_steam_keyboard").catch(unlock);
   }, [tauriShell]);
 
   useEffect(() => {

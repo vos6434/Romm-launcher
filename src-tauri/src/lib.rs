@@ -661,23 +661,18 @@ async fn open_local_folder(path: String) -> Result<(), String> {
 async fn open_steam_keyboard() -> Result<bool, String> {
     #[cfg(all(unix, not(target_os = "macos")))]
     {
+        // Mode=0: keyboard hides when Enter is pressed and sends the Enter key
+        // event to the app before closing — this is the signal we rely on to
+        // unlock gamepad navigation. SDL uses the same URL (SDL PR #6515).
+        let url = "steam://open/keyboard?XPosition=0&YPosition=0&Width=0&Height=0&Mode=0";
         let attempts: [(&str, &[&str]); 7] = [
-            ("xdg-open", &["steam://open/keyboard"]),
-            ("steam", &["steam://open/keyboard"]),
-            ("/usr/bin/steam", &["steam://open/keyboard"]),
-            (
-                "flatpak-spawn",
-                &["--host", "xdg-open", "steam://open/keyboard"],
-            ),
-            (
-                "flatpak-spawn",
-                &["--host", "steam", "steam://open/keyboard"],
-            ),
-            (
-                "flatpak-spawn",
-                &["--host", "/usr/bin/steam", "steam://open/keyboard"],
-            ),
-            ("host-spawn", &["xdg-open", "steam://open/keyboard"]),
+            ("xdg-open", &[url]),
+            ("steam", &[url]),
+            ("/usr/bin/steam", &[url]),
+            ("flatpak-spawn", &["--host", "xdg-open", url]),
+            ("flatpak-spawn", &["--host", "steam", url]),
+            ("flatpak-spawn", &["--host", "/usr/bin/steam", url]),
+            ("host-spawn", &["xdg-open", url]),
         ];
 
         for (program, args) in attempts {
@@ -1357,6 +1352,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             gamescope_focus::start_monitor();
             Ok(())

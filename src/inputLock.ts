@@ -11,7 +11,7 @@ let currentLocked = false;
 let lockTimeoutId: number | null = null;
 const subscribers = new Set<(locked: boolean) => void>();
 
-const MANUAL_LOCK_MS = 30000;
+const MANUAL_LOCK_MS = 15000;
 
 function setCurrentLocked(nextLocked: boolean): void {
   if (currentLocked === nextLocked) {

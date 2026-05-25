@@ -58,22 +58,25 @@ export function useLoginGamepadNavigation({
     };
 
     const tick = () => {
-      if (
+      const g = getActiveGamepad();
+
+      const blocked =
         document.visibilityState !== "visible" ||
         !document.hasFocus() ||
-        isInputLocked()
-      ) {
-        lastGamepadIndexRef.current = null;
-        prevBtnRef.current = null;
-        stickHoldRef.current = { ySign: 0, lastStep: 0 };
-        raf = requestAnimationFrame(tick);
-        return;
-      }
+        isInputLocked();
 
-      const g = getActiveGamepad();
-      if (!g) {
-        lastGamepadIndexRef.current = null;
-        prevBtnRef.current = null;
+      if (blocked || !g) {
+        // Keep prevBtnRef up-to-date even while blocked so that held buttons
+        // don't appear as fresh presses the moment we unblock (e.g. back
+        // button held across a view transition firing twice).
+        if (g && lastGamepadIndexRef.current === g.index) {
+          prevBtnRef.current = g.buttons.map(
+            (b) => b.pressed || (typeof b.value === "number" && b.value > 0.5),
+          );
+        } else {
+          prevBtnRef.current = null;
+          lastGamepadIndexRef.current = g?.index ?? null;
+        }
         stickHoldRef.current = { ySign: 0, lastStep: 0 };
         raf = requestAnimationFrame(tick);
         return;
