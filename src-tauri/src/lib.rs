@@ -817,6 +817,16 @@ async fn launch_retroarch(
             launch_attempts.push((executable.to_string(), Command::new(executable), is_appimage));
         }
 
+        // flatpak-spawn --host breaks out of a Flatpak sandbox to run on the host.
+        // This is required when the launcher itself is packaged as a Flatpak.
+        let mut c_fspawn = Command::new("flatpak-spawn");
+        c_fspawn.args(["--host", "flatpak", "run", "org.libretro.RetroArch"]);
+        launch_attempts.push(("flatpak-spawn --host flatpak run org.libretro.RetroArch".to_string(), c_fspawn, false));
+
+        let mut c_fspawn2 = Command::new("/usr/bin/flatpak-spawn");
+        c_fspawn2.args(["--host", "flatpak", "run", "org.libretro.RetroArch"]);
+        launch_attempts.push(("/usr/bin/flatpak-spawn --host flatpak run org.libretro.RetroArch".to_string(), c_fspawn2, false));
+
         let mut c1 = Command::new("flatpak");
         c1.arg("run").arg("org.libretro.RetroArch");
         launch_attempts.push(("flatpak run org.libretro.RetroArch".to_string(), c1, false));
@@ -869,11 +879,14 @@ async fn launch_retroarch(
             child
         } else if configured_retroarch.is_none() {
             return Err(format!(
-                "Failed to launch RetroArch. Attempted: {}. Install Flatpak RetroArch (org.libretro.RetroArch) on the host or set a custom RetroArch command/path in Emulator Settings.",
-                failures.join(" | ")
+                "Failed to launch RetroArch. All launch attempts failed:\n{}\n\nInstall Flatpak RetroArch (org.libretro.RetroArch) on the host or set a custom RetroArch path in Emulator Settings.",
+                failures.iter().map(|f| format!("  • {f}")).collect::<Vec<_>>().join("\n")
             ));
         } else {
-            return Err(format!("Failed to launch RetroArch: {}", failures.join(" | ")));
+            return Err(format!(
+                "Failed to launch RetroArch. All launch attempts failed:\n{}",
+                failures.iter().map(|f| format!("  • {f}")).collect::<Vec<_>>().join("\n")
+            ));
         }
     };
 
