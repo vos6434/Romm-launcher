@@ -218,6 +218,10 @@ function OnScreenKeyboard({
   // Physical keyboard support (laptops): type directly, arrows move selection.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // The overlay is modal: consume key events so they don't leak to the
+      // login/collections navigation (e.g. Escape must close the keyboard, not
+      // quit the launcher).
+      e.stopPropagation();
       if (e.key === "Enter" || e.key === "Escape") {
         e.preventDefault();
         onClose();

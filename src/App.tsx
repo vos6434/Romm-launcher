@@ -8,6 +8,7 @@ import {
   KeyboardEnterPromptGlyph,
   KeyboardNavPromptGlyphs,
 } from "./KeyboardNavPromptGlyphs";
+import { KeyboardBackGlyph } from "./KeyboardCollectionsHintGlyphs";
 import {
   clearSavedCredentials,
   loadSavedCredentials,
@@ -337,6 +338,11 @@ function App() {
     setSession({ apiBase: catalog?.apiBase ?? "", accessToken: "", offline: true });
   }, []);
 
+  const quitLauncher = useCallback(() => {
+    if (!tauriShell) return;
+    void invoke("quit_app").catch(() => {});
+  }, [tauriShell]);
+
   const activateLoginSlot = useCallback(() => {
     const id = slotOrder[gpFocusIndex];
     if (id === "host" || id === "username" || id === "password") {
@@ -379,6 +385,7 @@ function App() {
     slotCount: slotOrder.length,
     setFocusIndex: setGpFocusIndex,
     onActivate: activateLoginSlot,
+    onBack: quitLauncher,
   });
 
   useLoginGamepadNavigation({
@@ -387,6 +394,7 @@ function App() {
     slotCount: slotOrder.length,
     setFocusIndex: setGpFocusIndex,
     onSelect: activateLoginSlot,
+    onBack: quitLauncher,
   });
 
   async function onLogin(e: React.FormEvent) {
@@ -615,6 +623,10 @@ function App() {
               <KeyboardEnterPromptGlyph />
               <span>Select</span>
             </span>
+            <span className="login-gamepad-hint">
+              <KeyboardBackGlyph />
+              <span>Quit</span>
+            </span>
           </div>
         ) : null}
 
@@ -630,6 +642,10 @@ function App() {
             <span className="login-gamepad-hint">
               <GamepadPromptGlyph flavor={gamepadFlavor} role="primary" />
               <span>Select</span>
+            </span>
+            <span className="login-gamepad-hint">
+              <GamepadPromptGlyph flavor={gamepadFlavor} role="back" />
+              <span>Quit</span>
             </span>
           </div>
         ) : null}

@@ -1642,6 +1642,12 @@ fn is_rom_file(ext: &str) -> bool {
 
 /// Recursively scan `dir` for ROM-like files. Best-effort: unreadable folders
 /// are skipped. Used by offline mode to build the "All Games" view from disk.
+/// Quit the launcher (used by the "back to quit" action on the login screen).
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 #[tauri::command]
 async fn scan_local_roms(dir: String) -> Result<Vec<LocalRom>, String> {
     let dir = dir.trim();
@@ -1745,6 +1751,7 @@ pub fn run() {
             cache_image,
             cached_image,
             scan_local_roms,
+            quit_app,
             steamgriddb_hero_url,
             steamgriddb_hero_urls,
             steamgriddb_hero_images,

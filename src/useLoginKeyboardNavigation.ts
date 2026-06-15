@@ -7,6 +7,8 @@ type Options = {
   slotCount: number;
   setFocusIndex: Dispatch<SetStateAction<number>>;
   onActivate: () => void;
+  /** Escape — e.g. quit the launcher from the login screen. */
+  onBack?: () => void;
 };
 
 /**
@@ -19,6 +21,7 @@ export function useLoginKeyboardNavigation({
   slotCount,
   setFocusIndex,
   onActivate,
+  onBack,
 }: Options): void {
   useEffect(() => {
     if (!enabled) return;
@@ -50,10 +53,15 @@ export function useLoginKeyboardNavigation({
         if (el instanceof HTMLTextAreaElement) return;
         e.preventDefault();
         onActivate();
+        return;
+      }
+      if (e.key === "Escape" && onBack) {
+        e.preventDefault();
+        onBack();
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [enabled, loading, slotCount, setFocusIndex, onActivate]);
+  }, [enabled, loading, slotCount, setFocusIndex, onActivate, onBack]);
 }

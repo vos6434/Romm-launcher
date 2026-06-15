@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { getActiveGamepad } from "./gamepadAccess";
 import { isInputLocked } from "./inputLock";
-import { GP_FACE_SOUTH } from "./gamepadFlavor";
+import { GP_FACE_EAST, GP_FACE_SOUTH } from "./gamepadFlavor";
 
 /** Common Chromium / Firefox mapping: D-pad as extra buttons. */
 const DPAD_UP = 12;
@@ -18,6 +18,8 @@ type Options = {
   slotCount: number;
   setFocusIndex: Dispatch<SetStateAction<number>>;
   onSelect: () => void;
+  /** Face east (B / Circle) — e.g. quit the launcher from the login screen. */
+  onBack?: () => void;
 };
 
 /**
@@ -30,11 +32,14 @@ export function useLoginGamepadNavigation({
   slotCount,
   setFocusIndex,
   onSelect,
+  onBack,
 }: Options): void {
   const slotCountRef = useRef(slotCount);
   const onSelectRef = useRef(onSelect);
+  const onBackRef = useRef(onBack);
   slotCountRef.current = slotCount;
   onSelectRef.current = onSelect;
+  onBackRef.current = onBack;
 
   const prevBtnRef = useRef<boolean[] | null>(null);
   const stickHoldRef = useRef<{ ySign: -1 | 0 | 1; lastStep: number }>({
@@ -138,6 +143,13 @@ export function useLoginGamepadNavigation({
         if (south && !prevSouth) {
           lastActionRef.current = now;
           onSelectRef.current();
+        }
+
+        const east = pressed[GP_FACE_EAST] ?? false;
+        const prevEast = prev[GP_FACE_EAST] ?? false;
+        if (east && !prevEast && onBackRef.current) {
+          lastActionRef.current = now;
+          onBackRef.current();
         }
       }
 
