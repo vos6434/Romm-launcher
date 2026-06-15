@@ -21,6 +21,8 @@ export type RommGame = {
   romRelativePath?: string;
   downloadUrl?: string;
   platformSlug?: string;
+  /** Absolute on-disk path for ROMs discovered by the local scan (offline). */
+  localPath?: string;
 };
 
 type RomListPage = {

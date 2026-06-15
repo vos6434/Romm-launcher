@@ -1205,6 +1205,11 @@ button.collections-settings-action:focus-visible {
     opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.collection-poster--offline-unavailable {
+  opacity: 0.4;
+  filter: grayscale(0.85);
+}
+
 .collection-poster--focus {
   border-color: #ffffff;
   box-shadow:

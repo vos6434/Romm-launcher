@@ -13,6 +13,7 @@ import {
   loadSavedCredentials,
   saveCredentials,
 } from "./savedCredentials";
+import { loadOfflineCatalog } from "./offlineCatalog";
 import { useLoginGamepadNavigation } from "./useLoginGamepadNavigation";
 import { useLoginKeyboardNavigation } from "./useLoginKeyboardNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
@@ -80,6 +81,7 @@ function App() {
   const toggleRef = useRef<HTMLButtonElement>(null);
   const rememberRef = useRef<HTMLInputElement>(null);
   const submitRef = useRef<HTMLButtonElement>(null);
+  const offlineRef = useRef<HTMLButtonElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
 
   const { flavor: gamepadFlavor, gamepadConnected } = useGamepadInput();
@@ -89,7 +91,13 @@ function App() {
     slotNavChrome && tauriShell && gamepadConnected;
   const showKeyboardFooterHints = slotNavChrome && !showGamepadFooterHints;
 
-  const slotOrder = useMemo(() => loginSlotOrder(!!error), [error]);
+  // Always offer offline mode in the desktop shell so the launcher is usable
+  // without logging in (an unsynced library just shows its empty state).
+  const offlineSlotEnabled = tauriShell;
+  const slotOrder = useMemo(
+    () => loginSlotOrder(!!error, offlineSlotEnabled),
+    [error, offlineSlotEnabled],
+  );
 
   // Initialize gamescope overlay detection on mount
   useEffect(() => {
@@ -332,14 +340,23 @@ function App() {
                 ? rememberRef.current
                 : id === "submit"
                   ? submitRef.current
-                  : id === "retry"
-                    ? retryRef.current
-                    : null;
+                  : id === "offline"
+                    ? offlineRef.current
+                    : id === "retry"
+                      ? retryRef.current
+                      : null;
     el?.focus();
   }, [gpFocusIndex, slotOrder, slotNavChrome]);
 
   const onRetry = useCallback(() => {
     setError(null);
+  }, []);
+
+  const enterOfflineMode = useCallback(async () => {
+    // Enter offline mode with whatever has been synced (empty library is fine —
+    // the collections view shows its empty state and Settings stays reachable).
+    const catalog = await loadOfflineCatalog();
+    setSession({ apiBase: catalog?.apiBase ?? "", accessToken: "", offline: true });
   }, []);
 
   const activateLoginSlot = useCallback(() => {
@@ -361,11 +378,22 @@ function App() {
       formRef.current?.requestSubmit();
       return;
     }
+    if (id === "offline") {
+      void enterOfflineMode();
+      return;
+    }
     if (id === "retry") {
       onRetry();
       return;
     }
-  }, [slotOrder, gpFocusIndex, onRetry, focusTextField, requestSteamKeyboard]);
+  }, [
+    slotOrder,
+    gpFocusIndex,
+    onRetry,
+    enterOfflineMode,
+    focusTextField,
+    requestSteamKeyboard,
+  ]);
 
   useLoginKeyboardNavigation({
     enabled: slotNavChrome && inputActive && !gamepadConnected,
@@ -555,6 +583,23 @@ function App() {
             {loading ? "Signing in…" : "Log In"}
           </button>
         </form>
+
+        {offlineSlotEnabled ? (
+          <button
+            ref={offlineRef}
+            type="button"
+            className={
+              isActive("offline")
+                ? "btn-secondary login-offline login-slot--active"
+                : "btn-secondary login-offline"
+            }
+            onClick={() => void enterOfflineMode()}
+            onFocus={() => focusSlot("offline")}
+            disabled={loading}
+          >
+            Offline Mode
+          </button>
+        ) : null}
 
         {error ? (
           <p className="login-error" role="alert">

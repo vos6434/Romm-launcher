@@ -6,9 +6,13 @@ export type LoginSlotId =
   | "togglePassword"
   | "remember"
   | "submit"
+  | "offline"
   | "retry";
 
-export function loginSlotOrder(includeRetry: boolean): LoginSlotId[] {
+export function loginSlotOrder(
+  includeRetry: boolean,
+  includeOffline = false,
+): LoginSlotId[] {
   const base: LoginSlotId[] = [
     "host",
     "username",
@@ -17,6 +21,7 @@ export function loginSlotOrder(includeRetry: boolean): LoginSlotId[] {
     "remember",
     "submit",
   ];
+  if (includeOffline) base.push("offline");
   if (includeRetry) base.push("retry");
   return base;
 }

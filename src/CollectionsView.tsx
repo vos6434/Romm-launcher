@@ -57,6 +57,18 @@ import {
 import { rommAssetUrl } from "./rommAssets";
 import { fetchGamesForCollection, type RommGame } from "./rommGames";
 import {
+  loadOfflineCatalog,
+  patchCollections,
+  patchCollectionGames,
+  saveOfflineCatalog,
+} from "./offlineCatalog";
+import { resolveCachedArt, resolveCachedArtMap, warmArtCache } from "./offlineArt";
+import {
+  ALL_GAMES_COLLECTION_ID,
+  ALL_GAMES_COLLECTION_NAME,
+  scanLocalRoms,
+} from "./localRoms";
+import {
   getSteamGridDbApiKey,
   loadSteamGridDbApiKey,
   saveSteamGridDbApiKey,
@@ -81,6 +93,8 @@ import "./CollectionsView.css";
 export type Session = {
   apiBase: string;
   accessToken: string;
+  /** When true, browse the last-synced catalog from disk with no server. */
+  offline?: boolean;
 };
 
 export type RommCollection = {
@@ -232,7 +246,7 @@ const MAX_CAROUSEL_SLOT_RADIUS = 30;
 const BACKGROUND_CROSSFADE_MS = 320;
 
 /** Settings panel: IGDB, franchise, SteamGrid key/save/unhide, emulator launch toggle, RetroArch path pick/core/flatpak scan, download dir input/pick/open. */
-const SETTINGS_NAV_SLOTS = 13;
+const SETTINGS_NAV_SLOTS = 14;
 
 /** Hide + pick background + clear background + pick cover + clear cover. */
 const COLLECTION_SETTINGS_NAV_SLOTS = 5;
@@ -582,6 +596,7 @@ async function fetchCollectionArrays(
 export function CollectionsView({ session, onLogout }: Props) {
   const { flavor: gamepadFlavor, gamepadConnected } = useGamepadInput();
   const tauriShell = isTauri();
+  const offline = session.offline === true;
   const showGamepadHints = tauriShell && gamepadConnected;
 
   const [virtualType, setVirtualType] = useState<VirtualCollectionType>(() =>
@@ -641,6 +656,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   const settingsRomsDirRef = useRef<HTMLInputElement>(null);
   const settingsPickDownloadsDirRef = useRef<HTMLButtonElement>(null);
   const settingsOpenDownloadsDirRef = useRef<HTMLButtonElement>(null);
+  const settingsSyncOfflineRef = useRef<HTMLButtonElement>(null);
   const collectionHideRef = useRef<HTMLButtonElement>(null);
   const collectionPickHeroRef = useRef<HTMLButtonElement>(null);
   const collectionClearHeroRef = useRef<HTMLButtonElement>(null);
@@ -671,6 +687,11 @@ export function CollectionsView({ session, onLogout }: Props) {
     loadMinimizeLauncherOnGameLaunch(),
   );
   const [launchingOverlayVisible, setLaunchingOverlayVisible] = useState(false);
+  const [offlineSyncState, setOfflineSyncState] = useState<{
+    running: boolean;
+    done: number;
+    total: number;
+  } | null>(null);
   const [gameDownloadState, setGameDownloadState] = useState<
     Record<string, "missing" | "downloading" | "downloaded" | "error">
   >({});
@@ -733,11 +754,27 @@ export function CollectionsView({ session, onLogout }: Props) {
       setLoading(true);
       setError(null);
       try {
+        if (offline) {
+          const catalog = await loadOfflineCatalog();
+          if (!cancelled) {
+            // A built-in "All Games" collection scans local ROMs from disk, so
+            // the launcher is usable even with no synced server catalog.
+            const allGames: RommCollection = {
+              id: ALL_GAMES_COLLECTION_ID,
+              name: ALL_GAMES_COLLECTION_NAME,
+            };
+            setItems([allGames, ...(catalog?.collections ?? [])]);
+            setFocusIndex(0);
+          }
+          return;
+        }
         const list = await fetchCollectionArrays(session, virtualType);
         if (!cancelled) {
           setItems(list);
           setFocusIndex(0);
         }
+        // Persist the catalog snapshot for offline browsing.
+        void patchCollections(session.apiBase, list);
       } catch (e) {
         if (!cancelled) setError(formatInvokeError(e));
       } finally {
@@ -747,7 +784,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [session, virtualType]);
+  }, [session, virtualType, offline]);
 
   useEffect(() => {
     if (!tauriShell) {
@@ -836,13 +873,33 @@ export function CollectionsView({ session, onLogout }: Props) {
     setGamesLoading(true);
     setGamesError(null);
 
+    const rowKey = collectionRowKey(activeCollection);
+
     void (async () => {
       try {
+        if (activeCollection.id === ALL_GAMES_COLLECTION_ID) {
+          const list = await scanLocalRoms(romsDownloadDir);
+          if (!cancelled) {
+            setGames(list);
+            setGamesFocusIndex(0);
+          }
+          return;
+        }
+        if (offline) {
+          const catalog = await loadOfflineCatalog();
+          if (!cancelled) {
+            setGames(catalog?.gamesByCollection[rowKey] ?? []);
+            setGamesFocusIndex(0);
+          }
+          return;
+        }
         const list = await fetchGamesForCollection(session, activeCollection);
         if (!cancelled) {
           setGames(list);
           setGamesFocusIndex(0);
         }
+        // Persist this collection's games for offline browsing.
+        void patchCollectionGames(session.apiBase, rowKey, list);
       } catch (e) {
         if (!cancelled) setGamesError(formatInvokeError(e));
       } finally {
@@ -853,7 +910,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [activeCollection, session]);
+  }, [activeCollection, session, offline, romsDownloadDir]);
 
   const visibleItems = useMemo(
     () => items.filter((c) => !isCollectionHidden(c)),
@@ -911,6 +968,43 @@ export function CollectionsView({ session, onLogout }: Props) {
     [games, gameGridCovers, prefsRev],
   );
 
+  // Offline art: map of remote-url -> cached `data:` URL for the currently
+  // displayable covers/backgrounds. Online, we instead warm the disk cache.
+  const [offlineArt, setOfflineArt] = useState<Record<string, string>>({});
+
+  const displayableArtUrls = useMemo(
+    () => [
+      ...collectionCards.flatMap((c) => [c.coverUrl, c.backgroundUrl]),
+      ...gameCards.flatMap((g) => [g.coverUrl, g.backgroundUrl]),
+    ],
+    [collectionCards, gameCards],
+  );
+
+  useEffect(() => {
+    if (offline) return;
+    warmArtCache(displayableArtUrls);
+  }, [offline, displayableArtUrls]);
+
+  useEffect(() => {
+    if (!offline) {
+      setOfflineArt({});
+      return;
+    }
+    let cancelled = false;
+    void resolveCachedArtMap(displayableArtUrls).then((map) => {
+      if (!cancelled) setOfflineArt((prev) => ({ ...prev, ...map }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [offline, displayableArtUrls]);
+
+  const displayArt = useCallback(
+    (url: string | undefined): string | undefined =>
+      offline ? (url ? offlineArt[url] : undefined) : url,
+    [offline, offlineArt],
+  );
+
   const currentCards = inGamesView ? gameCards : collectionCards;
   const currentFocusIndex = inGamesView ? gamesFocusIndex : focusIndex;
   const currentLoading = inGamesView ? gamesLoading : loading;
@@ -925,9 +1019,11 @@ export function CollectionsView({ session, onLogout }: Props) {
   const gamePrimaryActionLabel =
     focusedGameDownloadState === "downloaded"
       ? "Play"
-      : focusedGameDownloadState === "downloading"
-        ? "Downloading..."
-        : "Download";
+      : offline
+        ? "Unavailable offline"
+        : focusedGameDownloadState === "downloading"
+          ? "Downloading..."
+          : "Download";
 
   useEffect(() => {
     focusIndexRef.current = currentFocusIndex;
@@ -974,7 +1070,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     let cancelled = false;
     void (async () => {
       const sgKey = getSteamGridDbApiKey()?.trim();
-      if (!isTauri() || !sgKey) {
+      if (offline || !isTauri() || !sgKey) {
         if (!cancelled) setGridCovers({});
         return;
       }
@@ -993,7 +1089,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [items, prefsRev]);
+  }, [items, prefsRev, offline]);
 
   useEffect(() => {
     if (!activeCollection || games.length === 0) {
@@ -1004,7 +1100,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     let cancelled = false;
     void (async () => {
       const sgKey = getSteamGridDbApiKey()?.trim();
-      if (!isTauri() || !sgKey) {
+      if (offline || !isTauri() || !sgKey) {
         if (!cancelled) setGameGridCovers({});
         return;
       }
@@ -1023,7 +1119,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [activeCollection, games, prefsRev, steamSettingsRev]);
+  }, [activeCollection, games, prefsRev, steamSettingsRev, offline]);
 
   useEffect(() => {
     if (!activeCollection || games.length === 0) {
@@ -1047,6 +1143,18 @@ export function CollectionsView({ session, onLogout }: Props) {
       const next = { ...initial };
       await mapPool(games, 8, async (game) => {
         if (next[game.key] === "downloading") return;
+        // Locally-scanned ROMs already know their absolute path on disk.
+        if (game.localPath) {
+          try {
+            const exists = await invoke<boolean>("local_path_exists", {
+              path: game.localPath,
+            });
+            next[game.key] = exists ? "downloaded" : "missing";
+          } catch {
+            next[game.key] = "missing";
+          }
+          return;
+        }
         const relativePath = gameDownloadRelativePath(game);
         const fullPath = joinLocalPath(romsDownloadDir, relativePath);
         try {
@@ -1078,7 +1186,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   }, [activeCollection, games, romsDownloadDir, tauriShell]);
 
   useEffect(() => {
-    if (loading || items.length === 0) {
+    if (offline || loading || items.length === 0) {
       setReleaseLabels({});
       setYearSpansLoading(false);
       return;
@@ -1106,18 +1214,25 @@ export function CollectionsView({ session, onLogout }: Props) {
       cancelled = true;
       setYearSpansLoading(false);
     };
-  }, [session, items, loading]);
+  }, [session, items, loading, offline]);
 
   const onRefreshLibrary = useCallback(async () => {
     setRefreshing(true);
     if (activeCollection) {
       setGamesError(null);
       try {
-        const list = await fetchGamesForCollection(session, activeCollection);
+        const rowKey = collectionRowKey(activeCollection);
+        const list =
+          activeCollection.id === ALL_GAMES_COLLECTION_ID
+            ? await scanLocalRoms(romsDownloadDir)
+            : offline
+              ? (await loadOfflineCatalog())?.gamesByCollection[rowKey] ?? []
+              : await fetchGamesForCollection(session, activeCollection);
         setGames(list);
         setGamesFocusIndex((i) =>
           list.length === 0 ? 0 : Math.min(i, list.length - 1),
         );
+        if (!offline) void patchCollectionGames(session.apiBase, rowKey, list);
       } catch (e) {
         setGamesError(formatInvokeError(e));
       } finally {
@@ -1128,17 +1243,20 @@ export function CollectionsView({ session, onLogout }: Props) {
 
     setError(null);
     try {
-      const list = await fetchCollectionArrays(session, virtualType);
+      const list = offline
+        ? (await loadOfflineCatalog())?.collections ?? []
+        : await fetchCollectionArrays(session, virtualType);
       setItems(list);
       setFocusIndex((i) =>
         list.length === 0 ? 0 : Math.min(i, list.length - 1),
       );
+      if (!offline) void patchCollections(session.apiBase, list);
     } catch (e) {
       setError(formatInvokeError(e));
     } finally {
       setRefreshing(false);
     }
-  }, [activeCollection, session, virtualType]);
+  }, [activeCollection, session, virtualType, offline, romsDownloadDir]);
 
   const toggleSettings = useCallback(() => {
     setCollectionSettingsOpen(false);
@@ -1327,6 +1445,49 @@ export function CollectionsView({ session, onLogout }: Props) {
     saveMinimizeLauncherOnGameLaunch(next);
   }, []);
 
+  const syncLibraryForOffline = useCallback(async () => {
+    if (offline || !tauriShell || offlineSyncState?.running) return;
+    setError(null);
+    setOfflineSyncState({ running: true, done: 0, total: 0 });
+    try {
+      const collections = await fetchCollectionArrays(session, virtualType);
+      // Warm collection cover art so the carousel renders offline.
+      warmArtCache(collections.map((c) => coverForCollection(session.apiBase, c)));
+
+      // Merge onto any prior snapshot so a failing collection keeps old games.
+      const prior = await loadOfflineCatalog();
+      const gamesByCollection: Record<string, RommGame[]> = {
+        ...(prior?.gamesByCollection ?? {}),
+      };
+
+      let done = 0;
+      setOfflineSyncState({ running: true, done, total: collections.length });
+      await mapPool(collections, FETCH_CONCURRENCY, async (c) => {
+        try {
+          const list = await fetchGamesForCollection(session, c);
+          gamesByCollection[collectionRowKey(c)] = list;
+          warmArtCache(list.flatMap((g) => [g.coverUrl, g.backgroundUrl]));
+        } catch {
+          /* skip a failing collection; keep syncing the rest */
+        } finally {
+          done += 1;
+          setOfflineSyncState({ running: true, done, total: collections.length });
+        }
+      });
+
+      await saveOfflineCatalog({
+        apiBase: session.apiBase,
+        syncedAt: Date.now(),
+        collections,
+        gamesByCollection,
+      });
+      setOfflineSyncState({ running: false, done, total: collections.length });
+    } catch (e) {
+      setError(formatInvokeError(e));
+      setOfflineSyncState(null);
+    }
+  }, [offline, tauriShell, offlineSyncState, session, virtualType]);
+
   const scanFlatpakRetroArch = useCallback(async () => {
     if (!tauriShell) {
       setFlatpakRetroArchFound(false);
@@ -1357,6 +1518,10 @@ export function CollectionsView({ session, onLogout }: Props) {
 
   const downloadFocusedGame = useCallback(async () => {
     if (!tauriShell || !focusedGame) return;
+    if (offline) {
+      setGamesError("This game isn't downloaded and can't be fetched offline.");
+      return;
+    }
     if (gameDownloadState[focusedGame.key] === "downloading") return;
 
     const dir = romsDownloadDir.trim();
@@ -1389,6 +1554,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   }, [
     focusedGame,
     gameDownloadState,
+    offline,
     pickRomsDownloadDir,
     romsDownloadDir,
     session.accessToken,
@@ -1398,19 +1564,22 @@ export function CollectionsView({ session, onLogout }: Props) {
 
   const launchFocusedGame = useCallback(async () => {
     if (!tauriShell || !focusedGame || launchingOverlayVisible) return;
+    // Locally-scanned ROMs (offline "All Games") carry their absolute path and
+    // don't depend on the configured download directory.
+    const localPath = focusedGame.localPath;
     const dir = romsDownloadDir.trim();
-    if (!dir) {
+    if (!localPath && !dir) {
       setGamesError("Pick a ROMs download location in Emulator Settings before launching.");
       return;
     }
-    const relativePath = gameDownloadRelativePath(focusedGame);
-    const canonicalRomPath = joinLocalPath(dir, relativePath);
 
     try {
       setGamesError(null);
-      let romPath = canonicalRomPath;
+      let romPath = localPath ?? joinLocalPath(dir, gameDownloadRelativePath(focusedGame));
       let exists = await invoke<boolean>("local_path_exists", { path: romPath });
-      if (!exists && !isWindowsStylePath(dir)) {
+      if (!localPath && !exists && !isWindowsStylePath(dir)) {
+        const relativePath = gameDownloadRelativePath(focusedGame);
+        const canonicalRomPath = joinLocalPath(dir, relativePath);
         const legacyPath = joinLegacyWindowsPath(dir, relativePath);
         const legacyExists = await invoke<boolean>("local_path_exists", {
           path: legacyPath,
@@ -2056,6 +2225,9 @@ export function CollectionsView({ session, onLogout }: Props) {
       case 12:
         void openRomsDownloadDir();
         break;
+      case 13:
+        void syncLibraryForOffline();
+        break;
       default:
         break;
     }
@@ -2068,6 +2240,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     scanFlatpakRetroArch,
     saveSteamGridKey,
     settingsNavIndex,
+    syncLibraryForOffline,
   ]);
 
   const pickHeroSteam = useCallback(() => {
@@ -2202,6 +2375,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       settingsRomsDirRef,
       settingsPickDownloadsDirRef,
       settingsOpenDownloadsDirRef,
+      settingsSyncOfflineRef,
     ] as const;
     const el = refs[settingsNavIndex]?.current;
     el?.focus();
@@ -2337,6 +2511,9 @@ export function CollectionsView({ session, onLogout }: Props) {
       getCollectionPrefs(collectionRowKey(focusedCollection)).heroSteamIndex ?? -1;
     setHeroBg({ key, url: undefined });
 
+    // Offline: no network fetch; bgUrl falls back to the (cached) collection cover.
+    if (offline) return;
+
     let cancelled = false;
     void (async () => {
       const url = await fetchCollectionBackgroundUrl(
@@ -2359,6 +2536,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     steamSettingsRev,
     prefsRev,
     gridCovers,
+    offline,
   ]);
 
   useEffect(() => {
@@ -2383,7 +2561,7 @@ export function CollectionsView({ session, onLogout }: Props) {
     const cached = getCachedGameSteamGridBackgroundUrl(focusedGameBgTarget, heroIdx);
     setGameHeroBg({ key, url: cached });
 
-    if (cached) return;
+    if (cached || offline) return;
 
     let cancelled = false;
     void (async () => {
@@ -2395,9 +2573,9 @@ export function CollectionsView({ session, onLogout }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [focusedGameBgTarget, steamSettingsRev, prefsRev]);
+  }, [focusedGameBgTarget, steamSettingsRev, prefsRev, offline]);
 
-  const bgUrl = inGamesView
+  const rawBgUrl = inGamesView
     ? focusedGameBgTarget
       ? gameHeroBg &&
           gameHeroBg.key === focusedGameBgTarget.key &&
@@ -2410,6 +2588,24 @@ export function CollectionsView({ session, onLogout }: Props) {
         heroBg.key === collectionRowKey(focusedCollection)
       ? (heroBg.url ?? cardCoverUrl)
       : cardCoverUrl;
+
+  // Online: cache the focused hero so it renders offline later. Offline: resolve
+  // it from disk (covers SteamGrid heroes not present in the card arrays).
+  useEffect(() => {
+    if (offline) {
+      void resolveCachedArt(rawBgUrl).then((data) => {
+        if (data && rawBgUrl) {
+          setOfflineArt((prev) =>
+            prev[rawBgUrl] === data ? prev : { ...prev, [rawBgUrl]: data },
+          );
+        }
+      });
+      return;
+    }
+    warmArtCache([rawBgUrl]);
+  }, [offline, rawBgUrl]);
+
+  const bgUrl = displayArt(rawBgUrl);
   const bgLayerIdRef = useRef(0);
   const bgFadeTimeoutRef = useRef<number | null>(null);
   const bgActivateFrameRef = useRef<number | null>(null);
@@ -3480,6 +3676,22 @@ export function CollectionsView({ session, onLogout }: Props) {
                 >
                   Open downloads location
                 </button>
+                <button
+                  ref={settingsSyncOfflineRef}
+                  type="button"
+                  className={`collections-settings-steamgrid-save${settingsNavIndex === 13 ? " collections-settings-steamgrid-save--active" : ""}`}
+                  onClick={() => {
+                    void syncLibraryForOffline();
+                  }}
+                  onFocus={() => setSettingsNavIndex(13)}
+                  disabled={offline || offlineSyncState?.running === true}
+                >
+                  {offlineSyncState?.running
+                    ? `Syncing for offline… ${offlineSyncState.done}/${offlineSyncState.total}`
+                    : offlineSyncState && !offlineSyncState.running
+                      ? `Synced ${offlineSyncState.total} collections — Sync again`
+                      : "Sync library for offline"}
+                </button>
               </div>
             </div>
           </>,
@@ -3488,7 +3700,7 @@ export function CollectionsView({ session, onLogout }: Props) {
       : null;
 
   const collSteamDisabled =
-    !isTauri() || !getSteamGridDbApiKey()?.trim();
+    offline || !isTauri() || !getSteamGridDbApiKey()?.trim();
   const gameSteamDisabled = collSteamDisabled;
 
   const collectionSettingsPortal =
@@ -4102,7 +4314,23 @@ export function CollectionsView({ session, onLogout }: Props) {
 
       {!currentLoading && !currentError && activeCollection && games.length === 0 ? (
         <p className="collections-status">
-          No games found in <strong>{activeCollection.name}</strong>.
+          {activeCollection.id === ALL_GAMES_COLLECTION_ID ? (
+            romsDownloadDir.trim() ? (
+              <>
+                No ROMs found in <strong>{romsDownloadDir}</strong>. Put your game
+                files there (or in subfolders), then press Refresh.
+              </>
+            ) : (
+              <>
+                Set your ROMs folder in <strong>Launcher settings</strong> (the
+                gear) to scan it for games.
+              </>
+            )
+          ) : (
+            <>
+              No games found in <strong>{activeCollection.name}</strong>.
+            </>
+          )}
         </p>
       ) : null}
 
@@ -4166,6 +4394,10 @@ export function CollectionsView({ session, onLogout }: Props) {
                 isPlaceholder: false,
                 slotRadius,
               });
+              const unavailableOffline =
+                offline &&
+                card.showTimeline &&
+                (gameDownloadState[card.key] ?? "missing") !== "downloaded";
               return (
                 <button
                   key={`${card.key}-${idx}`}
@@ -4192,10 +4424,10 @@ export function CollectionsView({ session, onLogout }: Props) {
                   <div className="collection-slot-content">
                     <div className={`collection-slot-poster-wrap${slideClass}`}>
                       <div
-                        className={`collection-poster${isFocus ? " collection-poster--focus" : ""}`}
+                        className={`collection-poster${isFocus ? " collection-poster--focus" : ""}${unavailableOffline ? " collection-poster--offline-unavailable" : ""}`}
                       >
-                        {card.coverUrl ? (
-                          <img src={card.coverUrl} alt="" loading="lazy" />
+                        {displayArt(card.coverUrl) ? (
+                          <img src={displayArt(card.coverUrl)} alt="" loading="lazy" />
                         ) : (
                           <span className="collection-poster-fallback">
                             {card.title}

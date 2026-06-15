@@ -1,8 +1,11 @@
+use base64::Engine;
 use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
+use tauri::Manager;
 
 mod gamescope_focus;
 
@@ -246,6 +249,28 @@ fn auto_core_path_from_platform(
     }
 
     None
+}
+
+/// Fast filesystem check for an installed Flatpak RetroArch. Used to avoid
+/// spawning `flatpak run org.libretro.RetroArch` when it isn't installed — that
+/// command would spawn successfully (the `flatpak` binary exists) and only then
+/// fail with "not installed", masking a working native RetroArch.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn retroarch_flatpak_installed() -> bool {
+    let app_id = "org.libretro.RetroArch";
+    if Path::new("/var/lib/flatpak/app").join(app_id).is_dir() {
+        return true;
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        if PathBuf::from(home)
+            .join(".local/share/flatpak/app")
+            .join(app_id)
+            .is_dir()
+        {
+            return true;
+        }
+    }
+    false
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -567,7 +592,14 @@ async fn retroarch_flatpak_exists() -> Result<bool, String> {
         ];
 
         for (program, args) in attempts {
-            match Command::new(program).args(args).status() {
+            // Silence stderr/stdout: a missing app makes `flatpak info` print
+            // "not installed", which is just noise for an existence probe.
+            match Command::new(program)
+                .args(args)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+            {
                 Ok(status) if status.success() => return Ok(true),
                 Ok(_) | Err(_) => continue,
             }
@@ -817,27 +849,32 @@ async fn launch_retroarch(
             launch_attempts.push((executable.to_string(), Command::new(executable), is_appimage));
         }
 
-        // flatpak-spawn --host breaks out of a Flatpak sandbox to run on the host.
-        // This is required when the launcher itself is packaged as a Flatpak.
-        let mut c_fspawn = Command::new("flatpak-spawn");
-        c_fspawn.args(["--host", "flatpak", "run", "org.libretro.RetroArch"]);
-        launch_attempts.push(("flatpak-spawn --host flatpak run org.libretro.RetroArch".to_string(), c_fspawn, false));
+        // Only attempt Flatpak RetroArch when it is actually installed. Otherwise
+        // `flatpak run …` spawns (the binary exists) but exits with "not installed",
+        // which would mask a working native RetroArch further down the list.
+        if retroarch_flatpak_installed() {
+            // flatpak-spawn --host breaks out of a Flatpak sandbox to run on the host.
+            // This is required when the launcher itself is packaged as a Flatpak.
+            let mut c_fspawn = Command::new("flatpak-spawn");
+            c_fspawn.args(["--host", "flatpak", "run", "org.libretro.RetroArch"]);
+            launch_attempts.push(("flatpak-spawn --host flatpak run org.libretro.RetroArch".to_string(), c_fspawn, false));
 
-        let mut c_fspawn2 = Command::new("/usr/bin/flatpak-spawn");
-        c_fspawn2.args(["--host", "flatpak", "run", "org.libretro.RetroArch"]);
-        launch_attempts.push(("/usr/bin/flatpak-spawn --host flatpak run org.libretro.RetroArch".to_string(), c_fspawn2, false));
+            let mut c_fspawn2 = Command::new("/usr/bin/flatpak-spawn");
+            c_fspawn2.args(["--host", "flatpak", "run", "org.libretro.RetroArch"]);
+            launch_attempts.push(("/usr/bin/flatpak-spawn --host flatpak run org.libretro.RetroArch".to_string(), c_fspawn2, false));
 
-        let mut c1 = Command::new("flatpak");
-        c1.arg("run").arg("org.libretro.RetroArch");
-        launch_attempts.push(("flatpak run org.libretro.RetroArch".to_string(), c1, false));
+            let mut c1 = Command::new("flatpak");
+            c1.arg("run").arg("org.libretro.RetroArch");
+            launch_attempts.push(("flatpak run org.libretro.RetroArch".to_string(), c1, false));
 
-        let mut c2 = Command::new("/usr/bin/flatpak");
-        c2.arg("run").arg("org.libretro.RetroArch");
-        launch_attempts.push(("/usr/bin/flatpak run org.libretro.RetroArch".to_string(), c2, false));
+            let mut c2 = Command::new("/usr/bin/flatpak");
+            c2.arg("run").arg("org.libretro.RetroArch");
+            launch_attempts.push(("/usr/bin/flatpak run org.libretro.RetroArch".to_string(), c2, false));
 
-        let mut c3 = Command::new("host-spawn");
-        c3.arg("flatpak").arg("run").arg("org.libretro.RetroArch");
-        launch_attempts.push(("host-spawn flatpak run org.libretro.RetroArch".to_string(), c3, false));
+            let mut c3 = Command::new("host-spawn");
+            c3.arg("flatpak").arg("run").arg("org.libretro.RetroArch");
+            launch_attempts.push(("host-spawn flatpak run org.libretro.RetroArch".to_string(), c3, false));
+        }
 
         if let Some(auto_executable) = detect_local_retroarch_executable() {
             let already_added = launch_attempts
@@ -1376,6 +1413,294 @@ async fn steamgriddb_grid_url_at(
     Ok(Some(urls[i].clone()))
 }
 
+// --- Offline mode: catalog snapshot + on-disk image cache ---------------------
+
+fn app_data_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {e}"))
+}
+
+fn offline_catalog_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(app_data_path(app)?.join("offline-catalog.json"))
+}
+
+fn art_cache_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(app_data_path(app)?.join("art-cache"))
+}
+
+fn hash_url(url: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(url.as_bytes());
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+fn ext_from_url(url: &str) -> String {
+    let path = url.split(['?', '#']).next().unwrap_or(url);
+    let name = path.rsplit('/').next().unwrap_or("");
+    let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    match ext.as_str() {
+        "png" | "jpg" | "jpeg" | "webp" | "gif" | "avif" | "bmp" => ext,
+        _ => "img".to_string(),
+    }
+}
+
+fn sniff_image_mime(bytes: &[u8]) -> &'static str {
+    if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
+        "image/png"
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        "image/jpeg"
+    } else if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        "image/webp"
+    } else if bytes.starts_with(b"GIF8") {
+        "image/gif"
+    } else {
+        "image/jpeg"
+    }
+}
+
+fn mime_for(ext: &str, bytes: &[u8]) -> &'static str {
+    match ext {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        "avif" => "image/avif",
+        "bmp" => "image/bmp",
+        _ => sniff_image_mime(bytes),
+    }
+}
+
+#[tauri::command]
+async fn write_offline_catalog(app: tauri::AppHandle, json: String) -> Result<(), String> {
+    let path = offline_catalog_path(&app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create app data dir: {e}"))?;
+    }
+    std::fs::write(&path, json.as_bytes())
+        .map_err(|e| format!("Failed to write offline catalog: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn read_offline_catalog(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let path = offline_catalog_path(&app)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let contents = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read offline catalog: {e}"))?;
+    Ok(Some(contents))
+}
+
+#[tauri::command]
+async fn offline_catalog_exists(app: tauri::AppHandle) -> Result<bool, String> {
+    Ok(offline_catalog_path(&app)?.exists())
+}
+
+/// Download an image and store its bytes under `art-cache/<sha256(url)>.<ext>`.
+/// Fire-and-forget from the frontend: network failures are a silent no-op so a
+/// flaky/offline server never surfaces an error while merely browsing.
+#[tauri::command]
+async fn cache_image(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    let url = url.trim().to_string();
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Ok(());
+    }
+
+    let dir = art_cache_dir(&app)?;
+    let target = dir.join(format!("{}.{}", hash_url(&url), ext_from_url(&url)));
+    if target.exists() {
+        return Ok(());
+    }
+
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let Ok(res) = client.get(&url).send().await else {
+        return Ok(());
+    };
+    if !res.status().is_success() {
+        return Ok(());
+    }
+    let Ok(bytes) = res.bytes().await else {
+        return Ok(());
+    };
+    if bytes.is_empty() {
+        return Ok(());
+    }
+
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create art cache dir: {e}"))?;
+    std::fs::write(&target, &bytes)
+        .map_err(|e| format!("Failed to write cached image: {e}"))?;
+    Ok(())
+}
+
+/// Return a cached image as a `data:` URL, or `None` if it is not on disk.
+#[tauri::command]
+async fn cached_image(app: tauri::AppHandle, url: String) -> Result<Option<String>, String> {
+    let url = url.trim();
+    if url.is_empty() {
+        return Ok(None);
+    }
+
+    let dir = art_cache_dir(&app)?;
+    let hash = hash_url(url);
+    let mut path = dir.join(format!("{hash}.{}", ext_from_url(url)));
+
+    if !path.exists() {
+        // Tolerate a different stored extension than the URL implies.
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            return Ok(None);
+        };
+        let mut found: Option<PathBuf> = None;
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.file_stem().and_then(|s| s.to_str()) == Some(hash.as_str()) {
+                found = Some(p);
+                break;
+            }
+        }
+        match found {
+            Some(p) => path = p,
+            None => return Ok(None),
+        }
+    }
+
+    let Ok(bytes) = std::fs::read(&path) else {
+        return Ok(None);
+    };
+    let actual_ext = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let mime = mime_for(&actual_ext, &bytes);
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(Some(format!("data:{mime};base64,{encoded}")))
+}
+
+// --- Offline: scan a folder for local ROM files (no server needed) -----------
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LocalRom {
+    file_name: String,
+    path: String,
+    platform_slug: Option<String>,
+}
+
+/// Map a file extension to a RomM-style platform slug (drives RetroArch core
+/// auto-selection). Returns None for ambiguous/disc formats.
+fn rom_extension_platform(ext: &str) -> Option<&'static str> {
+    match ext {
+        "nes" | "fds" | "unf" | "unif" => Some("nes"),
+        "sfc" | "smc" => Some("snes"),
+        "n64" | "z64" | "v64" => Some("n64"),
+        "gb" => Some("gb"),
+        "gbc" => Some("gbc"),
+        "gba" | "srl" => Some("gba"),
+        "md" | "smd" | "gen" => Some("genesis"),
+        "sms" => Some("sega-master-system"),
+        "gg" => Some("game-gear"),
+        "nds" => Some("nds"),
+        "pce" => Some("turbografx-16"),
+        _ => None,
+    }
+}
+
+fn is_rom_file(ext: &str) -> bool {
+    const EXTS: &[&str] = &[
+        "nes", "fds", "unf", "unif", "sfc", "smc", "n64", "z64", "v64", "gb", "gbc", "gba",
+        "srl", "md", "smd", "gen", "sms", "gg", "nds", "pce", "a26", "col", "ws", "wsc", "ngp",
+        "ngc", "32x", "iso", "bin", "cue", "chd", "pbp", "img", "zip", "7z",
+    ];
+    EXTS.contains(&ext)
+}
+
+/// Recursively scan `dir` for ROM-like files. Best-effort: unreadable folders
+/// are skipped. Used by offline mode to build the "All Games" view from disk.
+#[tauri::command]
+async fn scan_local_roms(dir: String) -> Result<Vec<LocalRom>, String> {
+    let dir = dir.trim();
+    if dir.is_empty() {
+        return Ok(Vec::new());
+    }
+    let root = PathBuf::from(dir);
+    if !root.is_dir() {
+        return Ok(Vec::new());
+    }
+
+    let mut out = Vec::<LocalRom>::new();
+    let mut queue: Vec<(PathBuf, usize)> = vec![(root, 0)];
+
+    while let Some((d, depth)) = queue.pop() {
+        let Ok(entries) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if depth < 6 {
+                    queue.push((path, depth + 1));
+                }
+                continue;
+            }
+            if !path.is_file() {
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if name.starts_with('.') {
+                continue;
+            }
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_ascii_lowercase())
+                .unwrap_or_default();
+            if !is_rom_file(&ext) {
+                continue;
+            }
+
+            // Prefer extension-based platform; fall back to the folder layout
+            // (e.g. .../<platform>/roms/<file> or .../<platform>/<file>).
+            let platform = rom_extension_platform(&ext)
+                .map(str::to_string)
+                .or_else(|| {
+                    let parent = path.parent()?;
+                    let parent_name = parent.file_name().and_then(|n| n.to_str())?;
+                    if parent_name.eq_ignore_ascii_case("roms") {
+                        parent
+                            .parent()
+                            .and_then(|pp| pp.file_name())
+                            .and_then(|n| n.to_str())
+                            .map(|s| s.to_lowercase())
+                    } else {
+                        Some(parent_name.to_lowercase())
+                    }
+                });
+
+            out.push(LocalRom {
+                file_name: name.to_string(),
+                path: path.to_string_lossy().to_string(),
+                platform_slug: platform,
+            });
+        }
+    }
+
+    out.sort_by(|a, b| a.file_name.to_lowercase().cmp(&b.file_name.to_lowercase()));
+    Ok(out)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     configure_linux_webview_env();
@@ -1400,6 +1725,12 @@ pub fn run() {
             gamescope_launcher_focused,
             launch_retroarch,
             romm_download_rom,
+            write_offline_catalog,
+            read_offline_catalog,
+            offline_catalog_exists,
+            cache_image,
+            cached_image,
+            scan_local_roms,
             steamgriddb_hero_url,
             steamgriddb_hero_urls,
             steamgriddb_hero_images,
