@@ -13,6 +13,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { GamepadCollectionSettingsPromptGlyph } from "./GamepadCollectionSettingsPromptGlyph";
 import { GamepadHorizontalNavPromptGlyphs } from "./GamepadHorizontalNavPromptGlyphs";
+import { GamepadNavPromptGlyphs } from "./GamepadNavPromptGlyphs";
 import { GamepadPromptGlyph } from "./GamepadPromptGlyph";
 import {
   GamepadNextPagePromptGlyph,
@@ -27,7 +28,10 @@ import {
   KeyboardRefreshGlyph,
   KeyboardSettingsGlyph,
 } from "./KeyboardCollectionsHintGlyphs";
-import { KeyboardEnterPromptGlyph } from "./KeyboardNavPromptGlyphs";
+import {
+  KeyboardEnterPromptGlyph,
+  KeyboardNavPromptGlyphs,
+} from "./KeyboardNavPromptGlyphs";
 import { getActiveGamepad } from "./gamepadAccess";
 import { isInputLocked } from "./inputLock";
 import { useKeyboard } from "./OnScreenKeyboard";
@@ -246,8 +250,14 @@ function estimateCollectionGapPx(): number {
 const MAX_CAROUSEL_SLOT_RADIUS = 30;
 const BACKGROUND_CROSSFADE_MS = 320;
 
-/** Settings panel: IGDB, franchise, SteamGrid key/save/unhide, emulator launch toggle, RetroArch path pick/core/flatpak scan, download dir input/pick/open. */
-const SETTINGS_NAV_SLOTS = 14;
+/** Launcher settings tabs (top-of-panel sections, switched with LB/RB). */
+type SettingsTabId = "library" | "artwork" | "emulator" | "roms";
+const SETTINGS_TABS: { id: SettingsTabId; label: string }[] = [
+  { id: "library", label: "Library" },
+  { id: "artwork", label: "Artwork" },
+  { id: "emulator", label: "Emulator" },
+  { id: "roms", label: "ROMs & Offline" },
+];
 
 /** Hide + pick background + clear background + pick cover + clear cover. */
 const COLLECTION_SETTINGS_NAV_SLOTS = 5;
@@ -669,6 +679,7 @@ export function CollectionsView({ session, onLogout }: Props) {
   const gamePickCoverRef = useRef<HTMLButtonElement>(null);
   const gameClearCoverRef = useRef<HTMLButtonElement>(null);
   const [settingsNavIndex, setSettingsNavIndex] = useState(0);
+  const [settingsTab, setSettingsTab] = useState<SettingsTabId>("library");
   const [slotRadius, setSlotRadius] = useState(2);
   const [inputActive, setInputActive] = useState(true);
   const [steamGridKeyDraft, setSteamGridKeyDraft] = useState(() =>
@@ -1268,11 +1279,22 @@ export function CollectionsView({ session, onLogout }: Props) {
     setSettingsOpen((prev) => {
       if (!prev) {
         setSteamGridKeyDraft(loadSteamGridDbApiKey());
+        setSettingsTab("library");
         setSettingsNavIndex(virtualType === "franchise" ? 1 : 0);
       }
       return !prev;
     });
   }, [virtualType]);
+
+  const changeSettingsTab = useCallback((delta: number) => {
+    setSettingsTab((cur) => {
+      const i = SETTINGS_TABS.findIndex((t) => t.id === cur);
+      const next =
+        (i + delta + SETTINGS_TABS.length) % SETTINGS_TABS.length;
+      return SETTINGS_TABS[next].id;
+    });
+    setSettingsNavIndex(0);
+  }, []);
 
   const closeCollectionSettings = useCallback(() => {
     setCollectionSettingsOpen(false);
@@ -2183,68 +2205,94 @@ export function CollectionsView({ session, onLogout }: Props) {
     steamGridPickerTarget,
   ]);
 
-  const activateSettingsNav = useCallback(() => {
-    switch (settingsNavIndex) {
-      case 0:
-        settingsRadioCollectionRef.current?.click();
-        break;
-      case 1:
-        settingsRadioFranchiseRef.current?.click();
-        break;
-      case 2:
-        settingsSteamKeyRef.current?.focus();
-        openSettingsKeyboard("steamKey");
-        break;
-      case 3:
-        saveSteamGridKey();
-        break;
-      case 4:
-        onUnhideAllCollections();
-        break;
-      case 5:
-        settingsMinimizeOnLaunchRef.current?.click();
-        break;
-      case 6:
-        settingsRetroArchPathRef.current?.focus();
-        openSettingsKeyboard("retroArchPath");
-        break;
-      case 7:
-        void pickRetroArchPath();
-        break;
-      case 8:
-        settingsRetroArchCoreRef.current?.focus();
-        openSettingsKeyboard("retroArchCore");
-        break;
-      case 9:
-        void scanFlatpakRetroArch();
-        break;
-      case 10:
-        settingsRomsDirRef.current?.focus();
-        openSettingsKeyboard("romsDir");
-        break;
-      case 11:
-        void pickRomsDownloadDir();
-        break;
-      case 12:
-        void openRomsDownloadDir();
-        break;
-      case 13:
-        void syncLibraryForOffline();
-        break;
-      default:
-        break;
+  // Focusable controls for the active settings tab, in nav order. Each tab
+  // renders only its own controls, so settingsNavIndex is 0-based per tab.
+  const currentTabItems = useMemo<
+    { focus: () => void; activate: () => void }[]
+  >(() => {
+    const focusKeyboard = (
+      ref: React.RefObject<HTMLInputElement | null>,
+      field: Parameters<typeof openSettingsKeyboard>[0],
+    ) => ({
+      focus: () => ref.current?.focus(),
+      activate: () => {
+        ref.current?.focus();
+        openSettingsKeyboard(field);
+      },
+    });
+    switch (settingsTab) {
+      case "library":
+        return [
+          {
+            focus: () => settingsRadioCollectionRef.current?.focus(),
+            activate: () => settingsRadioCollectionRef.current?.click(),
+          },
+          {
+            focus: () => settingsRadioFranchiseRef.current?.focus(),
+            activate: () => settingsRadioFranchiseRef.current?.click(),
+          },
+          {
+            focus: () => settingsUnhideAllRef.current?.focus(),
+            activate: () => onUnhideAllCollections(),
+          },
+        ];
+      case "artwork":
+        return [
+          focusKeyboard(settingsSteamKeyRef, "steamKey"),
+          {
+            focus: () => settingsSaveRef.current?.focus(),
+            activate: () => saveSteamGridKey(),
+          },
+        ];
+      case "emulator":
+        return [
+          {
+            focus: () => settingsMinimizeOnLaunchRef.current?.focus(),
+            activate: () => settingsMinimizeOnLaunchRef.current?.click(),
+          },
+          focusKeyboard(settingsRetroArchPathRef, "retroArchPath"),
+          {
+            focus: () => settingsPickRetroArchPathRef.current?.focus(),
+            activate: () => void pickRetroArchPath(),
+          },
+          focusKeyboard(settingsRetroArchCoreRef, "retroArchCore"),
+          {
+            focus: () => settingsScanFlatpakRef.current?.focus(),
+            activate: () => void scanFlatpakRetroArch(),
+          },
+        ];
+      case "roms":
+        return [
+          focusKeyboard(settingsRomsDirRef, "romsDir"),
+          {
+            focus: () => settingsPickDownloadsDirRef.current?.focus(),
+            activate: () => void pickRomsDownloadDir(),
+          },
+          {
+            focus: () => settingsOpenDownloadsDirRef.current?.focus(),
+            activate: () => void openRomsDownloadDir(),
+          },
+          {
+            focus: () => settingsSyncOfflineRef.current?.focus(),
+            activate: () => void syncLibraryForOffline(),
+          },
+        ];
     }
   }, [
+    settingsTab,
     onUnhideAllCollections,
-    openRomsDownloadDir,
     openSettingsKeyboard,
     pickRetroArchPath,
     pickRomsDownloadDir,
-    scanFlatpakRetroArch,
+    openRomsDownloadDir,
     saveSteamGridKey,
-    settingsNavIndex,
+    scanFlatpakRetroArch,
     syncLibraryForOffline,
   ]);
+
+  const activateSettingsNav = useCallback(() => {
+    currentTabItems[settingsNavIndex]?.activate();
+  }, [currentTabItems, settingsNavIndex]);
 
   const pickHeroSteam = useCallback(() => {
     void openCollectionPicker("background");
@@ -2364,25 +2412,8 @@ export function CollectionsView({ session, onLogout }: Props) {
 
   useLayoutEffect(() => {
     if (!settingsOpen) return;
-    const refs = [
-      settingsRadioCollectionRef,
-      settingsRadioFranchiseRef,
-      settingsSteamKeyRef,
-      settingsSaveRef,
-      settingsUnhideAllRef,
-      settingsMinimizeOnLaunchRef,
-      settingsRetroArchPathRef,
-      settingsPickRetroArchPathRef,
-      settingsRetroArchCoreRef,
-      settingsScanFlatpakRef,
-      settingsRomsDirRef,
-      settingsPickDownloadsDirRef,
-      settingsOpenDownloadsDirRef,
-      settingsSyncOfflineRef,
-    ] as const;
-    const el = refs[settingsNavIndex]?.current;
-    el?.focus();
-  }, [settingsOpen, settingsNavIndex]);
+    currentTabItems[settingsNavIndex]?.focus();
+  }, [settingsOpen, settingsNavIndex, settingsTab, currentTabItems]);
 
   useLayoutEffect(() => {
     if (!collectionSettingsOpen) return;
@@ -2736,10 +2767,11 @@ export function CollectionsView({ session, onLogout }: Props) {
     settingsOpen,
     settingsNav: settingsOpen
       ? {
-          slotCount: SETTINGS_NAV_SLOTS,
+          slotCount: currentTabItems.length,
           setFocusIndex: setSettingsNavIndex,
           onActivate: activateSettingsNav,
           onCloseSettings: () => setSettingsOpen(false),
+          onTabDelta: changeSettingsTab,
         }
       : null,
     refreshDisabled: currentLoading || refreshing,
@@ -3342,7 +3374,7 @@ export function CollectionsView({ session, onLogout }: Props) {
         if (e.key === "ArrowDown") {
           e.preventDefault();
           setSettingsNavIndex((i) =>
-            Math.min(SETTINGS_NAV_SLOTS - 1, i + 1),
+            Math.min(currentTabItems.length - 1, i + 1),
           );
           return;
         }
@@ -3352,8 +3384,14 @@ export function CollectionsView({ session, onLogout }: Props) {
           activateSettingsNav();
           return;
         }
-        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        if (e.key === "ArrowLeft") {
           e.preventDefault();
+          changeSettingsTab(-1);
+          return;
+        }
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          changeSettingsTab(1);
           return;
         }
         if (e.key === "Backspace" && !isShortcutTarget(e.target)) {
@@ -3399,6 +3437,8 @@ export function CollectionsView({ session, onLogout }: Props) {
     openGamesView,
     visibleItems.length,
     activateSettingsNav,
+    changeSettingsTab,
+    currentTabItems,
     activateCollectionSettingsNav,
     activateGameSettingsNav,
     activateSteamGridPickerFilterNav,
@@ -3467,234 +3507,331 @@ export function CollectionsView({ session, onLogout }: Props) {
             <div
               ref={settingsWrapRef}
               id="collections-settings-menu"
-              className="collections-settings-menu collections-settings-menu--popover"
+              className="settings-panel"
               role="dialog"
               aria-label="Launcher settings"
               aria-modal="true"
               onPointerDown={(e) => e.stopPropagation()}
             >
-              <p className="collections-settings-menu-title">
-                Autogenerated groups
-              </p>
-              <p className="collections-settings-menu-hint">
-                Same option as RomM’s virtual collection type (IGDB metadata).
-              </p>
-              <label
-                className={`collections-settings-option${settingsNavIndex === 0 ? " collections-settings-option--active" : ""}`}
-              >
-                <input
-                  ref={settingsRadioCollectionRef}
-                  type="radio"
-                  name="virtual-type"
-                  checked={virtualType === "collection"}
-                  onChange={() => selectVirtualType("collection")}
-                  onFocus={() => setSettingsNavIndex(0)}
-                />
-                <span>
-                  <strong>IGDB collection</strong>
-                  <span className="collections-settings-option-desc">
-                    Series / collection names from IGDB (RomM default).
-                  </span>
-                </span>
-              </label>
-              <label
-                className={`collections-settings-option${settingsNavIndex === 1 ? " collections-settings-option--active" : ""}`}
-              >
-                <input
-                  ref={settingsRadioFranchiseRef}
-                  type="radio"
-                  name="virtual-type"
-                  checked={virtualType === "franchise"}
-                  onChange={() => selectVirtualType("franchise")}
-                  onFocus={() => setSettingsNavIndex(1)}
-                />
-                <span>
-                  <strong>Franchise</strong>
-                  <span className="collections-settings-option-desc">
-                    Group by franchise (e.g. Super Mario).
-                  </span>
-                </span>
-              </label>
-              <div className="collections-settings-steamgrid">
-                <p className="collections-settings-menu-title collections-settings-menu-title--spaced">
-                  SteamGridDB backgrounds
-                </p>
-                <p className="collections-settings-menu-hint">
-                  Optional API key for hero-style backdrop art (
-                  <a
-                    href="https://www.steamgriddb.com/profile/preferences"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    create a key
-                  </a>
-                  ). Stored only on this device. If empty, RomM screenshots are
-                  used instead.
-                </p>
-                <input
-                  ref={settingsSteamKeyRef}
-                  type="password"
-                  className={`collections-settings-steamgrid-input${settingsNavIndex === 2 ? " collections-settings-steamgrid-input--active" : ""}`}
-                  autoComplete="off"
-                  placeholder="API key"
-                  value={steamGridKeyDraft}
-                  onChange={(e) => setSteamGridKeyDraft(e.target.value)}
-                  onFocus={() => setSettingsNavIndex(2)}
-                />
-                <button
-                  ref={settingsSaveRef}
-                  type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 3 ? " collections-settings-steamgrid-save--active" : ""}`}
-                  onClick={saveSteamGridKey}
-                  onFocus={() => setSettingsNavIndex(3)}
-                >
-                  Save key
-                </button>
-                <button
-                  ref={settingsUnhideAllRef}
-                  type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 4 ? " collections-settings-steamgrid-save--active" : ""}`}
-                  onClick={onUnhideAllCollections}
-                  onFocus={() => setSettingsNavIndex(4)}
-                >
-                  Unhide all collections
-                </button>
+              <div className="settings-panel-header">
+                <span className="settings-panel-title">Settings</span>
+                <div className="settings-tabbar" role="tablist">
+                  {SETTINGS_TABS.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={settingsTab === tab.id}
+                      className={`settings-tab${settingsTab === tab.id ? " settings-tab--active" : ""}`}
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        setSettingsTab(tab.id);
+                        setSettingsNavIndex(0);
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                <p className="collections-settings-menu-title collections-settings-menu-title--spaced">
-                  Emulator Settings
-                </p>
-                <p className="collections-settings-menu-hint">
-                  Configure emulator launch behavior and defaults.
-                </p>
-                <label
-                  className={`collections-settings-option${settingsNavIndex === 5 ? " collections-settings-option--active" : ""}`}
-                >
-                  <input
-                    ref={settingsMinimizeOnLaunchRef}
-                    type="checkbox"
-                    checked={minimizeLauncherOnLaunch}
-                    onChange={(e) =>
-                      onMinimizeLauncherOnLaunchChange(e.target.checked)
-                    }
-                    onFocus={() => setSettingsNavIndex(5)}
-                  />
-                  <span>
-                    <strong>Minimize launcher on game launch</strong>
-                    <span className="collections-settings-option-desc">
-                      Global launcher behavior for all emulators.
-                    </span>
-                  </span>
-                </label>
-                <p className="collections-settings-menu-title">RetroArch</p>
-                <p className="collections-settings-menu-hint">
-                  Play launches downloaded ROMs with your local RetroArch install. On Linux, leaving RetroArch path empty uses Flatpak app id org.libretro.RetroArch.
-                </p>
-                <input
-                  ref={settingsRetroArchPathRef}
-                  type="text"
-                  className={`collections-settings-steamgrid-input${settingsNavIndex === 6 ? " collections-settings-steamgrid-input--active" : ""}`}
-                  autoComplete="off"
-                  placeholder="RetroArch executable/command (Windows: C:\\RetroArch\\retroarch.exe)"
-                  value={retroArchPathDraft}
-                  onChange={(e) => onRetroArchPathChange(e.target.value)}
-                  onFocus={() => setSettingsNavIndex(6)}
-                />
-                <button
-                  ref={settingsPickRetroArchPathRef}
-                  type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 7 ? " collections-settings-steamgrid-save--active" : ""}`}
-                  onClick={() => {
-                    void pickRetroArchPath();
-                  }}
-                  onFocus={() => setSettingsNavIndex(7)}
-                >
-                  Pick RetroArch location
-                </button>
-                <input
-                  ref={settingsRetroArchCoreRef}
-                  type="text"
-                  className={`collections-settings-steamgrid-input${settingsNavIndex === 8 ? " collections-settings-steamgrid-input--active" : ""}`}
-                  autoComplete="off"
-                  placeholder="Core path (e.g. C:\\RetroArch\\cores\\nestopia_libretro.dll)"
-                  value={retroArchCorePathDraft}
-                  onChange={(e) => onRetroArchCorePathChange(e.target.value)}
-                  onFocus={() => setSettingsNavIndex(8)}
-                />
-                <p
-                  className={`collections-settings-flatpak-status ${flatpakRetroArchFound ? "collections-settings-flatpak-status--found" : "collections-settings-flatpak-status--missing"}`}
-                >
-                  {flatpakRetroArchFound
-                    ? "Flatpak found"
-                    : "Flatpak not found"}
-                </p>
-                {flatpakCheckInProgress ? (
-                  <p className="collections-settings-flatpak-scanning" aria-live="polite">
-                    Scanning Flatpak installation...
-                  </p>
+              <div className="settings-tabpanel" role="tabpanel">
+                {settingsTab === "library" ? (
+                  <>
+                    <p className="collections-settings-menu-title">
+                      Autogenerated groups
+                    </p>
+                    <p className="collections-settings-menu-hint">
+                      Same option as RomM’s virtual collection type (IGDB
+                      metadata).
+                    </p>
+                    <label
+                      className={`collections-settings-option${settingsNavIndex === 0 ? " collections-settings-option--active" : ""}`}
+                    >
+                      <input
+                        ref={settingsRadioCollectionRef}
+                        type="radio"
+                        name="virtual-type"
+                        checked={virtualType === "collection"}
+                        onChange={() => selectVirtualType("collection")}
+                        onFocus={() => setSettingsNavIndex(0)}
+                      />
+                      <span>
+                        <strong>IGDB collection</strong>
+                        <span className="collections-settings-option-desc">
+                          Series / collection names from IGDB (RomM default).
+                        </span>
+                      </span>
+                    </label>
+                    <label
+                      className={`collections-settings-option${settingsNavIndex === 1 ? " collections-settings-option--active" : ""}`}
+                    >
+                      <input
+                        ref={settingsRadioFranchiseRef}
+                        type="radio"
+                        name="virtual-type"
+                        checked={virtualType === "franchise"}
+                        onChange={() => selectVirtualType("franchise")}
+                        onFocus={() => setSettingsNavIndex(1)}
+                      />
+                      <span>
+                        <strong>Franchise</strong>
+                        <span className="collections-settings-option-desc">
+                          Group by franchise (e.g. Super Mario).
+                        </span>
+                      </span>
+                    </label>
+                    <button
+                      ref={settingsUnhideAllRef}
+                      type="button"
+                      className={`collections-settings-steamgrid-save${settingsNavIndex === 2 ? " collections-settings-steamgrid-save--active" : ""}`}
+                      onClick={onUnhideAllCollections}
+                      onFocus={() => setSettingsNavIndex(2)}
+                    >
+                      Unhide all collections
+                    </button>
+                  </>
                 ) : null}
-                <button
-                  ref={settingsScanFlatpakRef}
-                  type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 9 ? " collections-settings-steamgrid-save--active" : ""}`}
-                  onClick={() => {
-                    void scanFlatpakRetroArch();
-                  }}
-                  onFocus={() => setSettingsNavIndex(9)}
-                  disabled={flatpakCheckInProgress}
-                >
-                  {flatpakCheckInProgress
-                    ? "Scanning Flatpak RetroArch..."
-                    : "Scan Flatpak RetroArch"}
-                </button>
-                <input
-                  ref={settingsRomsDirRef}
-                  type="text"
-                  className={`collections-settings-steamgrid-input${settingsNavIndex === 10 ? " collections-settings-steamgrid-input--active" : ""}`}
-                  autoComplete="off"
-                  placeholder="ROMs download path (e.g. /home/deck/ROMs)"
-                  value={romsDownloadDir}
-                  onChange={(e) => onRomsDirChange(e.target.value)}
-                  onFocus={() => setSettingsNavIndex(10)}
-                />
-                <button
-                  ref={settingsPickDownloadsDirRef}
-                  type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 11 ? " collections-settings-steamgrid-save--active" : ""}`}
-                  onClick={() => {
-                    void pickRomsDownloadDir();
-                  }}
-                  onFocus={() => setSettingsNavIndex(11)}
-                >
-                  Browse for ROMs location
-                </button>
-                <button
-                  ref={settingsOpenDownloadsDirRef}
-                  type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 12 ? " collections-settings-steamgrid-save--active" : ""}`}
-                  onClick={() => {
-                    void openRomsDownloadDir();
-                  }}
-                  onFocus={() => setSettingsNavIndex(12)}
-                  disabled={!romsDownloadDir.trim()}
-                >
-                  Open downloads location
-                </button>
-                <button
-                  ref={settingsSyncOfflineRef}
-                  type="button"
-                  className={`collections-settings-steamgrid-save${settingsNavIndex === 13 ? " collections-settings-steamgrid-save--active" : ""}`}
-                  onClick={() => {
-                    void syncLibraryForOffline();
-                  }}
-                  onFocus={() => setSettingsNavIndex(13)}
-                  disabled={offline || offlineSyncState?.running === true}
-                >
-                  {offlineSyncState?.running
-                    ? `Syncing for offline… ${offlineSyncState.done}/${offlineSyncState.total}`
-                    : offlineSyncState && !offlineSyncState.running
-                      ? `Synced ${offlineSyncState.total} collections — Sync again`
-                      : "Sync library for offline"}
-                </button>
+
+                {settingsTab === "artwork" ? (
+                  <>
+                    <p className="collections-settings-menu-title">
+                      SteamGridDB backgrounds
+                    </p>
+                    <p className="collections-settings-menu-hint">
+                      Optional API key for hero-style backdrop art (
+                      <a
+                        href="https://www.steamgriddb.com/profile/preferences"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        create a key
+                      </a>
+                      ). Stored only on this device. If empty, RomM screenshots
+                      are used instead.
+                    </p>
+                    <input
+                      ref={settingsSteamKeyRef}
+                      type="password"
+                      className={`collections-settings-steamgrid-input${settingsNavIndex === 0 ? " collections-settings-steamgrid-input--active" : ""}`}
+                      autoComplete="off"
+                      placeholder="API key"
+                      value={steamGridKeyDraft}
+                      onChange={(e) => setSteamGridKeyDraft(e.target.value)}
+                      onFocus={() => setSettingsNavIndex(0)}
+                    />
+                    <button
+                      ref={settingsSaveRef}
+                      type="button"
+                      className={`collections-settings-steamgrid-save${settingsNavIndex === 1 ? " collections-settings-steamgrid-save--active" : ""}`}
+                      onClick={saveSteamGridKey}
+                      onFocus={() => setSettingsNavIndex(1)}
+                    >
+                      Save key
+                    </button>
+                  </>
+                ) : null}
+
+                {settingsTab === "emulator" ? (
+                  <>
+                    <p className="collections-settings-menu-title">
+                      Launch behavior
+                    </p>
+                    <label
+                      className={`collections-settings-option${settingsNavIndex === 0 ? " collections-settings-option--active" : ""}`}
+                    >
+                      <input
+                        ref={settingsMinimizeOnLaunchRef}
+                        type="checkbox"
+                        checked={minimizeLauncherOnLaunch}
+                        onChange={(e) =>
+                          onMinimizeLauncherOnLaunchChange(e.target.checked)
+                        }
+                        onFocus={() => setSettingsNavIndex(0)}
+                      />
+                      <span>
+                        <strong>Minimize launcher on game launch</strong>
+                        <span className="collections-settings-option-desc">
+                          Global launcher behavior for all emulators.
+                        </span>
+                      </span>
+                    </label>
+                    <p className="collections-settings-menu-title collections-settings-menu-title--spaced">
+                      RetroArch
+                    </p>
+                    <p className="collections-settings-menu-hint">
+                      Play launches downloaded ROMs with your local RetroArch
+                      install. On Linux, leaving RetroArch path empty uses
+                      Flatpak app id org.libretro.RetroArch.
+                    </p>
+                    <input
+                      ref={settingsRetroArchPathRef}
+                      type="text"
+                      className={`collections-settings-steamgrid-input${settingsNavIndex === 1 ? " collections-settings-steamgrid-input--active" : ""}`}
+                      autoComplete="off"
+                      placeholder="RetroArch executable/command (Windows: C:\\RetroArch\\retroarch.exe)"
+                      value={retroArchPathDraft}
+                      onChange={(e) => onRetroArchPathChange(e.target.value)}
+                      onFocus={() => setSettingsNavIndex(1)}
+                    />
+                    <button
+                      ref={settingsPickRetroArchPathRef}
+                      type="button"
+                      className={`collections-settings-steamgrid-save${settingsNavIndex === 2 ? " collections-settings-steamgrid-save--active" : ""}`}
+                      onClick={() => {
+                        void pickRetroArchPath();
+                      }}
+                      onFocus={() => setSettingsNavIndex(2)}
+                    >
+                      Pick RetroArch location
+                    </button>
+                    <input
+                      ref={settingsRetroArchCoreRef}
+                      type="text"
+                      className={`collections-settings-steamgrid-input${settingsNavIndex === 3 ? " collections-settings-steamgrid-input--active" : ""}`}
+                      autoComplete="off"
+                      placeholder="Core path (e.g. C:\\RetroArch\\cores\\nestopia_libretro.dll)"
+                      value={retroArchCorePathDraft}
+                      onChange={(e) => onRetroArchCorePathChange(e.target.value)}
+                      onFocus={() => setSettingsNavIndex(3)}
+                    />
+                    <p
+                      className={`collections-settings-flatpak-status ${flatpakRetroArchFound ? "collections-settings-flatpak-status--found" : "collections-settings-flatpak-status--missing"}`}
+                    >
+                      {flatpakRetroArchFound
+                        ? "Flatpak found"
+                        : "Flatpak not found"}
+                    </p>
+                    {flatpakCheckInProgress ? (
+                      <p
+                        className="collections-settings-flatpak-scanning"
+                        aria-live="polite"
+                      >
+                        Scanning Flatpak installation...
+                      </p>
+                    ) : null}
+                    <button
+                      ref={settingsScanFlatpakRef}
+                      type="button"
+                      className={`collections-settings-steamgrid-save${settingsNavIndex === 4 ? " collections-settings-steamgrid-save--active" : ""}`}
+                      onClick={() => {
+                        void scanFlatpakRetroArch();
+                      }}
+                      onFocus={() => setSettingsNavIndex(4)}
+                      disabled={flatpakCheckInProgress}
+                    >
+                      {flatpakCheckInProgress
+                        ? "Scanning Flatpak RetroArch..."
+                        : "Scan Flatpak RetroArch"}
+                    </button>
+                  </>
+                ) : null}
+
+                {settingsTab === "roms" ? (
+                  <>
+                    <p className="collections-settings-menu-title">
+                      ROMs location
+                    </p>
+                    <p className="collections-settings-menu-hint">
+                      Where ROMs are downloaded and scanned (the offline “All
+                      Games” view reads this folder).
+                    </p>
+                    <input
+                      ref={settingsRomsDirRef}
+                      type="text"
+                      className={`collections-settings-steamgrid-input${settingsNavIndex === 0 ? " collections-settings-steamgrid-input--active" : ""}`}
+                      autoComplete="off"
+                      placeholder="ROMs download path (e.g. /home/deck/ROMs)"
+                      value={romsDownloadDir}
+                      onChange={(e) => onRomsDirChange(e.target.value)}
+                      onFocus={() => setSettingsNavIndex(0)}
+                    />
+                    <button
+                      ref={settingsPickDownloadsDirRef}
+                      type="button"
+                      className={`collections-settings-steamgrid-save${settingsNavIndex === 1 ? " collections-settings-steamgrid-save--active" : ""}`}
+                      onClick={() => {
+                        void pickRomsDownloadDir();
+                      }}
+                      onFocus={() => setSettingsNavIndex(1)}
+                    >
+                      Browse for ROMs location
+                    </button>
+                    <button
+                      ref={settingsOpenDownloadsDirRef}
+                      type="button"
+                      className={`collections-settings-steamgrid-save${settingsNavIndex === 2 ? " collections-settings-steamgrid-save--active" : ""}`}
+                      onClick={() => {
+                        void openRomsDownloadDir();
+                      }}
+                      onFocus={() => setSettingsNavIndex(2)}
+                      disabled={!romsDownloadDir.trim()}
+                    >
+                      Open downloads location
+                    </button>
+                    <p className="collections-settings-menu-title collections-settings-menu-title--spaced">
+                      Offline
+                    </p>
+                    <p className="collections-settings-menu-hint">
+                      Cache the full library + artwork to disk so it can be
+                      browsed offline.
+                    </p>
+                    <button
+                      ref={settingsSyncOfflineRef}
+                      type="button"
+                      className={`collections-settings-steamgrid-save${settingsNavIndex === 3 ? " collections-settings-steamgrid-save--active" : ""}`}
+                      onClick={() => {
+                        void syncLibraryForOffline();
+                      }}
+                      onFocus={() => setSettingsNavIndex(3)}
+                      disabled={offline || offlineSyncState?.running === true}
+                    >
+                      {offlineSyncState?.running
+                        ? `Syncing for offline… ${offlineSyncState.done}/${offlineSyncState.total}`
+                        : offlineSyncState && !offlineSyncState.running
+                          ? `Synced ${offlineSyncState.total} collections — Sync again`
+                          : "Sync library for offline"}
+                    </button>
+                  </>
+                ) : null}
+              </div>
+
+              <div className="settings-footer">
+                <div className="collections-footer-hint">
+                  {showGamepadHints ? (
+                    <>
+                      <GamepadPreviousPagePromptGlyph flavor={gamepadFlavor} />
+                      <GamepadNextPagePromptGlyph flavor={gamepadFlavor} />
+                    </>
+                  ) : (
+                    <KeyboardMoveHorizontalGlyph />
+                  )}
+                  <span>Switch tab</span>
+                </div>
+                <div className="collections-footer-hint">
+                  {showGamepadHints ? (
+                    <GamepadNavPromptGlyphs flavor={gamepadFlavor} />
+                  ) : (
+                    <KeyboardNavPromptGlyphs />
+                  )}
+                  <span>Move</span>
+                </div>
+                <div className="collections-footer-hint">
+                  {showGamepadHints ? (
+                    <GamepadPromptGlyph flavor={gamepadFlavor} role="primary" />
+                  ) : (
+                    <KeyboardEnterPromptGlyph />
+                  )}
+                  <span>Select</span>
+                </div>
+                <div className="collections-footer-hint">
+                  {showGamepadHints ? (
+                    <GamepadPromptGlyph flavor={gamepadFlavor} role="back" />
+                  ) : (
+                    <KeyboardBackGlyph />
+                  )}
+                  <span>Close</span>
+                </div>
               </div>
             </div>
           </>,

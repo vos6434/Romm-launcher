@@ -14,6 +14,8 @@ const DPAD_LEFT = 14;
 const DPAD_RIGHT = 15;
 const DPAD_UP = 12;
 const DPAD_DOWN = 13;
+const SHOULDER_LEFT = 4;
+const SHOULDER_RIGHT = 5;
 
 const STICK_DEAD = 0.42;
 const STICK_REPEAT_MS = 140;
@@ -24,6 +26,8 @@ export type CollectionsSettingsNavApi = {
   setFocusIndex: Dispatch<SetStateAction<number>>;
   onActivate: () => void;
   onCloseSettings: () => void;
+  /** Switch settings tab (LB/RB). Only the main launcher settings provides this. */
+  onTabDelta?: (delta: number) => void;
 };
 
 type Options = {
@@ -233,6 +237,21 @@ export function useCollectionsGamepadNavigation({
           if (!refreshDisabled && select && !prevSelect) {
             lastActionRef.current = now;
             onRefreshRef.current();
+          }
+
+          // Shoulder buttons switch settings tabs (main launcher settings only).
+          if (overlayNav?.onTabDelta) {
+            const lb = pressed[SHOULDER_LEFT] ?? false;
+            const rb = pressed[SHOULDER_RIGHT] ?? false;
+            const prevLb = prev[SHOULDER_LEFT] ?? false;
+            const prevRb = prev[SHOULDER_RIGHT] ?? false;
+            if (lb && !prevLb) {
+              lastActionRef.current = now;
+              overlayNav.onTabDelta(-1);
+            } else if (rb && !prevRb) {
+              lastActionRef.current = now;
+              overlayNav.onTabDelta(1);
+            }
           }
         }
 
