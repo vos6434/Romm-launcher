@@ -707,42 +707,6 @@ async fn open_local_folder(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn open_steam_keyboard() -> Result<bool, String> {
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        // Mode=0: keyboard hides when Enter is pressed and sends the Enter key
-        // event to the app before closing — this is the signal we rely on to
-        // unlock gamepad navigation. SDL uses the same URL (SDL PR #6515).
-        let url = "steam://open/keyboard?XPosition=0&YPosition=0&Width=0&Height=0&Mode=0";
-        let attempts: [(&str, &[&str]); 7] = [
-            ("xdg-open", &[url]),
-            ("steam", &[url]),
-            ("/usr/bin/steam", &[url]),
-            ("flatpak-spawn", &["--host", "xdg-open", url]),
-            ("flatpak-spawn", &["--host", "steam", url]),
-            ("flatpak-spawn", &["--host", "/usr/bin/steam", url]),
-            ("host-spawn", &["xdg-open", url]),
-        ];
-
-        for (program, args) in attempts {
-            match Command::new(program).args(args).status() {
-                Ok(status) if status.success() => return Ok(true),
-                Ok(_) => continue,
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(_) => continue,
-            }
-        }
-
-        Ok(false)
-    }
-
-    #[cfg(not(all(unix, not(target_os = "macos"))))]
-    {
-        Ok(false)
-    }
-}
-
-#[tauri::command]
 async fn launch_retroarch(
     window: tauri::Window,
     rom_path: String,
@@ -1721,7 +1685,6 @@ pub fn run() {
             local_path_exists,
             move_local_file,
             open_local_folder,
-            open_steam_keyboard,
             gamescope_launcher_focused,
             launch_retroarch,
             romm_download_rom,

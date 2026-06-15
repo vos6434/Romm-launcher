@@ -17,7 +17,8 @@ import { loadOfflineCatalog } from "./offlineCatalog";
 import { useLoginGamepadNavigation } from "./useLoginGamepadNavigation";
 import { useLoginKeyboardNavigation } from "./useLoginKeyboardNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
-import { setInputLocked, initInputLock, setOverlayLocked } from "./inputLock";
+import { initInputLock, setOverlayLocked } from "./inputLock";
+import { useKeyboard } from "./OnScreenKeyboard";
 import {
   loginSlotIndex,
   loginSlotOrder,
@@ -85,6 +86,7 @@ function App() {
   const retryRef = useRef<HTMLButtonElement>(null);
 
   const { flavor: gamepadFlavor, gamepadConnected } = useGamepadInput();
+  const { openKeyboard } = useKeyboard();
   const tauriShell = isTauri();
   const slotNavChrome = session === null;
   const showGamepadFooterHints =
@@ -283,46 +285,22 @@ function App() {
     el.focus();
   }, []);
 
-  const requestSteamKeyboard = useCallback(() => {
-    if (!tauriShell) return;
-
-    const el = document.activeElement as HTMLInputElement | null;
-    let done = false;
-    let timeoutId: number | null = null;
-    const lockedAt = performance.now();
-
-    const unlock = () => {
-      if (done) return;
-      done = true;
-      if (timeoutId !== null) window.clearTimeout(timeoutId);
-      setInputLocked(false);
-      window.removeEventListener("keydown", onEnter);
-      el?.removeEventListener("input", onInput);
-    };
-
-    const resetTimeout = (ms: number) => {
-      if (timeoutId !== null) window.clearTimeout(timeoutId);
-      timeoutId = window.setTimeout(unlock, ms);
-    };
-
-    // Gamescope maps the A button to a keyboard Enter event. We add this listener
-    // synchronously, so the A-press Enter fires right away and would immediately
-    // unlock. Guard: ignore Enter events within 300ms of the keyboard being requested.
-    const onEnter = (e: KeyboardEvent) => {
-      if (e.key === "Enter" && performance.now() - lockedAt >= 300) unlock();
-    };
-
-    // While the user is actively typing, extend the lock (keyboard is still open).
-    // Unlocks 5s after the last keystroke if Enter is never received.
-    const onInput = () => resetTimeout(5000);
-
-    setInputLocked(true);
-    window.addEventListener("keydown", onEnter);
-    el?.addEventListener("input", onInput);
-    resetTimeout(10000); // fallback if no interaction at all
-
-    void invoke<boolean>("open_steam_keyboard").catch(unlock);
-  }, [tauriShell]);
+  const openFieldKeyboard = useCallback(
+    (id: "host" | "username" | "password") => {
+      const config = {
+        host: { title: "RomM Host", value: host, set: setHost },
+        username: { title: "Username", value: username, set: setUsername },
+        password: { title: "Password", value: password, set: setPassword },
+      }[id];
+      openKeyboard({
+        title: config.title,
+        initialValue: config.value,
+        onChange: config.set,
+        secret: id === "password",
+      });
+    },
+    [openKeyboard, host, username, password],
+  );
 
   useEffect(() => {
     if (!slotNavChrome) return;
@@ -363,7 +341,7 @@ function App() {
     const id = slotOrder[gpFocusIndex];
     if (id === "host" || id === "username" || id === "password") {
       focusTextField(id);
-      requestSteamKeyboard();
+      openFieldKeyboard(id);
       return;
     }
     if (id === "togglePassword") {
@@ -392,7 +370,7 @@ function App() {
     onRetry,
     enterOfflineMode,
     focusTextField,
-    requestSteamKeyboard,
+    openFieldKeyboard,
   ]);
 
   useLoginKeyboardNavigation({

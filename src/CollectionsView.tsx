@@ -29,7 +29,8 @@ import {
 } from "./KeyboardCollectionsHintGlyphs";
 import { KeyboardEnterPromptGlyph } from "./KeyboardNavPromptGlyphs";
 import { getActiveGamepad } from "./gamepadAccess";
-import { isInputLocked, setInputLocked } from "./inputLock";
+import { isInputLocked } from "./inputLock";
+import { useKeyboard } from "./OnScreenKeyboard";
 import { GP_FACE_EAST, GP_FACE_NORTH, GP_FACE_SOUTH } from "./gamepadFlavor";
 import { useCollectionsGamepadNavigation } from "./useCollectionsGamepadNavigation";
 import { useGamepadInput } from "./useGamepadFlavor";
@@ -595,6 +596,7 @@ async function fetchCollectionArrays(
 
 export function CollectionsView({ session, onLogout }: Props) {
   const { flavor: gamepadFlavor, gamepadConnected } = useGamepadInput();
+  const { openKeyboard } = useKeyboard();
   const tauriShell = isTauri();
   const offline = session.offline === true;
   const showGamepadHints = tauriShell && gamepadConnected;
@@ -1399,46 +1401,47 @@ export function CollectionsView({ session, onLogout }: Props) {
     saveRomsDownloadDir(next);
   }, []);
 
-  const requestSteamKeyboard = useCallback((el: HTMLElement | null) => {
-    if (!tauriShell || !el) return;
-
-    const inputEl = el as HTMLInputElement;
-    let done = false;
-    let timeoutId: number | null = null;
-    const lockedAt = performance.now();
-
-    const unlock = () => {
-      if (done) return;
-      done = true;
-      if (timeoutId !== null) window.clearTimeout(timeoutId);
-      setInputLocked(false);
-      window.removeEventListener("keydown", onEnter);
-      inputEl.removeEventListener("input", onInput);
-    };
-
-    const resetTimeout = (ms: number) => {
-      if (timeoutId !== null) window.clearTimeout(timeoutId);
-      timeoutId = window.setTimeout(unlock, ms);
-    };
-
-    // Gamescope maps the A button to a keyboard Enter event. Guard: ignore Enter
-    // events within 300ms of the keyboard being requested so the A-press that
-    // opened the keyboard doesn't immediately unlock it.
-    const onEnter = (e: KeyboardEvent) => {
-      if (e.key === "Enter" && performance.now() - lockedAt >= 300) unlock();
-    };
-
-    // While the user is actively typing, extend the lock (keyboard is still open).
-    // Unlocks 5s after the last keystroke if Enter is never received.
-    const onInput = () => resetTimeout(5000);
-
-    setInputLocked(true);
-    window.addEventListener("keydown", onEnter);
-    inputEl.addEventListener("input", onInput);
-    resetTimeout(10000); // fallback if no interaction at all
-
-    void invoke<boolean>("open_steam_keyboard").catch(unlock);
-  }, [tauriShell]);
+  const openSettingsKeyboard = useCallback(
+    (field: "steamKey" | "retroArchPath" | "retroArchCore" | "romsDir") => {
+      const config = {
+        steamKey: {
+          title: "SteamGridDB API Key",
+          value: steamGridKeyDraft,
+          set: setSteamGridKeyDraft,
+        },
+        retroArchPath: {
+          title: "RetroArch Path",
+          value: retroArchPathDraft,
+          set: onRetroArchPathChange,
+        },
+        retroArchCore: {
+          title: "RetroArch Core Path",
+          value: retroArchCorePathDraft,
+          set: onRetroArchCorePathChange,
+        },
+        romsDir: {
+          title: "ROMs Download Path",
+          value: romsDownloadDir,
+          set: onRomsDirChange,
+        },
+      }[field];
+      openKeyboard({
+        title: config.title,
+        initialValue: config.value,
+        onChange: config.set,
+      });
+    },
+    [
+      openKeyboard,
+      steamGridKeyDraft,
+      retroArchPathDraft,
+      retroArchCorePathDraft,
+      romsDownloadDir,
+      onRetroArchPathChange,
+      onRetroArchCorePathChange,
+      onRomsDirChange,
+    ],
+  );
 
   const onMinimizeLauncherOnLaunchChange = useCallback((next: boolean) => {
     setMinimizeLauncherOnLaunch(next);
@@ -2190,7 +2193,7 @@ export function CollectionsView({ session, onLogout }: Props) {
         break;
       case 2:
         settingsSteamKeyRef.current?.focus();
-        requestSteamKeyboard(settingsSteamKeyRef.current);
+        openSettingsKeyboard("steamKey");
         break;
       case 3:
         saveSteamGridKey();
@@ -2203,21 +2206,21 @@ export function CollectionsView({ session, onLogout }: Props) {
         break;
       case 6:
         settingsRetroArchPathRef.current?.focus();
-        requestSteamKeyboard(settingsRetroArchPathRef.current);
+        openSettingsKeyboard("retroArchPath");
         break;
       case 7:
         void pickRetroArchPath();
         break;
       case 8:
         settingsRetroArchCoreRef.current?.focus();
-        requestSteamKeyboard(settingsRetroArchCoreRef.current);
+        openSettingsKeyboard("retroArchCore");
         break;
       case 9:
         void scanFlatpakRetroArch();
         break;
       case 10:
         settingsRomsDirRef.current?.focus();
-        requestSteamKeyboard(settingsRomsDirRef.current);
+        openSettingsKeyboard("romsDir");
         break;
       case 11:
         void pickRomsDownloadDir();
@@ -2234,9 +2237,9 @@ export function CollectionsView({ session, onLogout }: Props) {
   }, [
     onUnhideAllCollections,
     openRomsDownloadDir,
+    openSettingsKeyboard,
     pickRetroArchPath,
     pickRomsDownloadDir,
-    requestSteamKeyboard,
     scanFlatpakRetroArch,
     saveSteamGridKey,
     settingsNavIndex,

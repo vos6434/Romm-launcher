@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { KeyboardOverlayProvider } from "./OnScreenKeyboard";
 
 function renderFatalStartupError(message: string): void {
   const root = document.getElementById("root");
@@ -51,7 +52,9 @@ window.addEventListener("unhandledrejection", (event) => {
 try {
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
-      <App />
+      <KeyboardOverlayProvider>
+        <App />
+      </KeyboardOverlayProvider>
     </React.StrictMode>,
   );
 } catch (err: unknown) {

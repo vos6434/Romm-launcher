@@ -7,6 +7,7 @@
 
 let manualLocked = false;
 let overlayLocked = false;
+let keyboardLocked = false;
 let currentLocked = false;
 let lockTimeoutId: number | null = null;
 const subscribers = new Set<(locked: boolean) => void>();
@@ -23,7 +24,7 @@ function setCurrentLocked(nextLocked: boolean): void {
 }
 
 function recomputeLockedState(): void {
-  setCurrentLocked(manualLocked || overlayLocked);
+  setCurrentLocked(manualLocked || overlayLocked || keyboardLocked);
 }
 
 /**
@@ -61,6 +62,16 @@ export function setInputLocked(shouldLock: boolean): void {
     }, MANUAL_LOCK_MS);
   }
 
+  recomputeLockedState();
+}
+
+/**
+ * Lock input while the built-in on-screen keyboard overlay is open. Unlike
+ * `setInputLocked`, this does not auto-expire — the overlay controls open/close
+ * explicitly, so background navigation stays suppressed for the whole session.
+ */
+export function setKeyboardLocked(shouldLock: boolean): void {
+  keyboardLocked = shouldLock;
   recomputeLockedState();
 }
 
