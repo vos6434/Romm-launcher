@@ -163,17 +163,46 @@ fn core_candidates_for_platform(platform: &str) -> &'static [&'static str] {
             "mesen_libretro",
             "quicknes_libretro",
         ],
-        "snes" | "super-nintendo" | "sfc" => &["snes9x_libretro", "bsnes_libretro"],
+        "snes" | "super-nintendo" | "sfc" | "super-famicom" => &[
+            "snes9x_libretro",
+            "snes9x2010_libretro",
+            "bsnes_libretro",
+            "bsnes_mercury_performance_libretro",
+            "bsnes_mercury_balanced_libretro",
+            "bsnes_mercury_accuracy_libretro",
+            "mednafen_snes_libretro",
+        ],
         "n64" | "nintendo-64" => &["mupen64plus_next_libretro", "parallel_n64_libretro"],
-        "game-boy" | "gb" => &["gambatte_libretro", "gearboy_libretro"],
-        "game-boy-color" | "gbc" => &["gambatte_libretro", "gearboy_libretro"],
-        "game-boy-advance" | "gba" => &["mgba_libretro", "gpsp_libretro"],
+        "game-boy" | "gb" => &["gambatte_libretro", "gearboy_libretro", "mgba_libretro"],
+        "game-boy-color" | "gbc" => &["gambatte_libretro", "gearboy_libretro", "mgba_libretro"],
+        "game-boy-advance" | "gba" => &["mgba_libretro", "gpsp_libretro", "vba_next_libretro"],
+        "nds" | "nintendo-ds" => &[
+            "melonds_libretro",
+            "desmume_libretro",
+            "desmume2015_libretro",
+        ],
         "genesis" | "megadrive" | "mega-drive" | "sega-genesis" | "sega-mega-drive" => {
             &["genesis_plus_gx_libretro", "picodrive_libretro"]
         }
-        "psx" | "ps1" | "playstation" => {
-            &["pcsx_rearmed_libretro", "beetle_psx_hw_libretro", "beetle_psx_libretro"]
+        "sega-master-system" | "master-system" | "sms" => {
+            &["genesis_plus_gx_libretro", "picodrive_libretro", "smsplus_libretro"]
         }
+        "game-gear" | "gamegear" => &["genesis_plus_gx_libretro"],
+        "psx" | "ps1" | "playstation" => &[
+            "pcsx_rearmed_libretro",
+            "swanstation_libretro",
+            "beetle_psx_hw_libretro",
+            "beetle_psx_libretro",
+        ],
+        "turbografx-16" | "turbografx16" | "pc-engine" | "pce" => {
+            &["mednafen_pce_fast_libretro", "mednafen_pce_libretro"]
+        }
+        "wonderswan" | "wonderswan-color" => &["mednafen_wswan_libretro"],
+        "virtual-boy" | "virtualboy" => &["mednafen_vb_libretro"],
+        "neo-geo-pocket" | "neo-geo-pocket-color" | "ngp" => &["mednafen_ngp_libretro"],
+        "atari-2600" | "atari2600" => &["stella2014_libretro", "stella_libretro"],
+        "atari-7800" | "atari7800" => &["prosystem_libretro"],
+        "atari-lynx" | "lynx" => &["handy_libretro", "mednafen_lynx_libretro"],
         _ => &[],
     }
 }
@@ -221,6 +250,14 @@ fn auto_core_path_from_platform(
         let home_dir = PathBuf::from(home);
         candidate_dirs.push(home_dir.join(".config/retroarch/cores"));
         candidate_dirs.push(home_dir.join(".var/app/org.libretro.RetroArch/config/retroarch/cores"));
+    }
+
+    // Distro-packaged cores (e.g. Fedora installs to /usr/lib64/libretro).
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        candidate_dirs.push(PathBuf::from("/usr/lib64/libretro"));
+        candidate_dirs.push(PathBuf::from("/usr/lib/libretro"));
+        candidate_dirs.push(PathBuf::from("/app/lib/libretro"));
     }
 
     let mut unique_dirs: Vec<PathBuf> = Vec::new();
@@ -922,9 +959,21 @@ async fn launch_retroarch(
 
     focus_and_maximize_window_for_pid(child.id());
 
-    if minimize_launcher.unwrap_or(true) {
-        let _ = window.minimize();
+    // Hide (not minimize) while the game runs: Wayland has no protocol for an
+    // app to un-minimize itself, so a minimized launcher can't restore. hide()
+    // / show() are client-controlled and work across X11, Wayland and Windows.
+    let hide_launcher = minimize_launcher.unwrap_or(true);
+    if hide_launcher {
+        let _ = window.hide();
     }
+
+    let restore_launcher = || {
+        if hide_launcher {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    };
 
     std::thread::sleep(Duration::from_millis(350));
     if let Ok(Some(status)) = child.try_wait() {
@@ -947,6 +996,7 @@ async fn launch_retroarch(
             })
             .unwrap_or_default();
 
+        restore_launcher();
         return Err(format!(
             "RetroArch exited immediately (status: {status}).{}\nVerify RetroArch path, optional core path, and ROM compatibility.",
             stderr_hint
@@ -955,6 +1005,7 @@ async fn launch_retroarch(
 
     let _ = tauri::async_runtime::spawn_blocking(move || child.wait()).await;
 
+    restore_launcher();
     Ok(())
 }
 
